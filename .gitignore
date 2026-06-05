@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+build/
+dist/
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+*.egg
+*.whl
+
+# Poetry
+.poetry/
+__pypackages__/
+
+# Streamlit
+.streamlit/
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Generated data/output (adjust as needed)
+results.xlsx
+results.csv
+
+# Secrets (if not handled by st.secrets or environment variables)
+# .env
+# *.env
+# .streamlit/secrets.toml
