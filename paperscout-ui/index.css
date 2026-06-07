@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --ps-bg: radial-gradient(1100px 600px at 8% -10%, #fff1d6 0%, rgba(255,241,214,0.0) 60%),
+             radial-gradient(900px 600px at 92% 0%, #e2f1ff 0%, rgba(226,241,255,0.0) 60%),
+             linear-gradient(180deg, #fff9f2 0%, #f9fbff 50%, #fffdf8 100%);
+    --ps-ink: #0b1b3a;
+    --ps-ink-2: #122a55;
+    --ps-ink-3: #1d3a6e;
+    --ps-accent: #cb2f98;
+    --ps-accent-2: #5e3de3;
+    --ps-accent-text: #9a1f76;
+    --ps-card: rgba(255,255,255,0.96);
+    --ps-card-border: rgba(11,27,58,0.10);
+    --ps-shadow: 0 14px 30px rgba(11,27,58,0.12);
+    --ps-detail-bg: rgba(242,248,255,0.92);
+    --ps-hero-start: rgba(255,255,255,0.92);
+    --ps-hero-end: rgba(238,248,255,0.82);
+  }
+
+  body {
+    background: var(--ps-bg);
+    color: var(--ps-ink);
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .ps-card {
+    background: var(--ps-card);
+    border: 1px solid var(--ps-card-border);
+    box-shadow: var(--ps-shadow);
+    backdrop-filter: blur(6px);
+  }
+  
+  .ps-btn {
+    background: linear-gradient(135deg, var(--ps-accent), var(--ps-accent-2));
+  }
+}
