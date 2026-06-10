@@ -41,6 +41,7 @@ Thumbs.db
 # Generated data/output (adjust as needed)
 results.xlsx
 results.csv
+.agents/
 
 # Secrets (if not handled by st.secrets or environment variables)
 # .env
