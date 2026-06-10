@@ -2,14 +2,15 @@ import os
 from contextlib import asynccontextmanager
 
 from database import models
-from database.database import engine
+from database.database import engine, get_session
+from database.seed_data import DEFAULT_JOURNALS
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from services.auth_service import get_current_user
 from services.download_service import DownloadService
 from services.search_service import SearchService
-from sqlmodel import SQLModel
+from sqlmodel import Session, SQLModel, select
 
 
 @asynccontextmanager
@@ -18,6 +19,21 @@ async def lifespan(app: FastAPI):
     # Hier passiert die Magie: Wenn die paperscout.db fehlt,
     # wird sie JETZT erstellt. Wenn sie da ist, passiert nichts.
     SQLModel.metadata.create_all(engine)
+
+    # Standard-Journals hinzufügen, falls die Tabelle noch leer ist
+    with Session(engine) as session:
+        existing_journal = session.exec(select(models.Journals)).first()
+        if not existing_journal:
+            default_journals = [
+                models.Journals(**journal_data) for journal_data in DEFAULT_JOURNALS
+            ]
+            session.add_all(default_journals)
+            session.commit()
+            print(
+                f"📚 {len(default_journals)} Standard-Journals wurden erfolgreich zur Datenbank hinzugefügt!",
+                flush=True,
+            )
+
     print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
 
     yield  # Hier läuft die FastAPI App
@@ -49,6 +65,29 @@ async def search_papers(
     results = await search_service.search_open_access_papers(query=query)
     if not results:
         return {"message": "Keine Open-Access-Treffer gefunden.", "results": []}
+    return {"results": results}
+
+
+@app.get("/api/search/journals")
+async def search_journals(session: Session = Depends(get_session)):
+    statement = select(models.Journals)
+
+    db_journals = session.exec(statement).all()
+
+    results = []
+    for journal in db_journals:
+        results.append(
+            {
+                "id": str(journal.id),
+                "name": journal.name,
+                "issn": journal.issn,
+                "publisher": journal.publisher,
+                "homepage_url": journal.homepage,
+            }
+        )
+
+    if not results:
+        return {"message": "Keine Journals gefunden.", "results": []}
     return {"results": results}
 
 

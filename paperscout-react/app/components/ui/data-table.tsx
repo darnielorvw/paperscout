@@ -1,80 +1,105 @@
-"use client"
+"use client";
+import * as React from "react";
+import { Input } from "~/components/ui/input";
 
 import {
-    type ColumnDef,
-    flexRender,
-    getCoreRowModel,
-    useReactTable,
-} from "@tanstack/react-table"
-
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "~/components/ui/table"
+  type ColumnDef,
+  type ColumnFiltersState,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  type SortingState,
+  useReactTable,
+} from "@tanstack/react-table";
 
 interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[]
-  data: TData[]
+  columns: ColumnDef<TData, TValue>[];
+  data: TData[];
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
 }: DataTableProps<TData, TValue>) {
+  const [sorting, setSorting] = React.useState<SortingState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
+
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-  })
+    onSortingChange: setSorting,
+    getSortedRowModel: getSortedRowModel(),
+    state: {
+      sorting,
+      columnFilters,
+    },
+    onColumnFiltersChange: setColumnFilters,
+    getFilteredRowModel: getFilteredRowModel(),
+  });
 
   return (
-    <div className="overflow-hidden rounded-md border">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                return (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </TableHead>
-                )
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows?.length ? (
-            table.getRowModel().rows.map((row) => (
-              <TableRow
-                key={row.id}
-                data-state={row.getIsSelected() && "selected"}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          ) : (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="h-24 text-center">
-                No results.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+    <div className="px-1">
+      <div className="flex items-center py-4">
+        <Input
+          placeholder="Filter journals"
+          value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+          onChange={(event) =>
+            table.getColumn("name")?.setFilterValue(event.target.value)
+          }
+          className="max-w-sm"
+        />
+
+        {/* Header als Toolbar (für Sortierung & Checkboxen) */}
+      </div>
+      <div className="ml-auto flex items-center gap-4 mb-4 rounded-md border bg-muted/30 px-3 py-1.5 shadow-sm">
+        {table.getHeaderGroups().map((headerGroup) => (
+          <React.Fragment key={headerGroup.id}>
+            {headerGroup.headers.map((header) => (
+              <div key={header.id} className="flex items-center">
+                {header.isPlaceholder
+                  ? null
+                  : flexRender(
+                      header.column.columnDef.header,
+                      header.getContext(),
+                    )}
+              </div>
+            ))}
+          </React.Fragment>
+        ))}
+      </div>
+      {/* 2-Spalten Layout (Grid) anstelle der Standard-Tabelle */}
+      <div className="grid grid-cols-1 md:grid-cols-2 rounded-md border shadow-sm">
+        {table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => (
+            <div
+              key={row.id}
+              data-state={row.getIsSelected() && "selected"}
+              className="flex items-center border-b p-2 transition-colors last:border-b-0 hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted md:[&:nth-last-child(2):nth-child(odd)]:border-b-0"
+            >
+              {row.getVisibleCells().map((cell) => (
+                <div
+                  key={cell.id}
+                  className={`text-left align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-4 ${
+                    cell.column.id === "select"
+                      ? "flex-shrink-0"
+                      : "flex-1 overflow-hidden"
+                  }`}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </div>
+              ))}
+            </div>
+          ))
+        ) : (
+          <div className="col-span-full flex h-12 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+            No results.
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }

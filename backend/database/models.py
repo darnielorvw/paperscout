@@ -18,3 +18,11 @@ class Profile(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id")
 
     user: User = Relationship(back_populates="profiles")
+
+class Journals(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    issn: str
+    publisher: str
+    homepage: str
+    
