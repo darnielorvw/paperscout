@@ -2,7 +2,24 @@ DEFAULT_JOURNALS = [
     {"name": "Nature", "issn": "0028-0836", "publisher": "Nature Publishing Group", "homepage": "https://www.nature.com"},
     {"name": "Science", "issn": "0036-8075", "publisher": "AAAS", "homepage": "https://www.science.org"},
     {"name": "PLOS One", "issn": "1932-6203", "publisher": "Public Library of Science", "homepage": "https://journals.plos.org/plosone"},
-    # Hier kannst du die restlichen deiner 50 Journals einfach als Dictionary hinzufügen.
-    # ...
-    # {"name": "Beispiel Journal", "issn": "1234-5678", "publisher": "Beispiel Verlag", "homepage": "https://example.com"},
+    {"name": "The Lancet", "issn": "0140-6736", "publisher": "Elsevier", "homepage": "https://www.thelancet.com"},
+    {"name": "Cell", "issn": "0092-8674", "publisher": "Cell Press", "homepage": "https://www.cell.com/cell/home"},
+    {"name": "The New England Journal of Medicine", "issn": "0028-4793", "publisher": "Massachusetts Medical Society", "homepage": "https://www.nejm.org"},
+    {"name": "JAMA", "issn": "0098-7484", "publisher": "American Medical Association", "homepage": "https://jamanetwork.com/journals/jama"},
+    {"name": "The BMJ", "issn": "0959-8138", "publisher": "BMJ Publishing Group Ltd", "homepage": "https://www.bmj.com/"},
+    {"name": "Nature Medicine", "issn": "1078-8956", "publisher": "Nature Publishing Group", "homepage": "https://www.nature.com/nm/"},
+    {"name": "Nature Biotechnology", "issn": "1087-0156", "publisher": "Nature Publishing Group", "homepage": "https://www.nature.com/nbt/"},
+    {"name": "Neuron", "issn": "0896-6273", "publisher": "Cell Press", "homepage": "https://www.cell.com/neuron/home"},
+    {"name": "Immunity", "issn": "1074-7613", "publisher": "Cell Press", "homepage": "https://www.cell.com/immunity/home"},
+    {"name": "Cancer Cell", "issn": "1535-6108", "publisher": "Cell Press", "homepage": "https://www.cell.com/cancer-cell/home"},
+    {"name": "Journal of Clinical Oncology", "issn": "0732-183X", "publisher": "American Society of Clinical Oncology", "homepage": "https://ascopubs.org/journal/jco"},
+    {"name": "The Lancet Oncology", "issn": "1470-2045", "publisher": "Elsevier", "homepage": "https://www.thelancet.com/journals/lanonc/home"},
+    {"name": "Chemical Reviews", "issn": "0009-2665", "publisher": "American Chemical Society", "homepage": "https://pubs.acs.org/journal/chreay"},
+    {"name": "Accounts of Chemical Research", "issn": "0001-4842", "publisher": "American Chemical Society", "homepage": "https://pubs.acs.org/journal/achre4"},
+    {"name": "Journal of the American Chemical Society", "issn": "0002-7863", "publisher": "American Chemical Society", "homepage": "https://pubs.acs.org/journal/jacsat"},
+    {"name": "Angewandte Chemie International Edition", "issn": "1433-7851", "publisher": "Wiley-VCH", "homepage": "https://onlinelibrary.wiley.com/journal/15213773"},
+    {"name": "Physical Review Letters", "issn": "0031-9007", "publisher": "American Physical Society", "homepage": "https://journals.aps.org/prl/"},
+    {"name": "Reviews of Modern Physics", "issn": "0034-6861", "publisher": "American Physical Society", "homepage": "https://journals.aps.org/rmp/"},
+    {"name": "The Astrophysical Journal", "issn": "0004-637X", "publisher": "IOP Publishing", "homepage": "https://iopscience.iop.org/journal/0004-637X"},
+    {"name": "Proceedings of the National Academy of Sciences", "issn": "0027-8424", "publisher": "National Academy of Sciences", "homepage": "https://www.pnas.org/"}
 ]

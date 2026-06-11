@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { DataTable } from "~/components/ui/data-table";
+import { DataTable } from "~/components/data-table";
+import { Card, CardContent } from "~/components/ui/card";
 import { columns, type Journal } from "./columns";
 
-export default function SearchPage() {
+export default function JournalsPage() {
   // Ein Standard-Suchbegriff, da die API 'query' zwingend erfordert
   const [journals, setJournals] = useState<Journal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +40,9 @@ export default function SearchPage() {
   }, []); // Das leere Array bedeutet: Nur ein einziges Mal beim Initial-Render ausführen
 
   return (
-    <div className="w-full md:p-1">
-      <Card>
-        <CardHeader>
-          <CardTitle>Welcome to React Journals v7</CardTitle>
-        </CardHeader>
-        <CardContent>
+    <div className="flex h-full w-full flex-col md:p-1">
+      <Card className="flex flex-col">
+        <CardContent className="flex-1 overflow-auto">
           <DataTable columns={columns} data={journals} />
         </CardContent>
       </Card>

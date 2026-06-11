@@ -71,8 +71,7 @@ export function DataTable<TData, TValue>({
           </React.Fragment>
         ))}
       </div>
-      {/* 2-Spalten Layout (Grid) anstelle der Standard-Tabelle */}
-      <div className="grid grid-cols-1 md:grid-cols-2 rounded-md border shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 rounded-md border shadow-sm">
         {table.getRowModel().rows?.length ? (
           table.getRowModel().rows.map((row) => (
             <div
@@ -100,6 +99,7 @@ export function DataTable<TData, TValue>({
           </div>
         )}
       </div>
+      
     </div>
   );
 }

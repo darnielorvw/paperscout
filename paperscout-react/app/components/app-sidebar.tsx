@@ -2,41 +2,35 @@ import * as React from "react";
 import { NavLink, useLocation } from "react-router";
 
 import {
-    Sidebar,
-    SidebarContent,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    SidebarRail,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
 } from "~/components/ui/sidebar";
 
 // This is sample data.
 const data = {
   navMain: [
     {
-      title: "Input",
+      title: "Menü",
       url: "#",
       items: [
         {
-          title: "Journal Selection",
-          url: "/journals",
+          title: "Suche öffnen",
+          url: "/#journals",
         },
         {
-          title: "Search",
-          url: "/search",
+          title: "Einstellungen",
+          url: "/#search",
         },
-      ],
-    },
-    {
-      title: "Results",
-      url: "#",
-      items: [
         {
-          title: "Results",
-          url: "/results",
+          title: "Abmelden",
+          url: "/#logout",
         },
       ],
     },
@@ -49,24 +43,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarContent>
-        {/* We create a SidebarGroup for each parent. */}
         {data.navMain.map((item) => (
           <SidebarGroup key={item.title}>
             <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {item.items.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={location.pathname === item.url}
-                    >
-                      <NavLink to={item.url} end>
-                        {item.title}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                {item.items.map((subItem, index) => {
+                  // Aktiv, wenn der URL-Hash übereinstimmt ODER wenn gar kein Hash da ist und es das erste Item ist.
+                  const isActive =
+                    location.pathname === "/" &&
+                    (location.hash === subItem.url.replace("/", "") ||
+                      (!location.hash && index === 0));
+
+                  return (
+                    <SidebarMenuItem key={subItem.title}>
+                      <SidebarMenuButton asChild isActive={isActive}>
+                        <NavLink to={subItem.url}>{subItem.title}</NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
