@@ -20,17 +20,22 @@ interface InputAccordionProps {
   title?: string;
   description?: string;
   items: AccordionItemData[];
+  onFinish?: () => void;
 }
 
-export function InputAccordion({ items }: InputAccordionProps) {
+export function InputAccordion({ items, onFinish }: InputAccordionProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const hashItem = location.hash.replace("#", "");
 
+  // Um Hydration Mismatches zu vermeiden, initialisieren wir den State
+  // mit dem Server-Zustand (ohne Hash) und verlassen uns
+  // für die echte Client-Ansicht auf den useEffect unten.
   const [activeItem, setActiveItem] = useState<string | undefined>(
-    hashItem || items[0]?.value,
+    items[0]?.value,
   );
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const lastFocusedItem = useRef<string | undefined>(undefined);
 
   // Wenn sich der Hash in der URL ändert (z.B. durch Klick in der Sidebar),
   // synchronisieren wir den State des Accordions.
@@ -41,18 +46,6 @@ export function InputAccordion({ items }: InputAccordionProps) {
       setActiveItem(items[0]?.value);
     }
   }, [hashItem, items]);
-
-  useEffect(() => {
-    const index = items.findIndex((item) => item.value === activeItem);
-    if (index !== -1) {
-      // Ein kurzes Timeout stellt sicher, dass das Element im DOM gemountet 
-      // und die Aufklapp-Animation gestartet ist, bevor es fokussiert wird.
-      const timer = setTimeout(() => {
-        buttonRefs.current[index]?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [activeItem, items]);
 
   // Hilfsfunktion: Setzt das Accordion & aktualisiert gleichzeitig die URL
   const updateActiveItem = (newValue: string | undefined) => {
@@ -99,6 +92,17 @@ export function InputAccordion({ items }: InputAccordionProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeItem, items]); // Abhängigkeiten für aktuelles Item und Liste
 
+  // Zentralisierte Logik für den Fokus-Callback
+  const setFocusRef = (el: HTMLButtonElement | null, value: string, index: number) => {
+    buttonRefs.current[index] = el;
+    if (el && value === activeItem && activeItem !== lastFocusedItem.current) {
+      requestAnimationFrame(() => {
+        el.focus();
+        lastFocusedItem.current = activeItem;
+      });
+    }
+  };
+
   return (
     <Accordion
       type="single"
@@ -120,15 +124,18 @@ export function InputAccordion({ items }: InputAccordionProps) {
             {item.content}
             <div className="mt-auto flex justify-center gap-4 p-4">
               {index > 0 && (
-                <Button className="rounded-full" variant="outline" onClick={() => handlePrevious(index)} size="icon-xl">
+                <Button
+                  className="rounded-full"
+                  variant="outline"
+                  onClick={() => handlePrevious(index)}
+                  size="icon-xl"
+                >
                   <ArrowUpIcon className="size-6" />
                 </Button>
               )}
               {index < items.length - 1 ? (
                 <Button
-                  ref={(el) => {
-                    buttonRefs.current[index] = el;
-                  }}
+                  ref={(el) => setFocusRef(el, item.value, index)}
                   className="rounded-full"
                   onClick={() => handleNext(index)}
                   size="icon-xl"
@@ -137,12 +144,10 @@ export function InputAccordion({ items }: InputAccordionProps) {
                 </Button>
               ) : (
                 <Button
-                  ref={(el) => {
-                    buttonRefs.current[index] = el;
-                  }}
+                  ref={(el) => setFocusRef(el, item.value, index)}
                   className="rounded-full"
                   variant="default"
-                  onClick={() => console.log("Fertig!")}
+                  onClick={onFinish}
                   size="icon-xl"
                 >
                   <CheckIcon className="size-6" />

@@ -1,15 +1,17 @@
 import os
 from contextlib import asynccontextmanager
+from typing import List
 
 from database import models
 from database.database import engine, get_session
 from database.seed_data import DEFAULT_JOURNALS
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from services.auth_service import get_current_user
 from services.download_service import DownloadService
 from services.search_service import SearchService
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, SQLModel, select
 
 
@@ -23,16 +25,16 @@ async def lifespan(app: FastAPI):
     # Standard-Journals hinzufügen, falls die Tabelle noch leer ist
     with Session(engine) as session:
         existing_journal = session.exec(select(models.Journals)).first()
-        if not existing_journal:
-            default_journals = [
-                models.Journals(**journal_data) for journal_data in DEFAULT_JOURNALS
-            ]
-            session.add_all(default_journals)
-            session.commit()
-            print(
-                f"📚 {len(default_journals)} Standard-Journals wurden erfolgreich zur Datenbank hinzugefügt!",
-                flush=True,
-            )
+        # if not existing_journal:
+        #     default_journals = [
+        #         models.Journals(**journal_data) for journal_data in DEFAULT_JOURNALS
+        #     ]
+        #     session.add_all(default_journals)
+        #     session.commit()
+        #     print(
+        #         f"📚 {len(default_journals)} Standard-Journals wurden erfolgreich zur Datenbank hinzugefügt!",
+        #         flush=True,
+        #     )
 
     print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
 
@@ -57,19 +59,8 @@ search_service = SearchService()
 download_service = DownloadService()
 
 
-@app.get("/api/search")
-async def search_papers(
-    query: str = Query(..., description="Suchbegriff für die Literaturrecherche")
-):
-    """Sucht nach Open-Access-Papern basierend auf Keywords."""
-    results = await search_service.search_open_access_papers(query=query)
-    if not results:
-        return {"message": "Keine Open-Access-Treffer gefunden.", "results": []}
-    return {"results": results}
-
-
-@app.get("/api/search/journals")
-async def search_journals(session: Session = Depends(get_session)):
+@app.get("/api/journals")
+async def get_journals(session: Session = Depends(get_session)):
     statement = select(models.Journals)
 
     db_journals = session.exec(statement).all()
@@ -88,6 +79,59 @@ async def search_journals(session: Session = Depends(get_session)):
 
     if not results:
         return {"message": "Keine Journals gefunden.", "results": []}
+    return {"results": results}
+
+
+@app.post("/api/journals/import")
+async def import_journals(
+     session: Session = Depends(get_session)
+):
+    """Sucht Journals bei OpenAlex und speichert sie in der lokalen Datenbank."""
+    external_results = await search_service.fetch_external_journals()
+    
+    imported_journals = []
+    for item in external_results:
+        # Extrahiere die ID (z.B. S12345 aus der URL)
+        oa_id = item.get("id", "").split("/")[-1]
+        if not oa_id:
+            continue
+            
+        # Erstelle ein Statement für "INSERT OR IGNORE"
+        stmt = sqlite_insert(models.Journals).values(
+            id=oa_id,
+            name=item.get("display_name"),
+            issn=item.get("issn_l") or "",
+            publisher=item.get("host_organization_name") or "Unknown",
+            homepage=item.get("homepage_url") or "",
+        ).on_conflict_do_nothing()
+
+        session.exec(stmt)
+        imported_journals.append(oa_id)
+            
+    session.commit()
+    return {"message": f"{len(imported_journals)} Journals importiert.", "results": imported_journals}
+
+
+@app.get("/api/articles")
+async def search_articles(
+    journal_ids: List[str] = Query([]),
+    keywords: str = Query(""),
+    from_date: str = Query(...),
+    to_date: str = Query(...),
+    session: Session = Depends(get_session)
+):
+    """Sucht nach wissenschaftlichen Artikeln in den gewählten Journals."""
+    # Lokale IDs in OpenAlex-IDs auflösen
+    statement = select(models.Journals.id).where(models.Journals.id.in_(journal_ids))
+    oa_ids = session.exec(statement).all()
+    
+    results = await search_service.search(
+        journal_ids=[id for id in oa_ids if id],
+        keywords=keywords,
+        from_date=from_date,
+        to_date=to_date,
+        limit=25,
+    )
     return {"results": results}
 
 

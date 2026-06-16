@@ -17,20 +17,20 @@ import {
 const data = {
   navMain: [
     {
-      title: "Menü",
+      title: "Menu",
       url: "#",
       items: [
         {
-          title: "Suche öffnen",
+          title: "Select Journals",
           url: "/#journals",
         },
         {
-          title: "Einstellungen",
-          url: "/#search",
+          title: "Select Time Range",
+          url: "/#range",
         },
         {
-          title: "Abmelden",
-          url: "/#logout",
+          title: "Search",
+          url: "/#search",
         },
       ],
     },
@@ -39,6 +39,11 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   return (
     <Sidebar {...props}>
@@ -49,11 +54,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {item.items.map((subItem, index) => {
+                  // Vor der Hydration gehen wir (wie der Server) von keinem Hash aus
+                  const hash = isMounted ? location.hash : "";
+                  
                   // Aktiv, wenn der URL-Hash übereinstimmt ODER wenn gar kein Hash da ist und es das erste Item ist.
                   const isActive =
                     location.pathname === "/" &&
-                    (location.hash === subItem.url.replace("/", "") ||
-                      (!location.hash && index === 0));
+                    (hash === subItem.url.replace("/", "") ||
+                      (!hash && index === 0));
 
                   return (
                     <SidebarMenuItem key={subItem.title}>

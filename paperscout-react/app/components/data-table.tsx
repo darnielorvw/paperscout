@@ -12,15 +12,20 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
+import { Field } from "./ui/field";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  rowSelection?: any;
+  onRowSelectionChange?: any;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
+  rowSelection,
+  onRowSelectionChange,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -30,20 +35,23 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    getRowId: (row: any) => row.id, // Verknüpft Auswahl mit der ID statt Index
     getCoreRowModel: getCoreRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
+    onRowSelectionChange: onRowSelectionChange,
     state: {
       sorting,
       columnFilters,
+      rowSelection,
     },
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
   });
 
   return (
-    <div className="px-1">
-      <div className="flex items-center py-4">
+    <div>
+      <Field className="py-4">
         <Input
           placeholder="Filter journals"
           value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
@@ -52,9 +60,8 @@ export function DataTable<TData, TValue>({
           }
           className="max-w-sm"
         />
-
-        {/* Header als Toolbar (für Sortierung & Checkboxen) */}
-      </div>
+      </Field>
+      
       <div className="ml-auto flex items-center gap-4 mb-4 rounded-md border bg-muted/30 px-3 py-1.5 shadow-sm">
         {table.getHeaderGroups().map((headerGroup) => (
           <React.Fragment key={headerGroup.id}>
@@ -99,7 +106,6 @@ export function DataTable<TData, TValue>({
           </div>
         )}
       </div>
-      
     </div>
   );
 }
