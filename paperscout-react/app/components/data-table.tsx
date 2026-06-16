@@ -50,8 +50,8 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div>
-      <Field className="py-4">
+    <div className="flex flex-col h-full min-h-0">
+      <Field className="py-4 shrink-0">
         <Input
           placeholder="Filter journals"
           value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
@@ -62,7 +62,7 @@ export function DataTable<TData, TValue>({
         />
       </Field>
       
-      <div className="ml-auto flex items-center gap-4 mb-4 rounded-md border bg-muted/30 px-3 py-1.5 shadow-sm">
+      <div className="ml-auto w-full flex items-center gap-4 mb-4 rounded-md border bg-muted/30 px-3 py-1.5 shadow-sm shrink-0">
         {table.getHeaderGroups().map((headerGroup) => (
           <React.Fragment key={headerGroup.id}>
             {headerGroup.headers.map((header) => (
@@ -78,13 +78,13 @@ export function DataTable<TData, TValue>({
           </React.Fragment>
         ))}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 rounded-md border shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 rounded-md border shadow-sm flex-1 overflow-y-auto min-h-0 content-start">
         {table.getRowModel().rows?.length ? (
           table.getRowModel().rows.map((row) => (
             <div
-              key={row.id}
-              data-state={row.getIsSelected() && "selected"}
-              className="flex items-center border-b p-2 transition-colors last:border-b-0 hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted md:[&:nth-last-child(2):nth-child(odd)]:border-b-0"
+              key={row.id} 
+              data-state={row.getIsSelected() && "selected"} 
+              className="flex items-start border-b p-2 transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted"
             >
               {row.getVisibleCells().map((cell) => (
                 <div

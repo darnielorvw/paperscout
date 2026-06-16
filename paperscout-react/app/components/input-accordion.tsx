@@ -115,14 +115,16 @@ export function InputAccordion({ items, onFinish }: InputAccordionProps) {
         <AccordionItem
           key={item.value}
           value={item.value}
-          className="flex flex-col data-[state=open]:flex-1 overflow-hidden [&[data-state=open]>[data-slot=accordion-content]]:flex [&[data-state=open]>[data-slot=accordion-content]]:flex-1 [&[data-state=open]>[data-slot=accordion-content]]:flex-col"
+          className="flex flex-col transition-all duration-500 data-[state=open]:flex-1 overflow-hidden [&[data-state=open]>[data-slot=accordion-content]]:flex [&[data-state=open]>[data-slot=accordion-content]]:flex-1 [&[data-state=open]>[data-slot=accordion-content]]:flex-col"
         >
           <div className="flex items-start py-2.5 text-left text-sm font-medium">
             {item.trigger}
           </div>
-          <AccordionContent className="flex flex-1 flex-col overflow-auto min-h-0">
-            {item.content}
-            <div className="mt-auto flex justify-center gap-4 p-4">
+          <AccordionContent className="flex flex-1 flex-col min-h-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {item.content}
+            </div>
+            <div className="mt-auto flex shrink-0 justify-center gap-4 p-4">
               {index > 0 && (
                 <Button
                   className="rounded-full"

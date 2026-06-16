@@ -1,10 +1,10 @@
 import {
-  isRouteErrorResponse,
-  Links,
-  Meta,
-  Outlet,
-  Scripts,
-  ScrollRestoration,
+    isRouteErrorResponse,
+    Links,
+    Meta,
+    Outlet,
+    Scripts,
+    ScrollRestoration,
 } from "react-router";
 import { AppSidebar } from "~/components/app-sidebar";
 import { ThemeProvider } from "~/components/theme-provider";
@@ -45,9 +45,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         >
           <SidebarProvider>
             <AppSidebar />
-            <SidebarInset>
+            <SidebarInset className="flex h-svh flex-col overflow-hidden">
               {/* Headerbereich mit Titel und Theme-Toggle */}
-              <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <SidebarTrigger />
                 <span className="text-lg font-bold">PaperScout</span>
                 <div className="ml-auto">
@@ -56,9 +56,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </header>
 
               {/* Hauptinhalt der Applikation */}
-              <div className="flex-1 p-4 md:p-8">
+              <main className="flex-1 min-h-0 p-4 md:p-8">
                 {children}
-              </div>
+              </main>
 
               
             </SidebarInset>
