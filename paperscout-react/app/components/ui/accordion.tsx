@@ -1,16 +1,20 @@
-import { Accordion as AccordionPrimitive } from "radix-ui"
-import * as React from "react"
+import { Accordion as AccordionPrimitive } from "radix-ui";
+import * as React from "react";
 
-import { cn } from "~/lib/utils"
+import { cn } from "~/lib/utils";
 
 function Accordion({
   className,
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Root>) {
+  // Standarddauer für die Animation
+  const duration = "100ms"; 
+
   return (
     <AccordionPrimitive.Root
       data-slot="accordion"
       className={cn("flex w-full flex-col", className)}
+      style={{ "--accordion-transition-duration": duration } as React.CSSProperties}
       {...props}
     />
   )
@@ -73,4 +77,5 @@ function AccordionContent({
   )
 }
 
-export { Accordion, AccordionContent, AccordionItem, AccordionTrigger }
+export { Accordion, AccordionContent, AccordionItem, AccordionTrigger };
+

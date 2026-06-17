@@ -12,6 +12,7 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
+import { SkeletonTable } from "./skeletons";
 import { Field } from "./ui/field";
 
 interface DataTableProps<TData, TValue> {
@@ -19,6 +20,7 @@ interface DataTableProps<TData, TValue> {
   data: TData[];
   rowSelection?: any;
   onRowSelectionChange?: any;
+  isLoading: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -26,6 +28,7 @@ export function DataTable<TData, TValue>({
   data,
   rowSelection,
   onRowSelectionChange,
+  isLoading,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
@@ -61,7 +64,7 @@ export function DataTable<TData, TValue>({
           className="max-w-sm"
         />
       </Field>
-      
+
       <div className="ml-auto w-full flex items-center gap-4 mb-4 rounded-md border bg-muted/30 px-3 py-1.5 shadow-sm shrink-0">
         {table.getHeaderGroups().map((headerGroup) => (
           <React.Fragment key={headerGroup.id}>
@@ -78,34 +81,38 @@ export function DataTable<TData, TValue>({
           </React.Fragment>
         ))}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 rounded-md border shadow-sm flex-1 overflow-y-auto min-h-0 content-start">
-        {table.getRowModel().rows?.length ? (
-          table.getRowModel().rows.map((row) => (
-            <div
-              key={row.id} 
-              data-state={row.getIsSelected() && "selected"} 
-              className="flex items-start border-b p-2 transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted"
-            >
-              {row.getVisibleCells().map((cell) => (
-                <div
-                  key={cell.id}
-                  className={`text-left align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-4 ${
-                    cell.column.id === "select"
-                      ? "flex-shrink-0"
-                      : "flex-1 overflow-hidden"
-                  }`}
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </div>
-              ))}
+      {isLoading ? (
+        <SkeletonTable />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 rounded-md border shadow-sm flex-1 overflow-y-auto min-h-0 content-start">
+          {table.getRowModel().rows?.length ? (
+            table.getRowModel().rows.map((row) => (
+              <div
+                key={row.id}
+                data-state={row.getIsSelected() && "selected"}
+                className="flex items-start border-b p-2 transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted"
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <div
+                    key={cell.id}
+                    className={`text-left align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-4 ${
+                      cell.column.id === "select"
+                        ? "flex-shrink-0"
+                        : "flex-1 overflow-hidden"
+                    }`}
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                ))}
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full flex h-12 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+              No results.
             </div>
-          ))
-        ) : (
-          <div className="col-span-full flex h-12 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
-            No results.
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

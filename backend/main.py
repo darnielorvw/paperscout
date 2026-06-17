@@ -1,4 +1,5 @@
 import os
+import time
 from contextlib import asynccontextmanager
 from typing import List
 
@@ -130,7 +131,7 @@ async def search_articles(
         keywords=keywords,
         from_date=from_date,
         to_date=to_date,
-        limit=25,
+        limit=10,
     )
     return {"results": results}
 

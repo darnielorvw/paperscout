@@ -13,29 +13,39 @@ import {
   SidebarRail,
 } from "~/components/ui/sidebar";
 
-// This is sample data.
-const data = {
-  navMain: [
-    {
-      title: "Menu",
-      url: "#",
-      items: [
-        {
-          title: "Select Journals",
-          url: "/#journals",
-        },
-        {
-          title: "Select Time Range",
-          url: "/#range",
-        },
-        {
-          title: "Search",
-          url: "/#search",
-        },
-      ],
-    },
-  ],
-};
+// Dies sind Beispieldaten.
+const data = [
+  {
+    title: "Input",
+    items: [
+      {
+        title: "Select Journals",
+        url: "/#journals",
+      },
+      {
+        title: "Select Time Range",
+        url: "/#range",
+      },
+      {
+        title: "Search",
+        url: "/#search",
+      },
+    ],
+  },
+  {
+    title: "Results",
+    items: [
+      {
+        title: "Results",
+        url: "/results",
+      },
+      {
+        title: "Settings",
+        url: "/test",
+      }
+    ],
+  },
+];
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
@@ -47,8 +57,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props}>
-      <SidebarContent>
-        {data.navMain.map((item) => (
+      <SidebarContent> 
+        {data.map((item) => (
           <SidebarGroup key={item.title}>
             <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
             <SidebarGroupContent>

@@ -9,11 +9,9 @@ import { Checkbox } from "~/components/ui/checkbox";
 // You can use a Zod schema here if you want.
 export type Journal = {
   id: string;
-  display_name: string;
+  name: string;
   issn: string | null;
   publisher: string | null;
-  is_oa: boolean;
-  works_count: number;
   homepage_url: string | null;
 };
 

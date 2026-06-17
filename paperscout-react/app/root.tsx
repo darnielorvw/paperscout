@@ -1,14 +1,18 @@
 import {
-    isRouteErrorResponse,
-    Links,
-    Meta,
-    Outlet,
-    Scripts,
-    ScrollRestoration,
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
 } from "react-router";
 import { AppSidebar } from "~/components/app-sidebar";
 import { ThemeProvider } from "~/components/theme-provider";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "~/components/ui/sidebar";
 import type { Route } from "./+types/root";
 import { ModeToggle } from "./components/mode-toggle";
 
@@ -56,11 +60,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </header>
 
               {/* Hauptinhalt der Applikation */}
-              <main className="flex-1 min-h-0 p-4 md:p-8">
-                {children}
-              </main>
-
-              
+              <main className="flex-1 min-h-0 p-4 md:p-8">{children}</main>
             </SidebarInset>
           </SidebarProvider>
         </ThemeProvider>
