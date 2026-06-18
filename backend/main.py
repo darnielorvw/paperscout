@@ -145,7 +145,6 @@ async def download_paper(
     pdf_url = await download_service.get_pdf_download_url(
         doi, current_user.get("email", "")
     )
-    print(current_user)
 
     if not pdf_url:
         raise HTTPException(

@@ -42,7 +42,7 @@ const data = [
       {
         title: "Settings",
         url: "/test",
-      }
+      },
     ],
   },
 ];
@@ -57,7 +57,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar {...props}>
-      <SidebarContent> 
+      <SidebarContent>
         {data.map((item) => (
           <SidebarGroup key={item.title}>
             <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
@@ -66,13 +66,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 {item.items.map((subItem, index) => {
                   // Vor der Hydration gehen wir (wie der Server) von keinem Hash aus
                   const hash = isMounted ? location.hash : "";
-                  
+                  const normalizedHash = subItem.url.startsWith("/#")
+                    ? subItem.url.replace("/", "")
+                    : "";
+
                   // Aktiv, wenn der URL-Hash übereinstimmt ODER wenn gar kein Hash da ist und es das erste Item ist.
                   const isActive =
-                    location.pathname === "/" &&
-                    (hash === subItem.url.replace("/", "") ||
-                      (!hash && index === 0));
-
+                    location.pathname === subItem.url ||
+                    (location.pathname === "/" &&
+                      (hash === normalizedHash || (!hash && index === 0)));
                   return (
                     <SidebarMenuItem key={subItem.title}>
                       <SidebarMenuButton asChild isActive={isActive}>

@@ -2,19 +2,30 @@
 import { endOfMonth, format, startOfMonth } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { type DateRange } from "react-day-picker";
-import { useNavigate } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { InputAccordion } from "~/components/input-accordion";
 import { type Journal } from "~/pages/journals/columns";
 import JournalsPage from "~/pages/journals/journals";
 import RangePage from "~/pages/range/range";
 import SearchPage from "~/pages/search/search";
 
-export default function Home() {
-  const [journals, setJournals] = useState<Journal[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export async function clientLoader() {
+  const journals = fetch("http://localhost:8000/api/journals")
+    .then((response) => {
+      if (!response.ok) throw new Error("Fehler beim Laden der Journals");
+      return response.json();
+    })
+    .then((data) => {
+      return (data.results as Journal[]) || [];
+    });
 
+  return { journals };
+}
+
+export default function Home() {
   // Auswahlzustand für die Journals
+  const { journals } = useLoaderData();
+
   const [rowSelection, setRowSelection] = useState(() => {
     const saved = sessionStorage.getItem("ps_row_selection");
     return saved ? JSON.parse(saved) : {};
@@ -55,28 +66,6 @@ export default function Home() {
     sessionStorage.setItem("ps_search_term", searchTerm);
   }, [searchTerm]);
 
-  useEffect(() => {
-    async function loadJournals() {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch("http://localhost:8000/api/journals");
-        if (!response.ok) throw new Error("Fehler beim Laden");
-        const data = await response.json();
-        setJournals((data.results as Journal[]) || []);
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
-        setJournals([]);
-        setError(err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    loadJournals();
-  }, []);
-
   const handleSearch = async () => {
     if (!date?.from || !date?.to) return;
 
@@ -111,13 +100,11 @@ export default function Home() {
     () => (
       <JournalsPage
         initialData={journals}
-        initialError={error}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
-        isLoading={isLoading}
       />
     ),
-    [journals, error, rowSelection, setRowSelection, isLoading],
+    [rowSelection, setRowSelection],
   );
 
   const rangeContent = useMemo(
