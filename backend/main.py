@@ -119,6 +119,7 @@ async def search_articles(
     keywords: str = Query(""),
     from_date: str = Query(...),
     to_date: str = Query(...),
+    page: int = Query(1),
     session: Session = Depends(get_session)
 ):
     """Sucht nach wissenschaftlichen Artikeln in den gewählten Journals."""
@@ -126,14 +127,15 @@ async def search_articles(
     statement = select(models.Journals.id).where(models.Journals.id.in_(journal_ids))
     oa_ids = session.exec(statement).all()
     
-    results = await search_service.search(
+    data = await search_service.search(
         journal_ids=[id for id in oa_ids if id],
         keywords=keywords,
         from_date=from_date,
         to_date=to_date,
-        limit=10,
+        limit=25,
+        page=page,
     )
-    return {"results": results}
+    return data
 
 
 @app.get("/api/download")

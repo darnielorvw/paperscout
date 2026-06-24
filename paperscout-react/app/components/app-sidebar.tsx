@@ -12,6 +12,8 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "~/components/ui/sidebar";
+import { useSearch } from "~/context/search-context";
+import { buildResultsUrl } from "~/lib/search-utils";
 
 // Dies sind Beispieldaten.
 const data = [
@@ -49,11 +51,19 @@ const data = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
+  const { rowSelection, date, searchTerm, isInitialized } = useSearch();
   const [isMounted, setIsMounted] = React.useState(false);
 
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Baue die Results-URL basierend auf dem globalen Zustand.
+  // useMemo sorgt dafür, dass dies nur bei Änderungen neu berechnet wird.
+  const resultsUrl = React.useMemo(() => {
+    if (!isInitialized) return "/results"; // Warten, bis der Zustand aus dem Storage geladen ist
+    return buildResultsUrl({ rowSelection, date, searchTerm });
+  }, [rowSelection, date, searchTerm, isInitialized]);
 
   return (
     <Sidebar {...props}>
@@ -69,6 +79,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   const normalizedHash = subItem.url.startsWith("/#")
                     ? subItem.url.replace("/", "")
                     : "";
+                  
+                  let finalUrl = subItem.url;
+                  // Wenn es der "Results"-Link ist und wir auf der Startseite sind,
+                  // bauen wir die URL mit den Daten aus dem Session Storage.
+                  if (subItem.url === "/results") {
+                    finalUrl = resultsUrl;
+                  }
 
                   // Aktiv, wenn der URL-Hash übereinstimmt ODER wenn gar kein Hash da ist und es das erste Item ist.
                   const isActive =
@@ -78,7 +95,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   return (
                     <SidebarMenuItem key={subItem.title}>
                       <SidebarMenuButton asChild isActive={isActive}>
-                        <NavLink to={subItem.url}>{subItem.title}</NavLink>
+                        <NavLink to={finalUrl}>{subItem.title}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

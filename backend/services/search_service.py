@@ -1,3 +1,4 @@
+import re
 from typing import Any, Dict, List
 
 import httpx
@@ -38,7 +39,8 @@ class SearchService:
         from_date: str,
         to_date: str,
         limit: int,
-    ) -> List[Dict[str, Any]]:
+        page: int,
+    ) -> Dict[str, Any]:
         """Sucht nach wissenschaftlichen Artikeln (Works) innerhalb spezifischer Journals in einem Zeitraum."""
         # Bereinige die IDs (wir brauchen nur den Teil nach dem letzten Slash, z.B. S123)
         # OpenAlex erlaubt mehrere IDs getrennt durch ein Pipe-Symbol |
@@ -46,20 +48,23 @@ class SearchService:
 
         # OpenAlex Filter: Quelle(n), Startdatum und Enddatum
         filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date}"
-        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,cited_by_count"
+        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic"
 
         params = {
             "search": keywords,
             "filter": filter_str,
             "per_page": limit,
+            "page": page,
             "select": select,
         }
 
         # Abfrage des /works Endpunkts für Artikel statt /sources für Journals
         data = await self._fetch_from_api("/works", params)
 
+        meta = data.get("meta", {})
         results = []
         for work in data.get("results", []):
+            print(work)
             results.append(
                 {
                     "id": work.get("id"),
@@ -72,11 +77,11 @@ class SearchService:
                     "abstract": self._extract_abstract(
                         work.get("abstract_inverted_index", {})
                     ),
-                    "cited_by_count": work.get("cited_by_count"),
+                    "topic": (work.get("primary_topic") or {}).get("display_name"),
+                    
                 }
             )
-        print(results)
-        return results
+        return {"meta": meta, "results": results}
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]]) -> str:
         """OpenAlex liefert Abstracts aus Urheberrechtsgründen 'invertiert'. Das baut es wieder zusammen."""
@@ -90,4 +95,5 @@ class SearchService:
                 word_positions[pos] = word
 
         sorted_words = [word_positions[p] for p in sorted(word_positions.keys())]
-        return " ".join(sorted_words)
+        abstract = " ".join(sorted_words)
+        return re.sub(r"^(Abstract|ABSTRACT)\s*", "", abstract)

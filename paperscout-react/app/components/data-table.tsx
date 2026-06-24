@@ -20,7 +20,7 @@ import { Input } from "./ui/input";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
-  initialData: TData[];
+  initialData: Promise<TData[]>;
   rowSelection?: any;
   onRowSelectionChange?: any;
 }

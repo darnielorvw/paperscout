@@ -16,7 +16,7 @@ export function SkeletonTable() {
 
 export function SkeletonList() {
   return (
-    <div className="flex w-full flex-col gap-4">
+    <div className="flex w-full flex-col flex-1 gap-4">
       {Array.from({ length: 6 }).map((_, index) => (
         <div className="flex gap-4" key={index}>
           <Skeleton className="h-25 flex-1 rounded-lg" />

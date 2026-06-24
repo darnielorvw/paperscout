@@ -4,7 +4,7 @@ import { DataTable } from "~/components/data-table";
 import { columns, type Journal } from "./columns";
 
 interface JournalsPageProps {
-  initialData: Journal[];
+  initialData: Promise<Journal[]>;
   rowSelection: any;
   onRowSelectionChange: (selection: any) => void;
 }
