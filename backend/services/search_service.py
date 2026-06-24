@@ -1,23 +1,31 @@
+import os
 import re
 from typing import Any, Dict, List
 
 import httpx
+from dotenv import load_dotenv
+from lib.cache import LRUCache
+
+load_dotenv()
 
 
 class SearchService:
     def __init__(self):
-        # OpenAlex bittet um eine E-Mail im Header für den "Polite Pool" (schnellere Antwortzeiten)
-        self.headers = {"User-Agent": "PaperScoutBot/1.0 (mailto:ihre-mail@fh-swf.de)"}
         self.base_url = "https://api.openalex.org"
+        
+        # Initialisiere unsere neue, ausgelagerte Cache-Klasse
+        self.cache = LRUCache(max_size=100, ttl=3600)
 
     async def _fetch_from_api(
         self, endpoint: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Zentrale Methode für API-Anfragen, um redundanten Code zu vermeiden."""
         async with httpx.AsyncClient(
-            base_url=self.base_url, headers=self.headers, timeout=10.0
+            base_url=self.base_url, timeout=10.0
         ) as client:
             try:
+                api_key = os.environ.get("API_KEY")
+                params = {"api_key": api_key, **params}
                 response = await client.get(endpoint, params=params)
                 response.raise_for_status()
                 return response.json()
@@ -29,7 +37,6 @@ class SearchService:
         """Sucht extern bei OpenAlex nach Journals (Sources)."""
         params = {"filter": "type:journal", "per_page": 50}
         data = await self._fetch_from_api("/sources", params)
-        print(data)
         return data.get("results", [])
 
     async def search(
@@ -42,6 +49,24 @@ class SearchService:
         page: int,
     ) -> Dict[str, Any]:
         """Sucht nach wissenschaftlichen Artikeln (Works) innerhalb spezifischer Journals in einem Zeitraum."""
+        # 1. Eindeutigen und stabilen Cache-Schlüssel aus den Parametern erstellen
+        # Wir sortieren die journal_ids, damit die Reihenfolge keine Rolle spielt.
+        key_parts = (
+            tuple(sorted(journal_ids)),
+            keywords,
+            from_date,
+            to_date,
+            limit,
+            page,
+        )
+        cache_key = str(key_parts)
+
+        # 2. Im Cache nach einem gültigen Eintrag suchen
+        cached_data = self.cache.get(cache_key)
+        if cached_data:
+            print(f"✅ Treffer im Backend-Cache für Schlüssel: {cache_key[:50]}...")
+            return cached_data
+
         # Bereinige die IDs (wir brauchen nur den Teil nach dem letzten Slash, z.B. S123)
         # OpenAlex erlaubt mehrere IDs getrennt durch ein Pipe-Symbol |
         clean_ids = "|".join([jid.split("/")[-1] for jid in journal_ids])
@@ -60,11 +85,12 @@ class SearchService:
 
         # Abfrage des /works Endpunkts für Artikel statt /sources für Journals
         data = await self._fetch_from_api("/works", params)
+        
+
 
         meta = data.get("meta", {})
         results = []
         for work in data.get("results", []):
-            print(work)
             results.append(
                 {
                     "id": work.get("id"),
@@ -81,7 +107,11 @@ class SearchService:
                     
                 }
             )
-        return {"meta": meta, "results": results}
+        data = {"meta": meta, "results": results}
+
+        if results:
+            self.cache.set(cache_key, data)
+        return data
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]]) -> str:
         """OpenAlex liefert Abstracts aus Urheberrechtsgründen 'invertiert'. Das baut es wieder zusammen."""

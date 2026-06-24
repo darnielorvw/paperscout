@@ -7,6 +7,7 @@ __pycache__/
 .Python
 build/
 dist/
+.env
 
 # Virtual Environment
 .venv/
