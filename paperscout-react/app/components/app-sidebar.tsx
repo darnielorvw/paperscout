@@ -1,6 +1,6 @@
+import { LogOutIcon } from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation } from "react-router";
-
 import {
   Sidebar,
   SidebarContent,
@@ -44,6 +44,21 @@ const data = [
       {
         title: "Settings",
         url: "/test",
+      },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
+      {
+        title: "Login",
+        url: "/login",
+        isForm: true,
+      },
+      {
+        title: "Logout",
+        url: "/logout",
+        isForm: true, // Custom property to render a form
       },
     ],
   },
@@ -93,9 +108,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     (location.pathname === "/" &&
                       (hash === normalizedHash || (!hash && index === 0)));
                   return (
-                    <SidebarMenuItem key={subItem.title}>
-                      <SidebarMenuButton asChild isActive={isActive}>
-                        <NavLink to={finalUrl}>{subItem.title}</NavLink>
+                    <SidebarMenuItem key={subItem.title} className="w-full">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className="w-full justify-start"
+                      >
+                        {subItem.url === "/logout" ? (
+                          <NavLink to={finalUrl} className="flex w-full items-center gap-2"><LogOutIcon className="size-4" />{subItem.title}</NavLink>
+                        ) : (
+                          <NavLink to={finalUrl}>{subItem.title}</NavLink>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

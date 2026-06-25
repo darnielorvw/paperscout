@@ -8,7 +8,7 @@ __pycache__/
 build/
 dist/
 .env
-*.db
+**/*.db
 
 # Virtual Environment
 .venv/

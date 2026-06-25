@@ -1,6 +1,9 @@
+import { format } from "date-fns";
 import { Suspense, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
 import { SkeletonList } from "~/components/skeletons";
+
+import { Badge } from "~/components/ui/badge";
 import {
   Pagination,
   PaginationContent,
@@ -21,6 +24,7 @@ export type Article = {
   journal_name: string;
   abstract: string;
   topic: string;
+  author: string;
 };
 
 type LoaderData = {
@@ -101,7 +105,10 @@ export default function Results() {
       <div className="mb-6 flex">
         <h1 className="text-2xl font-bold">Search Results</h1>
       </div>
-      <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ opacity: isPending ? 0.3 : 1, transition: "opacity 1s" }}>
+      <div
+        className="flex flex-col flex-1 min-h-0 overflow-hidden"
+        style={{ opacity: isPending ? 0.3 : 1, transition: "opacity 1s" }}
+      >
         <Suspense fallback={<SkeletonList />}>
           <Await resolve={articlePromise}>
             {(resolvedData) => {
@@ -120,11 +127,18 @@ export default function Results() {
                           key={article.id}
                           className="rounded-lg border bg-card p-6 shadow-sm"
                         >
-                          <div className="mb-2 text-sm text-muted-foreground">
-                            {article.journal_name} | {article.publication_date}{" "}
-                            | topic: {article.topic}
+                          <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
+                            <Badge variant="outline">
+                              {article.journal_name}
+                            </Badge>
+                            <Badge variant="outline">
+                              {article.author} (
+                              {format(article.publication_date, "yyyy-MM")})
+                            </Badge>
+                            <Badge variant="outline">{article.topic}</Badge>
                           </div>
-                          <h2 className="mb-3 text-xl font-semibold leading-tight">
+
+                          <h2 className="mb-2 text-xl font-semibold leading-tight">
                             {article.title}
                           </h2>
                           <p className="text-sm text-muted-foreground">

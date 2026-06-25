@@ -8,6 +8,20 @@ from lib.cache import LRUCache
 
 load_dotenv()
 
+def format_authors_apa(authorships: list) -> str:
+    if not authorships:
+        return ""
+    
+    first = authorships[0]["author"]["display_name"].split()[-1]
+    
+    if len(authorships) == 1:
+        return first
+    if len(authorships) == 2:
+        second = authorships[1]["author"]["display_name"].split()[-1]
+        return f"{first} & {second}"
+    
+    return f"{first} et al."
+
 
 class SearchService:
     def __init__(self):
@@ -73,7 +87,7 @@ class SearchService:
 
         # OpenAlex Filter: Quelle(n), Startdatum und Enddatum
         filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date}"
-        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic"
+        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships"
 
         params = {
             "search": keywords,
@@ -104,6 +118,7 @@ class SearchService:
                         work.get("abstract_inverted_index", {})
                     ),
                     "topic": (work.get("primary_topic") or {}).get("display_name"),
+                    "author": format_authors_apa(work.get("authorships", [])),
                     
                 }
             )
