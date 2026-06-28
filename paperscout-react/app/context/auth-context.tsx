@@ -51,18 +51,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuthStatus();
   }, [checkAuthStatus]);
 
-  const login = async (token: string) => {
+  const login = useCallback(async (token: string) => {
     localStorage.setItem("auth_token", token);
     const userData = await apiFetch("/api/users/me", { method: "GET" });
     setUser(userData);
     navigate("/");
-  };
+  }, [navigate]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem("auth_token");
     navigate("/login");
-  };
+  }, [navigate]);
 
   const value = {
     user,
