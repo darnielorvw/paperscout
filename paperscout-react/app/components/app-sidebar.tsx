@@ -1,4 +1,3 @@
-import { LogOutIcon } from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation } from "react-router";
 import {
@@ -40,26 +39,7 @@ const data = [
       {
         title: "Results",
         url: "/results",
-      },
-      {
-        title: "Settings",
-        url: "/test",
-      },
-    ],
-  },
-  {
-    title: "Account",
-    items: [
-      {
-        title: "Login",
-        url: "/login",
-        isForm: true,
-      },
-      {
-        title: "Logout",
-        url: "/logout",
-        isForm: true, // Custom property to render a form
-      },
+      }
     ],
   },
 ];
@@ -94,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   const normalizedHash = subItem.url.startsWith("/#")
                     ? subItem.url.replace("/", "")
                     : "";
-                  
+
                   let finalUrl = subItem.url;
                   // Wenn es der "Results"-Link ist und wir auf der Startseite sind,
                   // bauen wir die URL mit den Daten aus dem Session Storage.
@@ -114,11 +94,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         isActive={isActive}
                         className="w-full justify-start"
                       >
-                        {subItem.url === "/logout" ? (
-                          <NavLink to={finalUrl} className="flex w-full items-center gap-2"><LogOutIcon className="size-4" />{subItem.title}</NavLink>
-                        ) : (
-                          <NavLink to={finalUrl}>{subItem.title}</NavLink>
-                        )}
+                        <NavLink to={finalUrl}>{subItem.title}</NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

@@ -62,7 +62,7 @@ app.add_middleware(
 search_service = SearchService()
 download_service = DownloadService()
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
 @app.post("/api/register", response_model=UserPublic, status_code=201)

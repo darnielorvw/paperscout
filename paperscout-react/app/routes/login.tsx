@@ -1,101 +1,62 @@
-import { useState } from "react";
-import { Form, Link } from "react-router";
-import { Button } from "~/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "~/components/ui/card";
-import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
+import { Link } from "react-router";
+import { AuthCard, type AuthField } from "~/components/auth-card";
 import { useAuth } from "~/context/auth-context";
 import { apiFetch } from "~/lib/api";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setError(null);
-
-    const formData = new FormData(event.currentTarget);
+  const handleLogin = async (formData: FormData) => {
     const email = formData.get("email");
     const password = formData.get("password");
 
     if (typeof email !== "string" || typeof password !== "string") {
-      setError("Invalid form data");
-      setIsSubmitting(false);
-      return;
+      throw new Error("Ungültige Eingabedaten.");
     }
 
-    try {
-      const loginFormData = new URLSearchParams();
-      loginFormData.append("username", email);
-      loginFormData.append("password", password);
+    const loginFormData = new URLSearchParams();
+    loginFormData.append("username", email);
+    loginFormData.append("password", password);
 
-      // Schritt 1: Token vom Login-Endpunkt holen.
-      const loginResponse = await apiFetch("/api/login", {
+    const loginResponse = await apiFetch(
+      "/api/login",
+      {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: loginFormData.toString(),
-      }, false); // handleUnauthorized = false, da wir den Fehler hier selbst behandeln wollen.
+      },
+      false,
+    );
 
-      if (!loginResponse.access_token) {
-        throw new Error(loginResponse.detail || "Login fehlgeschlagen.");
-      }
-
-      await login(loginResponse.access_token);
-    } catch (err: any) {
-      setError(err.message || "Ein unbekannter Fehler ist aufgetreten.");
-    } finally {
-      setIsSubmitting(false);
+    if (!loginResponse.access_token) {
+      throw new Error(loginResponse.detail || "Login fehlgeschlagen.");
     }
+
+    await login(loginResponse.access_token);
   };
 
+  const fields: AuthField[] = [
+    { id: "email", name: "email", label: "E-Mail", type: "email", required: true },
+    { id: "password", name: "password", label: "Passwort", type: "password", required: true },
+  ];
+
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <Form onSubmit={handleSubmit}>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Anmeldung</CardTitle>
-            <CardDescription>
-              Bitte melde dich an, um auf PaperScout zuzugreifen.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">E-Mail</Label>
-              <Input id="email" name="email" type="email" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Passwort</Label>
-              <Input id="password" name="password" type="password" required />
-            </div>
-            {error && (
-              <p className="text-sm text-red-500">{error}</p>
-            )}
-          </CardContent>
-          <CardFooter className="flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Melde an..." : "Anmelden"}
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              Du hast noch kein Konto?{" "}
-              <Link to="/register" className="font-semibold text-primary">
-                Registrieren
-              </Link>
-            </p>
-          </CardFooter>
-        </Form>
-      </Card>
-    </div>
+    <AuthCard
+      title="Anmeldung"
+      description="Bitte melde dich an, um auf PaperScout zuzugreifen."
+      fields={fields}
+      submitButtonText="Anmelden"
+      onSubmit={handleLogin}
+      footerContent={
+        <p className="text-sm text-muted-foreground">
+          Du hast noch kein Konto?{" "}
+          <Link to="/register" className="font-semibold text-primary">
+            Registrieren
+          </Link>
+        </p>
+      }
+    />
   );
 }

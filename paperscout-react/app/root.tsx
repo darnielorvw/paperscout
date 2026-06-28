@@ -5,20 +5,15 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
-import { AppSidebar } from "~/components/app-sidebar";
 import { ThemeProvider } from "~/components/theme-provider";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "~/components/ui/sidebar";
 import { AuthProvider } from "~/context/auth-context";
-import { SearchProvider } from "~/context/search-context";
+import { AppLayout } from "~/layouts/app-layout"; // Importieren
 import type { Route } from "./+types/root";
-import { ModeToggle } from "./components/mode-toggle";
 
 import "./app.css";
+import { AuthLayout } from "./layouts/auth-layout";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -34,6 +29,10 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const noLayoutRoutes = ["/login", "/register", "/logout"];
+  const useAppLayout = !noLayoutRoutes.includes(location.pathname);
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -50,23 +49,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           disableTransitionOnChange
         >
           <AuthProvider>
-            <SearchProvider>
-              <SidebarProvider>
-                <AppSidebar />
-                <SidebarInset className="flex h-svh flex-col overflow-hidden">
-                  {/* Headerbereich mit Titel und Theme-Toggle */}
-                  <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <SidebarTrigger />
-                    <span className="text-lg font-bold">PaperScout</span>
-                    <div className="ml-auto">
-                      <ModeToggle />
-                    </div>
-                  </header>
-
-                  <main className="flex-1 min-h-0 p-4 md:p-4">{children}</main>
-                </SidebarInset>
-              </SidebarProvider>
-            </SearchProvider>
+            {useAppLayout ? (
+              <AppLayout>{children}</AppLayout>
+            ) : (
+              <AuthLayout>{children}</AuthLayout>
+            )}
           </AuthProvider>
         </ThemeProvider>
 
