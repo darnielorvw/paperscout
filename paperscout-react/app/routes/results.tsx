@@ -13,6 +13,8 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "~/components/ui/pagination";
+import { apiFetch } from "~/lib/api";
+import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
 // Definiere den Artikel-Typ basierend auf der Rückgabe der search_service.py
@@ -34,11 +36,13 @@ type LoaderData = {
     perPage: number;
     currentPage: number;
   }>;
-  totalCount: number;
   error?: string;
 };
 
-export async function clientLoader({ request }: Route.ClientLoaderArgs) {
+export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
+  // Schütze diese Seite: Wenn kein Token, wird hier abgebrochen und umgeleitet.
+  protectPage();
+
   const url = new URL(request.url);
   const currentPage = parseInt(url.searchParams.get("page") || "1", 10);
   url.searchParams.set("page", currentPage.toString());
@@ -54,26 +58,20 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
         perPage: 0,
         currentPage: 1,
       }),
-      totalCount: 0,
       error:
         "Keine Suchparameter gefunden. Bitte führen Sie zuerst eine Suche durch.",
     };
   }
 
-  const articlePromise = fetch(
-    `http://localhost:8000/api/articles?${paramsString}`,
-  )
-    .then((res) => res.json())
-    .then((data) => {
-      const meta = data.meta || {};
-      const results = (data.results as Article[]) || [];
-      return {
-        articles: results,
-        totalCount: meta.count || 0,
-        perPage: meta.per_page || 25,
-        currentPage: meta.page || 1,
-      };
-    });
+  const articlePromise = apiFetch(`/api/articles?${paramsString}`).then((data) => {
+    const meta = data.meta || {}; const results = (data.results as Article[]) || [];
+    return {
+      articles: results,
+      totalCount: meta.count || 0,
+      perPage: meta.per_page || 25,
+      currentPage: meta.page || 1,
+    };
+  });
 
   return { articlePromise };
 }

@@ -13,6 +13,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "~/components/ui/sidebar";
+import { AuthProvider } from "~/context/auth-context";
 import { SearchProvider } from "~/context/search-context";
 import type { Route } from "./+types/root";
 import { ModeToggle } from "./components/mode-toggle";
@@ -42,30 +43,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <SearchProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset className="flex h-svh flex-col overflow-hidden">
-                {/* Headerbereich mit Titel und Theme-Toggle */}
-                <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <SidebarTrigger />
-                  <span className="text-lg font-bold">PaperScout</span>
-                  <div className="ml-auto">
-                    <ModeToggle />
-                  </div>
-                </header>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            <SearchProvider>
+              <SidebarProvider>
+                <AppSidebar />
+                <SidebarInset className="flex h-svh flex-col overflow-hidden">
+                  {/* Headerbereich mit Titel und Theme-Toggle */}
+                  <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                    <SidebarTrigger />
+                    <span className="text-lg font-bold">PaperScout</span>
+                    <div className="ml-auto">
+                      <ModeToggle />
+                    </div>
+                  </header>
 
-                <main className="flex-1 min-h-0 p-4 md:p-4">{children}</main>
-              </SidebarInset>
-            </SidebarProvider>
-          </ThemeProvider>
-        </SearchProvider>
+                  <main className="flex-1 min-h-0 p-4 md:p-4">{children}</main>
+                </SidebarInset>
+              </SidebarProvider>
+            </SearchProvider>
+          </AuthProvider>
+        </ThemeProvider>
 
         <ScrollRestoration />
         <Scripts />

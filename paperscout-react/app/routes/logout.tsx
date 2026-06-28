@@ -1,17 +1,12 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useAuth } from "~/context/auth-context";
 
 export default function LogoutPage() {
-  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   useEffect(() => {
-    // In einer echten Anwendung würdest du hier den Auth-Token aus dem
-    // Local Storage oder Auth-Context entfernen.
-    // z.B. auth.logout();
-
-    // Dann zur Login-Seite weiterleiten.
-    navigate("/login");
-  }, [navigate]);
+    logout();
+  }, [logout]);
 
   // Zeige eine Ladeanzeige, während die Weiterleitung stattfindet.
   return <div>Logging out...</div>;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Link, useNavigate } from "react-router";
+import { Form, Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -11,10 +11,11 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { useAuth } from "~/context/auth-context";
 import { apiFetch } from "~/lib/api";
 
 export default function LoginPage() {
-  const navigate = useNavigate();
+  const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -38,22 +39,22 @@ export default function LoginPage() {
       loginFormData.append("username", email);
       loginFormData.append("password", password);
 
-      const response = await apiFetch("http://localhost:8000/api/login", {
+      // Schritt 1: Token vom Login-Endpunkt holen.
+      const loginResponse = await apiFetch("/api/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: loginFormData.toString(),
-      });
+      }, false); // handleUnauthorized = false, da wir den Fehler hier selbst behandeln wollen.
 
-      if (response.access_token) {
-        // Hier könntest du den Token speichern (z.B. im AuthContext)
-        navigate("/"); // Nach erfolgreichem Login weiterleiten
-      } else {
-        setError(response.detail || "Login failed");
+      if (!loginResponse.access_token) {
+        throw new Error(loginResponse.detail || "Login fehlgeschlagen.");
       }
+
+      await login(loginResponse.access_token);
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      setError(err.message || "Ein unbekannter Fehler ist aufgetreten.");
     } finally {
       setIsSubmitting(false);
     }

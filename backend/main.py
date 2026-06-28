@@ -66,16 +66,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
 @app.post("/api/register", response_model=UserPublic, status_code=201)
-async def register_user(
-    user: UserCreate, session: Session = Depends(get_session)
-):
+async def register_user(user: UserCreate, session: Session = Depends(get_session)):
     """Registriert einen neuen Benutzer in der Datenbank."""
-    print("1")
     db_user = auth_service.get_user_by_email(session, user.email)
-    print("2")
     if db_user:
         raise HTTPException(status_code=400, detail="E-Mail bereits registriert.")
-    
+
     new_user = user_service.create_db_user(session, user)
     session.commit()
     session.refresh(new_user)
@@ -88,8 +84,12 @@ async def login_for_access_token(
     session: Session = Depends(get_session),
 ):
     """Authentifiziert einen Benutzer und gibt ein JWT-Token zurück."""
-    user = auth_service.get_user_by_email(session, form_data.username) # username ist die E-Mail
-    if not user or not user_service.verify_password(form_data.password, user.hashed_password):
+    user = auth_service.get_user_by_email(
+        session, form_data.username
+    )  # username ist die E-Mail
+    if not user or not user_service.verify_password(
+        form_data.password, user.hashed_password
+    ):
         raise HTTPException(
             status_code=401,
             detail="Falsche E-Mail oder Passwort.",
@@ -103,7 +103,10 @@ async def login_for_access_token(
 
 
 @app.get("/api/journals")
-async def get_journals(session: Session = Depends(get_session)):
+async def get_journals(
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.get_current_user),
+):
     statement = select(models.Journals)
 
     db_journals = session.exec(statement).all()
@@ -126,30 +129,39 @@ async def get_journals(session: Session = Depends(get_session)):
 
 
 @app.post("/api/journals/import")
-async def import_journals(session: Session = Depends(get_session),
-                          current_user: models.User = Depends(auth_service.get_current_user)):
+async def import_journals(
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.get_current_user),
+):
     """Sucht Journals bei OpenAlex und speichert sie in der lokalen Datenbank."""
     external_results = await search_service.fetch_external_journals()
-    
+
     imported_journals = []
     for item in external_results:
         oa_id = item.get("id", "").split("/")[-1]
         if not oa_id:
             continue
-            
-        stmt = sqlite_insert(models.Journals).values(
-            id=oa_id,
-            name=item.get("display_name"),
-            issn=item.get("issn_l") or "",
-            publisher=item.get("host_organization_name") or "Unknown",
-            homepage=item.get("homepage_url") or "",
-        ).on_conflict_do_nothing()
+
+        stmt = (
+            sqlite_insert(models.Journals)
+            .values(
+                id=oa_id,
+                name=item.get("display_name"),
+                issn=item.get("issn_l") or "",
+                publisher=item.get("host_organization_name") or "Unknown",
+                homepage=item.get("homepage_url") or "",
+            )
+            .on_conflict_do_nothing()
+        )
 
         session.exec(stmt)
         imported_journals.append(oa_id)
-            
+
     session.commit()
-    return {"message": f"{len(imported_journals)} Journals importiert.", "results": imported_journals}
+    return {
+        "message": f"{len(imported_journals)} Journals importiert.",
+        "results": imported_journals,
+    }
 
 
 @app.get("/api/articles")
@@ -160,12 +172,12 @@ async def search_articles(
     to_date: str = Query(...),
     page: int = Query(1),
     session: Session = Depends(get_session),
-    current_user: models.User = Depends(auth_service.get_current_user)
+    _: models.User = Depends(auth_service.get_current_user),
 ):
     """Sucht nach wissenschaftlichen Artikeln in den gewählten Journals."""
     statement = select(models.Journals.id).where(models.Journals.id.in_(journal_ids))
     oa_ids = session.exec(statement).all()
-    
+
     data = await search_service.search(
         journal_ids=[id for id in oa_ids if id],
         keywords=keywords,
@@ -177,20 +189,25 @@ async def search_articles(
     return data
 
 
-@app.get("/api/users/me", response_model=UserPublic)
-async def read_users_me(current_user: models.User = Depends(auth_service.get_current_user)):
+@app.api_route("/api/users/me", response_model=UserPublic, methods=["GET", "HEAD"])
+async def read_users_me(
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
     """Gibt die Daten des aktuell authentifizierten Benutzers zurück."""
     return current_user
 
 
 @app.get("/api/download")
 async def download_paper(
-    doi: str, title: str, current_user: models.User = Depends(auth_service.get_current_user)
+    doi: str,
+    title: str,
+    current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Sucht die PDF-Quelle und streamt die Datei direkt an das Frontend."""
     # 1. Versuche die direkte PDF-URL über Unpaywall zu ermitteln
-    pdf_url = await download_service.get_pdf_download_url( # Hier wird die E-Mail des angemeldeten Benutzers verwendet
-        doi, current_user.get("email", "")
+    pdf_url = await download_service.get_pdf_download_url(
+        doi,
+        current_user.email,  # Korrekter Zugriff auf die E-Mail des SQLModel-Benutzers
     )
 
     if not pdf_url:

@@ -4,14 +4,18 @@ import { useLoaderData, useLocation, useNavigate } from "react-router";
 import { InputAccordion } from "~/components/input-accordion";
 import { useSearch } from "~/context/search-context";
 import { apiFetch } from "~/lib/api";
+import { protectPage } from "~/lib/auth";
 import { buildResultsUrl } from "~/lib/search-utils";
 import { type Journal } from "~/pages/journals/columns";
 import JournalsPage from "~/pages/journals/journals";
 import RangePage from "~/pages/range/range";
 import SearchPage from "~/pages/search/search";
 
-export async function clientLoader() {
-  const journals = apiFetch("http://localhost:8000/api/journals")
+export function clientLoader(): { journals: Promise<Journal[]> } {
+  // Schütze diese Seite: Wenn kein Token, wird hier abgebrochen und umgeleitet.
+  protectPage();
+
+  const journals = apiFetch("/api/journals")
     .then((data) => {
       return (data.results as Journal[]) || [];
     });
