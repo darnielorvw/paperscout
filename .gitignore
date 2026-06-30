@@ -11,7 +11,8 @@ dist/
 **/*.db
 
 # Virtual Environment
-.venv/
+.venv/*
+!.venv/.gitkeep
 venv/
 env/
 ENV/
@@ -45,7 +46,3 @@ results.xlsx
 results.csv
 .agents/
 
-# Secrets (if not handled by st.secrets or environment variables)
-# .env
-# *.env
-# .streamlit/secrets.toml
