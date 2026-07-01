@@ -14,7 +14,6 @@ import {
 import { useSearch } from "~/context/search-context";
 import { buildResultsUrl } from "~/lib/search-utils";
 
-// Dies sind Beispieldaten.
 const data = [
   {
     title: "Input",
@@ -39,7 +38,16 @@ const data = [
       {
         title: "Results",
         url: "/results",
-      }
+      },
+    ],
+  },
+  {
+    title: "Settings",
+    items: [
+      {
+        title: "Profiles",
+        url: "/profiles",
+      },
     ],
   },
 ];
@@ -65,7 +73,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         {data.map((item) => (
           <SidebarGroup key={item.title}>
-            <SidebarGroupLabel>{item.title}</SidebarGroupLabel>
+            {item.title && <SidebarGroupLabel>{item.title}</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
                 {item.items.map((subItem, index) => {

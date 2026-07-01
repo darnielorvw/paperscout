@@ -1,3 +1,5 @@
+"use client";
+
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
