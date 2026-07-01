@@ -1,17 +1,16 @@
 import os
-import time
+from sqlalchemy.exc import IntegrityError
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import List
 
 from database import models
 from database.database import engine, get_session
-from database.seed_data import DEFAULT_JOURNALS
-from fastapi import Body, Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from schemas import UserCreate, UserLogin, UserPublic
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from schemas import ProfileCreate, UserCreate, UserLogin, UserPublic
 from services import auth_service, user_service
 from services.download_service import DownloadService
 from services.search_service import SearchService
@@ -187,6 +186,90 @@ async def search_articles(
         page=page,
     )
     return data
+
+
+@app.post("/api/profiles", status_code=201)
+async def create_profile(
+    profile_data: ProfileCreate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Erstellt ein neues Suchprofil für den aktuellen Benutzer."""
+
+    start = profile_data.settings.startDate
+    end = profile_data.settings.endDate
+
+    # 2. Neues DB-Profil mit den flachen Spalten befüllen
+    new_profile = models.Profile(
+        profile_name=profile_data.name,
+        user_id=current_user.id,
+        row_selection=profile_data.settings.rowSelection,
+        searchTerm=profile_data.settings.searchTerm,
+        start_date=start,
+        end_date=end,
+    )
+
+    new_profile.settings_hash = new_profile.generate_hash()
+
+    try:
+        session.add(new_profile)
+        session.commit()
+        session.refresh(new_profile)
+
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ein Suchprofil mit exakt diesen Filtern existiert bereits.",
+        )
+
+    # Kombiniere die Daten für die Antwort, wie vom Frontend erwartet
+    response_data = {
+        "name": new_profile.profile_name,
+        "id": new_profile.id,
+        "rowSelection": new_profile.row_selection,
+        "searchTerm": new_profile.searchTerm,
+        "date": {"from": new_profile.start_date, "to": new_profile.end_date},
+    }
+    return response_data
+
+
+@app.get("/api/profiles")
+async def get_profiles(
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Gibt alle Suchprofile des aktuellen Benutzers zurück."""
+    profiles = session.exec(
+        select(models.Profile).where(models.Profile.user_id == current_user.id)
+    ).all()
+
+    # Transformiere die Daten, um dem Frontend-Format zu entsprechen
+    results = [
+        {
+            "id": p.id,
+            "name": p.profile_name,
+            "rowSelection": p.row_selection,
+            "searchTerm": p.searchTerm,
+            "date": {"from": p.start_date, "to": p.end_date},
+        }
+        for p in profiles
+    ]
+    return {"results": results}
+
+
+@app.delete("/api/profiles/{profile_id}", status_code=204)
+async def delete_profile(
+    profile_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Löscht ein bestimmtes Suchprofil."""
+    profile = session.get(models.Profile, profile_id)
+    if not profile or profile.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+    session.delete(profile)
+    session.commit()
 
 
 @app.api_route("/api/users/me", response_model=UserPublic, methods=["GET", "HEAD"])

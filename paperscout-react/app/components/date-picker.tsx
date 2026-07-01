@@ -143,102 +143,102 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
         {/* Presets Sidebar */}
         <div className="flex w-40 shrink-0 flex-col gap-2">
           <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                Schnellauswahl
-              </div>
-              {presets.map((preset) => (
-                <Button
-                  key={preset.label}
-                  variant="ghost"
-                  className="justify-start font-normal"
-                  onClick={() => applyPreset(preset.getDates)}
-                >
-                  {preset.label}
-                </Button>
-              ))}
-            </div>
-
-            <div className="w-px bg-border my-2" />
-
-            {/* Start Date Calendar */}
-            <div className="w-64 shrink-0">
-              <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                Start Date
-              </div>
-              <div className="flex items-center justify-between pb-4">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setStartYear(startYear - 1)}
-                >
-                  <ChevronLeftIcon className="h-4 w-4" />
-                </Button>
-                <div className="font-semibold">{startYear}</div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setStartYear(startYear + 1)}
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {months.map((month, index) => {
-                  const selected = isSelected(startYear, index);
-                  return (
-                    <Button
-                      key={`start-${month}`}
-                      variant={selected ? "default" : "ghost"}
-                      onClick={() => handleStartMonthClick(index)}
-                      className="w-full"
-                    >
-                      {month}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="w-px bg-border my-2" />
-
-            {/* End Date Calendar */}
-            <div className="w-64 shrink-0">
-              <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
-                End Date
-              </div>
-              <div className="flex items-center justify-between pb-4">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setEndYear(endYear - 1)}
-                >
-                  <ChevronLeftIcon className="h-4 w-4" />
-                </Button>
-                <div className="font-semibold">{endYear}</div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setEndYear(endYear + 1)}
-                >
-                  <ChevronRightIcon className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {months.map((month, index) => {
-                  const selected = isSelected(endYear, index);
-                  return (
-                    <Button
-                      key={`end-${month}`}
-                      variant={selected ? "default" : "ghost"}
-                      onClick={() => handleEndMonthClick(index)}
-                      className="w-full"
-                    >
-                      {month}
-                    </Button>
-                  );
-                })}
-              </div>
-            </div>
+            Schnellauswahl
           </div>
+          {presets.map((preset) => (
+            <Button
+              key={preset.label}
+              variant="ghost"
+              className="justify-start font-normal"
+              onClick={() => applyPreset(preset.getDates)}
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className="w-px bg-border my-2" />
+
+        {/* Start Date Calendar */}
+        <div className="w-64 shrink-0">
+          <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
+            Start Date
+          </div>
+          <div className="flex items-center justify-between pb-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setStartYear(startYear - 1)}
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </Button>
+            <div className="font-semibold">{startYear}</div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setStartYear(startYear + 1)}
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {months.map((month, index) => {
+              const selected = isSelected(startYear, index);
+              return (
+                <Button
+                  key={`start-${month}`}
+                  variant={selected ? "default" : "ghost"}
+                  onClick={() => handleStartMonthClick(index)}
+                  className="w-full"
+                >
+                  {month}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="w-px bg-border my-2" />
+
+        {/* End Date Calendar */}
+        <div className="w-64 shrink-0">
+          <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
+            End Date
+          </div>
+          <div className="flex items-center justify-between pb-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setEndYear(endYear - 1)}
+            >
+              <ChevronLeftIcon className="h-4 w-4" />
+            </Button>
+            <div className="font-semibold">{endYear}</div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setEndYear(endYear + 1)}
+            >
+              <ChevronRightIcon className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {months.map((month, index) => {
+              const selected = isSelected(endYear, index);
+              return (
+                <Button
+                  key={`end-${month}`}
+                  variant={selected ? "default" : "ghost"}
+                  onClick={() => handleEndMonthClick(index)}
+                  className="w-full"
+                >
+                  {month}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

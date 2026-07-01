@@ -6,12 +6,12 @@ import { Await, useLoaderData, useNavigate } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -26,6 +26,8 @@ export interface SearchProfile {
   date: DateRange;
   searchTerm: string;
 }
+
+
 
 export function clientLoader() {
   protectPage();
@@ -52,7 +54,7 @@ export default function Profiles() {
 
   const handleSaveProfile = async () => {
     if (!newProfileName.trim()) {
-      setError("Bitte geben Sie einen Namen für das Profil ein.");
+      setError("Name required");
       return;
     }
     try {
@@ -62,7 +64,13 @@ export default function Profiles() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newProfileName,
-          settings: { rowSelection, date, searchTerm },
+
+          settings: {
+            rowSelection,
+            startDate: date?.from,
+            endDate: date?.to,
+            searchTerm,
+          }
         }),
       });
       setNewProfileName("");
@@ -101,7 +109,6 @@ export default function Profiles() {
         </p>
       </div>
 
-      {/* Neues Profil erstellen */}
       <Card>
         <CardHeader>
           <CardTitle>Neues Profil erstellen</CardTitle>
@@ -114,15 +121,18 @@ export default function Profiles() {
           <div className="flex w-full max-w-sm items-center space-x-2">
             <Input
               type="text"
-              placeholder="Name des Profils (z.B. 'KI-Forschung 2024')"
+              placeholder="Name of the profile"
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
             />
             <Button onClick={handleSaveProfile}>
-              <PlusIcon className="mr-2 h-4 w-4" /> Speichern
+              <PlusIcon className="h-4 w-4" /> Save
             </Button>
           </div>
-          <AlertDialogBasic open={!!error} />
+          <AlertDialogBasic
+            open={!!error}
+            description="Please enter a name for the profile." title={error}
+            onClose={() => setError(null)} />
         </CardContent>
       </Card>
 
