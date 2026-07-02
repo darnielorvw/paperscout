@@ -70,9 +70,13 @@ export default function Home() {
 
   const searchContent = useMemo(
     () => (
-      <SearchPage searchTerm={searchTerm} onSearchTermChange={setSearchTerm} />
+      <SearchPage
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
+        onSearch={handleSearch}
+      />
     ),
-    [searchTerm],
+    [searchTerm, setSearchTerm, handleSearch],
   );
 
   const accordionItems = useMemo(

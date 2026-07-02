@@ -1,5 +1,4 @@
 import os
-from sqlalchemy.exc import IntegrityError
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import List
@@ -10,11 +9,12 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from schemas import ProfileCreate, UserCreate, UserPublic
+from schemas import ProfileCreate, ProfileSettings, UserCreate, UserPublic
 from services import auth_service, user_service
 from services.download_service import DownloadService
 from services.search_service import SearchService
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
 
 
@@ -241,6 +241,38 @@ async def get_profiles(
     ]
     return {"results": results}
 
+
+@app.put("/api/profiles/{profile_id}")
+async def update_profile(
+    profile_id: int,
+    settings: ProfileSettings,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Aktualisiert ein bestehendes Suchprofil."""
+    profile = session.get(models.Profile, profile_id)
+    if not profile or profile.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+
+    # Update der Felder
+    profile.row_selection = settings.rowSelection
+    profile.searchTerm = settings.searchTerm
+    profile.start_date = settings.startDate
+    profile.end_date = settings.endDate
+    profile.settings_hash = profile.generate_hash()
+
+    session.add(profile)
+    session.commit()
+    session.refresh(profile)
+
+    response_data = {
+        "id": profile.id,
+        "name": profile.profile_name,
+        "rowSelection": profile.row_selection,
+        "searchTerm": profile.searchTerm,
+        "date": {"from": profile.start_date, "to": profile.end_date},
+    }
+    return response_data
 
 @app.delete("/api/profiles/{profile_id}", status_code=204)
 async def delete_profile(

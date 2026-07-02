@@ -21,6 +21,7 @@ class LRUCache:
     def get(self, key: str) -> Optional[Any]:
         """Holt einen Eintrag aus dem Cache, falls er existiert und gültig ist."""
         if key not in self.cache:
+
             return None
 
         cached_item = self.cache[key]

@@ -1,8 +1,7 @@
 import { format } from "date-fns";
-import { PlusIcon, Trash2Icon } from "lucide-react";
-import { Suspense, useState } from "react";
-import type { DateRange } from "react-day-picker";
-import { Await, useLoaderData, useNavigate } from "react-router";
+import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { useNavigate } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -15,41 +14,17 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
-import { useSearch } from "~/context/search-context";
-import { apiFetch } from "~/lib/api";
+import { useProfiles } from "~/context/profile-context";
 import { protectPage } from "~/lib/auth";
-import { buildResultsUrl } from "~/lib/search-utils";
 
-export interface SearchProfile {
-  id: number;
-  name: string;
-  rowSelection: Record<string, boolean>;
-  date: DateRange;
-  searchTerm: string;
-}
-
-
-
-export function clientLoader() {
+export function clientLoader() { // protectPage bleibt hier wichtig
   protectPage();
-  const profilesPromise = apiFetch("/api/profiles").then(
-    (data) => (data.results as SearchProfile[]) || [],
-  );
-  return { profilesPromise };
+  return null;
 }
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-
-  const { profilesPromise } = useLoaderData<typeof clientLoader>();
-  const {
-    rowSelection,
-    date,
-    searchTerm,
-    setRowSelection,
-    setDate,
-    setSearchTerm,
-  } = useSearch();
+  const { profiles, isLoading, saveProfile, deleteProfile, applyProfile, updateProfile, reloadProfiles } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
   const navigate = useNavigate();
 
@@ -59,65 +34,55 @@ export default function Profiles() {
       return;
     }
     try {
-      await apiFetch("/api/profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newProfileName,
-
-          settings: {
-            rowSelection,
-            startDate: date?.from,
-            endDate: date?.to,
-            searchTerm,
-          }
-        }),
-      });
+      await saveProfile(newProfileName);
       setNewProfileName("");
-      navigate(".", { replace: true }); // Lädt die Seite neu, um die Profilliste zu aktualisieren
     } catch (err: any) {
-      setError(err.message || "Profil konnte nicht gespeichert werden.");
+      setError(err.message || "Could not save profile.");
     }
   };
 
-  const handleApplyProfile = (profile: SearchProfile) => {
-    setRowSelection(profile.rowSelection);
-    setDate(profile.date);
-    setSearchTerm(profile.searchTerm);
-    const resultsURL = buildResultsUrl({
-      rowSelection,
-      date,
-      searchTerm,
-    })
-    navigate(resultsURL, { replace: true }); // Zurück zur Haupt-Suchseite
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      handleSaveProfile();
+    }
   };
 
   const handleDeleteProfile = async (profileId: number) => {
     try {
-      await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
-      navigate(".", { replace: true });
+      await deleteProfile(profileId);
     } catch (error: any) {
       setError(error.message || "Error deleting profile.");
     }
-
   };
+
+  const handleUpdateProfile = async (profileId: number) => {
+    try {
+      await updateProfile(profileId);
+    } catch (error: any) {
+      setError(error.message || "Error updating profile.");
+    }
+  };
+
+  // Wenn die Seite geladen wird, stellen wir sicher, dass die Profilliste aktuell ist.
+  useEffect(() => {
+    reloadProfiles();
+  }, [reloadProfiles]);
 
   return (
     <div className="flex h-full w-full flex-col gap-8 p-4">
       <div>
-        <h1 className="text-2xl font-bold">Such-Profile</h1>
+        <h1 className="text-2xl font-bold">Search Profiles</h1>
         <p className="text-muted-foreground">
-          Speichere deine aktuellen Sucheinstellungen als Profil oder wähle ein
-          bestehendes Profil aus, um es anzuwenden.
+          Save your current search settings as a profile or select an existing
+          one to apply it.
         </p>
       </div>
-
       <Card>
         <CardHeader>
-          <CardTitle>Neues Profil erstellen</CardTitle>
+          <CardTitle>Create New Profile</CardTitle>
           <CardDescription>
-            Speichere deine aktuelle Auswahl an Journals, den Zeitraum und den
-            Suchbegriff für die spätere Wiederverwendung.
+            Save your current selection of journals, the date range, and the
+            search term for later use.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -127,6 +92,7 @@ export default function Profiles() {
               placeholder="Name of the profile"
               value={newProfileName}
               onChange={(e) => setNewProfileName(e.target.value)}
+              onKeyDown={handleKeyDown}
             />
             <Button onClick={handleSaveProfile}>
               <PlusIcon className="h-4 w-4" /> Save
@@ -142,53 +108,54 @@ export default function Profiles() {
 
       {/* Gespeicherte Profile */}
       <div>
-        <h2 className="mb-4 text-xl font-semibold">Gespeicherte Profile</h2>
-        <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-          <Await resolve={profilesPromise}>
-            {(profiles: SearchProfile[]) => (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {profiles.length > 0 ? (
-                  profiles.map((profile) => (
-                    <Card key={profile.id}>
-                      <CardHeader>
-                        <CardTitle>{profile.name}</CardTitle>
-                        <CardDescription className="text-xs pt-2">
-                          {Object.keys(profile.rowSelection).length} Journals |{" "}
-                          {profile.date?.from &&
-                            format(
-                              new Date(profile.date.from),
-                              "MMM yyyy",
-                            )}{" "}
-                          -{" "}
-                          {profile.date?.to &&
-                            format(new Date(profile.date.to), "MMM yyyy")}{" "}
-                          {profile.searchTerm && "| "}
-                          {profile.searchTerm}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardFooter className="flex justify-between">
-                        <Button onClick={() => handleApplyProfile(profile)}>
-                          Anwenden
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteProfile(profile.id)}
-                        >
-                          <Trash2Icon className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground col-span-full">
-                    Noch keine Profile gespeichert.
-                  </p>
-                )}
-              </div>
+        <h2 className="mb-4 text-xl font-semibold">Saved Profiles</h2>
+        {isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {profiles.length > 0 ? (
+              profiles.map((profile) => (
+                <Card key={profile.id}>
+                  <CardHeader>
+                    <CardTitle>{profile.name}</CardTitle>
+                    <CardDescription className="text-xs pt-2">
+                      {Object.keys(profile.rowSelection).length} Journals |{" "}
+                      {profile.date?.from &&
+                        format(new Date(profile.date.from), "MMM yyyy")}{" "}
+                      -{" "}
+                      {profile.date?.to &&
+                        format(new Date(profile.date.to), "MMM yyyy")}{" "}
+                      {profile.searchTerm && "| "}
+                      {profile.searchTerm}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardFooter className="flex justify-between gap-2">
+                    <Button className="flex-1" onClick={() => applyProfile(profile.id)}>
+                      Apply 
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleUpdateProfile(profile.id)}
+                    >
+                      <RefreshCwIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDeleteProfile(profile.id)}
+                    >
+                      <Trash2Icon className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <p className="text-muted-foreground col-span-full">
+                No profiles saved yet.
+              </p>
             )}
-          </Await>
-        </Suspense>
+          </div>
+        )}
       </div>
     </div>
   );
