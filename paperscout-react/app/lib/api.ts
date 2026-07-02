@@ -43,8 +43,23 @@ export async function apiFetch(route: string, options: RequestInit = {}, handleU
     }
   }
 
+  // Prüfen, ob die Anfrage generell fehlgeschlagen ist (z.B. 400, 404, 500)
+  if (!response.ok) {
+    // Wir versuchen, die Fehlerdetails aus dem Body zu lesen,
+    // da die API oft eine JSON-Antwort mit einer 'detail'-Eigenschaft sendet.
+    const errorData = await response.json().catch(() => ({})); // Leeres Objekt, falls Body kein JSON ist
+    const errorMessage = errorData.detail || `API-Fehler: ${response.status} ${response.statusText}`;
+    // Wir werfen einen generischen Fehler, der dann in der aufrufenden Komponente gefangen wird.
+    throw new Error(errorMessage);
+  }
+
   // Eine HEAD-Anfrage hat keinen Body, also können wir .json() nicht aufrufen.
   if (options.method?.toUpperCase() === 'HEAD') {
+    return; // Einfach erfolgreich zurückkehren
+  }
+
+  // Wenn die Antwort einen 204 No Content Status hat, gibt es keinen Body zum Parsen.
+  if (response.status === 204) {
     return; // Einfach erfolgreich zurückkehren
   }
 

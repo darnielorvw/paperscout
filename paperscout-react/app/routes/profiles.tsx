@@ -18,6 +18,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { useSearch } from "~/context/search-context";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
+import { buildResultsUrl } from "~/lib/search-utils";
 
 export interface SearchProfile {
   id: number;
@@ -58,7 +59,6 @@ export default function Profiles() {
       return;
     }
     try {
-      console.log(rowSelection, date, searchTerm);
       await apiFetch("/api/profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,7 +76,7 @@ export default function Profiles() {
       setNewProfileName("");
       navigate(".", { replace: true }); // Lädt die Seite neu, um die Profilliste zu aktualisieren
     } catch (err: any) {
-      setError(err.message || "Ein unbekannter Fehler ist aufgetreten.");
+      setError(err.message || "Profil konnte nicht gespeichert werden.");
     }
   };
 
@@ -84,19 +84,22 @@ export default function Profiles() {
     setRowSelection(profile.rowSelection);
     setDate(profile.date);
     setSearchTerm(profile.searchTerm);
-    navigate("/"); // Zurück zur Haupt-Suchseite
+    const resultsURL = buildResultsUrl({
+      rowSelection,
+      date,
+      searchTerm,
+    })
+    navigate(resultsURL, { replace: true }); // Zurück zur Haupt-Suchseite
   };
 
   const handleDeleteProfile = async (profileId: number) => {
-    if (window.confirm("Möchten Sie dieses Profil wirklich löschen?")) {
-      try {
-        await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
-        navigate(".", { replace: true });
-      } catch (error) {
-        console.error("Fehler beim Löschen des Profils:", error);
-        alert("Das Profil konnte nicht gelöscht werden.");
-      }
+    try {
+      await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
+      navigate(".", { replace: true });
+    } catch (error: any) {
+      setError(error.message || "Error deleting profile.");
     }
+
   };
 
   return (
@@ -131,7 +134,8 @@ export default function Profiles() {
           </div>
           <AlertDialogBasic
             open={!!error}
-            description="Please enter a name for the profile." title={error}
+            title="Error Saving Profile"
+            description={error || ""}
             onClose={() => setError(null)} />
         </CardContent>
       </Card>
@@ -158,7 +162,8 @@ export default function Profiles() {
                           -{" "}
                           {profile.date?.to &&
                             format(new Date(profile.date.to), "MMM yyyy")}{" "}
-                          | "{profile.searchTerm}"
+                          {profile.searchTerm && "| "}
+                          {profile.searchTerm}
                         </CardDescription>
                       </CardHeader>
                       <CardFooter className="flex justify-between">

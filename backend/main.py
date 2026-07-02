@@ -9,8 +9,8 @@ from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from schemas import ProfileCreate, UserCreate, UserLogin, UserPublic
+from fastapi.security import OAuth2PasswordRequestForm
+from schemas import ProfileCreate, UserCreate, UserPublic
 from services import auth_service, user_service
 from services.download_service import DownloadService
 from services.search_service import SearchService
@@ -20,24 +20,8 @@ from sqlmodel import Session, SQLModel, select
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ---- VOR DEM START DER APP ----
-    # Hier passiert die Magie: Wenn die paperscout.db fehlt,
-    # wird sie JETZT erstellt. Wenn sie da ist, passiert nichts.
-    SQLModel.metadata.create_all(engine)
 
-    # Standard-Journals hinzufügen, falls die Tabelle noch leer ist
-    with Session(engine) as session:
-        existing_journal = session.exec(select(models.Journals)).first()
-        # if not existing_journal:
-        #     default_journals = [
-        #         models.Journals(**journal_data) for journal_data in DEFAULT_JOURNALS
-        #     ]
-        #     session.add_all(default_journals)
-        #     session.commit()
-        #     print(
-        #         f"📚 {len(default_journals)} Standard-Journals wurden erfolgreich zur Datenbank hinzugefügt!",
-        #         flush=True,
-        #     )
+    SQLModel.metadata.create_all(engine)
 
     print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
 
@@ -220,7 +204,7 @@ async def create_profile(
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Ein Suchprofil mit exakt diesen Filtern existiert bereits.",
+            detail="A profile with the same name or settings already exists.",
         )
 
     # Kombiniere die Daten für die Antwort, wie vom Frontend erwartet
@@ -262,11 +246,11 @@ async def get_profiles(
 async def delete_profile(
     profile_id: int,
     session: Session = Depends(get_session),
-    current_user: models.User = Depends(auth_service.get_current_user),
+    _: models.User = Depends(auth_service.get_current_user),
 ):
     """Löscht ein bestimmtes Suchprofil."""
     profile = session.get(models.Profile, profile_id)
-    if not profile or profile.user_id != current_user.id:
+    if not profile:
         raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
     session.delete(profile)
     session.commit()
