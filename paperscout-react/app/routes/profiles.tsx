@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router";
@@ -18,6 +17,7 @@ import { useSearch } from "~/context/search-context";
 import { useProfiles } from "~/context/profile-context";
 import { protectPage } from "~/lib/auth";
 import { areFiltersEqual } from "~/lib/search-utils";
+import { formatDateForDisplay } from "~/lib/date-utils";
 
 export function clientLoader() { // protectPage bleibt hier wichtig
   protectPage();
@@ -31,17 +31,20 @@ export default function Profiles() {
     date,
     searchTerm: currentSearchTerm,
   } = useSearch();
-  const { profiles, isLoading, saveProfile, deleteProfile, applyProfile, updateProfile, reloadProfiles } = useProfiles();
+  const { profiles, isLoading, saveProfile, deleteProfile, applyProfile, updateProfile, reloadProfiles, activeProfileId } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = { rowSelection, date, searchTerm: currentSearchTerm };
 
+  // Ein Profil kann nur gespeichert oder aktualisiert werden, wenn mindestens ein Journal ausgewählt ist.
+  const canSaveOrUpdate = Object.keys(rowSelection).length > 0;
 
   const handleSaveProfile = async () => {
     if (!newProfileName.trim()) {
       setError("Name required");
       return;
-    } else if (Object.keys(rowSelection).length === 0) {
+    } else if (!canSaveOrUpdate) {
       setError("Please select at least one journal to save a profile.");
+
       return;
     }
     try {
@@ -67,6 +70,10 @@ export default function Profiles() {
   };
 
   const handleUpdateProfile = async (profileId: number) => {
+    if (!canSaveOrUpdate) {
+      setError("Please select at least one journal to save a profile.");
+      return;
+    }
     try {
       await updateProfile(profileId);
     } catch (error: any) {
@@ -127,17 +134,18 @@ export default function Profiles() {
             {profiles.length > 0 ? (
               profiles.map((profile) => {
                 const isApplied = areFiltersEqual(profile, currentSearchState);
+                // Der Update-Button ist deaktiviert, wenn:
+                // 1. Die aktuellen Filter bereits dem Profil entsprechen (isApplied).
+                // 2. Ein anderes Profil aktiv ist (activeProfileId ist nicht null und nicht die ID dieses Profils) ODER keine Journale ausgewählt sind.
+                const isUpdateDisabled = isApplied || (activeProfileId !== null && activeProfileId !== profile.id);
                 return (
                   <Card key={profile.id}>
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
                       <CardDescription className="text-xs pt-2">
-                        {Object.keys(profile.rowSelection).length} Journals |{" "}
-                        {profile.date?.from &&
-                          format(new Date(profile.date.from), "MMM yyyy")}{" "}
-                        -{" "}
-                        {profile.date?.to &&
-                          format(new Date(profile.date.to), "MMM yyyy")}{" "}
+                        {Object.keys(profile.rowSelection).length} Journals | {formatDateForDisplay(profile.date?.from)}
+                        {" "}-{" "}
+                        {formatDateForDisplay(profile.date?.to)}{" "}
                         {profile.searchTerm && "| "}
                         {profile.searchTerm}
                       </CardDescription>
@@ -148,7 +156,7 @@ export default function Profiles() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => handleUpdateProfile(profile.id)} disabled={isApplied}
+                        onClick={() => handleUpdateProfile(profile.id)} disabled={isUpdateDisabled}
                       >
                         Save to Profile
                       </Button>

@@ -1,6 +1,6 @@
-import { format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import isEqual from "fast-deep-equal";
+import { formatDateForApi, normalizeDateRange } from "./date-utils";
 
 
 interface SearchParams {
@@ -26,29 +26,11 @@ export function buildResultsUrl({
   params.append("keywords", searchTerm.trim());
 
   if (date?.from && date?.to) {
-    // Die Daten aus dem sessionStorage müssen wieder in Date-Objekte umgewandelt werden
-    params.append("from_date", format(new Date(date.from), "yyyy-MM-dd"));
-    params.append("to_date", format(new Date(date.to), "yyyy-MM-dd"));
+    params.append("from_date", formatDateForApi(date.from)!);
+    params.append("to_date", formatDateForApi(date.to)!);
   }
 
   return `/results?${params.toString()}`;
-}
-
-
-/**
- * Normalisiert einen Datumsbereich, indem die Daten in ISO-Datumsstrings (YYYY-MM-DD) umgewandelt werden.
- * Dies ermöglicht einen robusten Vergleich, unabhängig davon, ob die Daten als Date-Objekte oder Strings vorliegen.
- * @param dateRange Der zu normalisierende Datumsbereich.
- * @returns Ein normalisierter Datumsbereich mit `from` und `to` als Strings oder undefined.
- */
-function normalizeDateRange(dateRange: DateRange | undefined) {
-  if (!dateRange) {
-    return { from: undefined, to: undefined };
-  }
-  return {
-    from: dateRange.from ? new Date(dateRange.from).toISOString().split("T")[0] : undefined,
-    to: dateRange.to ? new Date(dateRange.to).toISOString().split("T")[0] : undefined,
-  };
 }
 
 /**

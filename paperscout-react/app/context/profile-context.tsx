@@ -11,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router";
 import { apiFetch } from "~/lib/api";
 import { buildResultsUrl } from "~/lib/search-utils";
+import { formatDateForApi } from "~/lib/date-utils";
 import { areFiltersEqual } from "~/lib/search-utils";
 import { useSearch } from "./search-context";
 
@@ -89,7 +90,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
         setRowSelection(profile.rowSelection);
-        setDate(profile.date);
+        // Stelle sicher, dass die Daten als Date-Objekte übergeben werden,
+        // da sie von der API als Strings kommen könnten.
+        setDate({
+          from: profile.date.from ? new Date(profile.date.from) : undefined,
+          to: profile.date.to ? new Date(profile.date.to) : undefined,
+        });
         setSearchTerm(profile.searchTerm);
         setActiveProfileId(profile.id);
         // Wichtig: die neuen Werte direkt an buildResultsUrl übergeben, da der State-Update asynchron ist
@@ -121,8 +127,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           rowSelection,
-          startDate: date?.from,
-          endDate: date?.to,
+          startDate: formatDateForApi(date?.from),
+          endDate: formatDateForApi(date?.to),
           searchTerm,
         }),
       });
@@ -143,8 +149,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           name,
           settings: {
             rowSelection,
-            startDate: date?.from,
-            endDate: date?.to,
+            startDate: formatDateForApi(date?.from),
+            endDate: formatDateForApi(date?.to),
             searchTerm,
           },
         }),

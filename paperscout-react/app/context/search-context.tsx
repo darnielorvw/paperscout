@@ -1,6 +1,7 @@
 import { endOfMonth, startOfMonth } from "date-fns";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { DateRange } from "react-day-picker";
+import { normalizeDateRange } from "~/lib/date-utils";
 
 interface SearchState {
   rowSelection: Record<string, boolean>;
@@ -12,7 +13,7 @@ interface SearchContextType extends SearchState {
   setRowSelection: React.Dispatch<
     React.SetStateAction<Record<string, boolean>>
   >;
-  setDate: React.Dispatch<React.SetStateAction<DateRange | undefined>>;
+  setDate: (newDate: DateRange | undefined) => void;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   isInitialized: boolean;
 }
@@ -23,8 +24,13 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [date, setDate] = useState<DateRange | undefined>();
+  const [date, setDateState] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
+
+  // Wrapper um setDate, um sicherzustellen, dass die Uhrzeit immer auf 00:00:00 UTC gesetzt wird.
+  const setDate = (newDate: DateRange | undefined) => {
+    setDateState(normalizeDateRange(newDate));
+  };
 
   // Beim ersten Laden die Daten aus dem sessionStorage wiederherstellen
   useEffect(() => {
@@ -35,10 +41,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
       const savedDate = sessionStorage.getItem("ps_date_range");
       if (savedDate) {
         const parsed = JSON.parse(savedDate);
-        setDate({
-          from: parsed.from ? new Date(parsed.from) : undefined,
-          to: parsed.to ? new Date(parsed.to) : undefined,
-        });
+        setDate(parsed);
       } else {
         const now = new Date();
         setDate({ from: startOfMonth(now), to: endOfMonth(now) });
