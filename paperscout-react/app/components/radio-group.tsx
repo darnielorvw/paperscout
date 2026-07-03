@@ -26,7 +26,7 @@ export function HorizontalRadioGroup({ items, value, onValueChange }: Horizontal
           <FieldLabel
             key={item.value}
             htmlFor={item.value}
-            className="relative rounded-lg cursor-pointer border py-2 pl-2 transition-colors duration-200 select-none z-10 shrink-0"
+            className="relative rounded-lg cursor-pointer border py-2 pl-2 transition-colors duration-200 select-none shrink-0"
           >
             <FieldTitle >{item.title}</FieldTitle>
             <FieldDescription>
@@ -36,7 +36,7 @@ export function HorizontalRadioGroup({ items, value, onValueChange }: Horizontal
             {value === item.value && (
               <motion.div
                 layoutId="active-bg"
-                className="absolute inset-0  dark:bg-input rounded-lg -z-10"
+                className="absolute inset-0 bg-input rounded-lg -z-10"
                 transition={{ type: "spring", stiffness: 380, damping: 40 }}
               />
             )}

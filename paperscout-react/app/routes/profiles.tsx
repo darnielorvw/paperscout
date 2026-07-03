@@ -14,8 +14,10 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
+import { useSearch } from "~/context/search-context";
 import { useProfiles } from "~/context/profile-context";
 import { protectPage } from "~/lib/auth";
+import { areFiltersEqual } from "~/lib/search-utils";
 
 export function clientLoader() { // protectPage bleibt hier wichtig
   protectPage();
@@ -24,13 +26,22 @@ export function clientLoader() { // protectPage bleibt hier wichtig
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
+  const {
+    rowSelection,
+    date,
+    searchTerm: currentSearchTerm,
+  } = useSearch();
   const { profiles, isLoading, saveProfile, deleteProfile, applyProfile, updateProfile, reloadProfiles } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
-  const navigate = useNavigate();
+  const currentSearchState = { rowSelection, date, searchTerm: currentSearchTerm };
+
 
   const handleSaveProfile = async () => {
     if (!newProfileName.trim()) {
       setError("Name required");
+      return;
+    } else if (Object.keys(rowSelection).length === 0) {
+      setError("Please select at least one journal to save a profile.");
       return;
     }
     try {
@@ -112,43 +123,46 @@ export default function Profiles() {
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             {profiles.length > 0 ? (
-              profiles.map((profile) => (
-                <Card key={profile.id}>
-                  <CardHeader>
-                    <CardTitle>{profile.name}</CardTitle>
-                    <CardDescription className="text-xs pt-2">
-                      {Object.keys(profile.rowSelection).length} Journals |{" "}
-                      {profile.date?.from &&
-                        format(new Date(profile.date.from), "MMM yyyy")}{" "}
-                      -{" "}
-                      {profile.date?.to &&
-                        format(new Date(profile.date.to), "MMM yyyy")}{" "}
-                      {profile.searchTerm && "| "}
-                      {profile.searchTerm}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardFooter className="flex justify-between gap-2">
-                    <Button className="flex-1" onClick={() => applyProfile(profile.id)}>
-                      Apply 
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => handleUpdateProfile(profile.id)}
-                    >
-                      <RefreshCwIcon className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteProfile(profile.id)}
-                    >
-                      <Trash2Icon className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))
+              profiles.map((profile) => {
+                const isApplied = areFiltersEqual(profile, currentSearchState);
+                return (
+                  <Card key={profile.id}>
+                    <CardHeader>
+                      <CardTitle>{profile.name}</CardTitle>
+                      <CardDescription className="text-xs pt-2">
+                        {Object.keys(profile.rowSelection).length} Journals |{" "}
+                        {profile.date?.from &&
+                          format(new Date(profile.date.from), "MMM yyyy")}{" "}
+                        -{" "}
+                        {profile.date?.to &&
+                          format(new Date(profile.date.to), "MMM yyyy")}{" "}
+                        {profile.searchTerm && "| "}
+                        {profile.searchTerm}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="flex justify-between gap-2">
+                      <Button className="flex-1" onClick={() => applyProfile(profile.id)} disabled={isApplied}>
+                        Apply
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleUpdateProfile(profile.id)} disabled={isApplied}
+                      >
+                        Save to Profile
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteProfile(profile.id)}
+                      >
+                        <Trash2Icon className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })
             ) : (
               <p className="text-muted-foreground col-span-full">
                 No profiles saved yet.

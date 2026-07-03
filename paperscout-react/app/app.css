@@ -141,4 +141,34 @@ body {
   html {
     @apply font-sans;
   }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  /* 2. Für Chrome, Safari, Edge (Webkit) */
+  *::-webkit-scrollbar {
+    width: 10px;  /* data-vertical:w-2.5 */
+    height: 10px; /* data-horizontal:h-2.5 */
+  }
+
+  /* Der Hintergrund der Scrollbar (ScrollAreaScrollbar) */
+  *::-webkit-scrollbar-track {
+    background: transparent; 
+  }
+
+  /* Der bewegliche Balken (ScrollAreaThumb) */
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--border); /* bg-border */
+    border-radius: 9999px;           /* rounded-full */
+    
+    /* Dieser Trick sorgt für das "p-px" (Padding) aus deinem Code, 
+       damit der Balken nicht komplett am Rand klebt */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+  }
 }

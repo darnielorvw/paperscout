@@ -1,5 +1,4 @@
 import { endOfMonth, startOfMonth } from "date-fns";
-import isEqual from "lodash/isEqual";
 import {
   createContext,
   useCallback,
@@ -12,6 +11,7 @@ import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router";
 import { apiFetch } from "~/lib/api";
 import { buildResultsUrl } from "~/lib/search-utils";
+import { areFiltersEqual } from "~/lib/search-utils";
 import { useSearch } from "./search-context";
 
 export interface SearchProfile {
@@ -74,32 +74,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   // Effekt zur Synchronisierung des aktiven Profils mit dem aktuellen Suchstatus
   useEffect(() => {
-    // Finde ein Profil, das den aktuellen Sucheinstellungen entspricht.
-    const matchingProfile = profiles.find((profile) => {
-      // Konvertiere die Date-Objekte in ISO-Strings für einen robusten Vergleich
-      const profileDate = {
-        from: profile.date?.from
-          ? new Date(profile.date.from).toISOString().split("T")[0]
-          : undefined,
-        to: profile.date?.to
-          ? new Date(profile.date.to).toISOString().split("T")[0]
-          : undefined,
-      };
-      const searchDate = {
-        from: date?.from
-          ? new Date(date.from).toISOString().split("T")[0]
-          : undefined,
-        to: date?.to
-          ? new Date(date.to).toISOString().split("T")[0]
-          : undefined,
-      };
+    const currentSearchState = { rowSelection, date, searchTerm };
 
-      return (
-        isEqual(profile.rowSelection, rowSelection) &&
-        isEqual(profileDate, searchDate) &&
-        profile.searchTerm === searchTerm
-      );
-    });
+    // Finde ein Profil, das den aktuellen Sucheinstellungen entspricht.
+    const matchingProfile = profiles.find((profile) =>
+      areFiltersEqual(profile, currentSearchState)
+    );
 
     setActiveProfileId(matchingProfile ? matchingProfile.id : null);
   }, [rowSelection, date, searchTerm, profiles]);
@@ -169,7 +149,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           },
         }),
       });
-      
+
       setProfiles((prevProfiles) => [...prevProfiles, newProfile]);
     },
 

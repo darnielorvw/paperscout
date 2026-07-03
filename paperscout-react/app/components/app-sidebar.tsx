@@ -1,8 +1,10 @@
+import { UserIcon } from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation } from "react-router";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -11,6 +13,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "~/components/ui/sidebar";
+import { useAuth } from "~/context/auth-context";
 import { useSearch } from "~/context/search-context";
 import { buildResultsUrl } from "~/lib/search-utils";
 
@@ -54,6 +57,7 @@ const data = [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
+  const { user } = useAuth();
   const { rowSelection, date, searchTerm, isInitialized } = useSearch();
   const [isMounted, setIsMounted] = React.useState(false);
 
@@ -112,6 +116,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroup>
         ))}
       </SidebarContent>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton className="w-full justify-start">
+              <UserIcon className="size-4" />
+              <span className="truncate">{user?.name}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
