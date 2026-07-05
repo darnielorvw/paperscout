@@ -1,6 +1,5 @@
-import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -13,11 +12,11 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
-import { useSearch } from "~/context/search-context";
 import { useProfiles } from "~/context/profile-context";
+import { useSearch } from "~/context/search-context";
 import { protectPage } from "~/lib/auth";
-import { areFiltersEqual } from "~/lib/search-utils";
 import { formatDateForDisplay } from "~/lib/date-utils";
+import { areFiltersEqual } from "~/lib/search-utils";
 
 export function clientLoader() { // protectPage bleibt hier wichtig
   protectPage();
@@ -130,7 +129,7 @@ export default function Profiles() {
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {profiles.length > 0 ? (
               profiles.map((profile) => {
                 const isApplied = areFiltersEqual(profile, currentSearchState);

@@ -10,9 +10,8 @@ import {
 import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router";
 import { apiFetch } from "~/lib/api";
-import { buildResultsUrl } from "~/lib/search-utils";
 import { formatDateForApi } from "~/lib/date-utils";
-import { areFiltersEqual } from "~/lib/search-utils";
+import { areFiltersEqual, buildResultsUrl } from "~/lib/search-utils";
 import { useSearch } from "./search-context";
 
 export interface SearchProfile {
@@ -76,7 +75,6 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   // Effekt zur Synchronisierung des aktiven Profils mit dem aktuellen Suchstatus
   useEffect(() => {
     const currentSearchState = { rowSelection, date, searchTerm };
-
     // Finde ein Profil, das den aktuellen Sucheinstellungen entspricht.
     const matchingProfile = profiles.find((profile) =>
       areFiltersEqual(profile, currentSearchState)
@@ -89,20 +87,24 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     (profileId: number) => {
       const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
-        setRowSelection(profile.rowSelection);
-        // Stelle sicher, dass die Daten als Date-Objekte übergeben werden,
-        // da sie von der API als Strings kommen könnten.
-        setDate({
+        const newRowSelection = profile.rowSelection;
+        const newDate = {
           from: profile.date.from ? new Date(profile.date.from) : undefined,
           to: profile.date.to ? new Date(profile.date.to) : undefined,
-        });
-        setSearchTerm(profile.searchTerm);
+        };
+        const newSearchTerm = profile.searchTerm;
+
+        // Den globalen State mit den neuen Werten aktualisieren.
+        setRowSelection(newRowSelection);
+        setDate(newDate);
+        setSearchTerm(newSearchTerm);
         setActiveProfileId(profile.id);
-        // Wichtig: die neuen Werte direkt an buildResultsUrl übergeben, da der State-Update asynchron ist
+
+        // Die URL mit den neuen Werten bauen, nicht mit den alten aus dem Hook-State.
         const resultsURL = buildResultsUrl({
-          rowSelection: profile.rowSelection,
-          date: profile.date,
-          searchTerm: profile.searchTerm,
+          rowSelection: newRowSelection,
+          date: newDate,
+          searchTerm: newSearchTerm,
         });
         navigate(resultsURL, { replace: true });
       }
