@@ -1,11 +1,16 @@
 
-const API_BASE_URL = "http://localhost:8000";
+export const API_BASE_URL = "http://localhost:8000";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {
     super(message);
     this.name = "UnauthorizedError";
   }
+}
+
+interface ApiFetchOptions extends RequestInit {
+  // Erlaubt dem Aufrufer, den erwarteten Antworttyp zu spezifizieren.
+  responseType?: 'json' | 'blob' | 'text';
 }
 
 /**
@@ -17,16 +22,23 @@ export class UnauthorizedError extends Error {
  * @param handleUnauthorized Ob bei einem 401-Fehler automatisch umgeleitet werden soll.
  * @returns Eine Promise, die mit den JSON-Daten der API-Antwort aufgelöst wird.
  */
-export async function apiFetch(route: string, options: RequestInit = {}, handleUnauthorized = true): Promise<any> {
+export async function apiFetch<T = any>(
+  route: string,
+  options: ApiFetchOptions = {},
+  handleUnauthorized = true,
+): Promise<T> {
   const token = localStorage.getItem("auth_token");
   const url = `${API_BASE_URL}${route}`;
+
+  // Extrahiere unsere benutzerdefinierte Option, bevor wir sie an `fetch` übergeben.
+  const { responseType = 'json', ...fetchOptions } = options;
 
   const headers = new Headers(options.headers);
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...fetchOptions, headers });
 
   // Wenn der Server einen 401-Fehler zurückgibt (Token ungültig/abgelaufen),
   // leiten wir den Benutzer zur Login-Seite weiter.
@@ -53,15 +65,22 @@ export async function apiFetch(route: string, options: RequestInit = {}, handleU
     throw new Error(errorMessage);
   }
 
-  // Eine HEAD-Anfrage hat keinen Body, also können wir .json() nicht aufrufen.
   if (options.method?.toUpperCase() === 'HEAD') {
-    return; // Einfach erfolgreich zurückkehren
+    return undefined as T;
   }
 
   // Wenn die Antwort einen 204 No Content Status hat, gibt es keinen Body zum Parsen.
   if (response.status === 204) {
-    return; // Einfach erfolgreich zurückkehren
+    return undefined as T;
   }
 
-  return response.json();
+  // Verarbeite den Antwort-Body basierend auf dem angeforderten Typ.
+  switch (responseType) {
+    case 'blob':
+      return response.blob() as Promise<T>;
+    case 'text':
+      return response.text() as Promise<T>;
+    default: // 'json'
+      return response.json() as Promise<T>;
+  }
 }

@@ -1,11 +1,14 @@
 import os
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from time import sleep
 from typing import List
 
+from config import settings  # Importiere settings
 from database import models
 from database.database import engine, get_session
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException, Query,
+                     status)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -274,6 +277,7 @@ async def update_profile(
     }
     return response_data
 
+
 @app.delete("/api/profiles/{profile_id}", status_code=204)
 async def delete_profile(
     profile_id: int,
@@ -296,32 +300,19 @@ async def read_users_me(
     return current_user
 
 
-@app.get("/api/download")
-async def download_paper(
-    doi: str,
+@app.get("/api/prepare-download")
+async def prepare_download(
+    pdf_url: str,
     title: str,
-    current_user: models.User = Depends(auth_service.get_current_user),
+    _: models.User = Depends(auth_service.get_current_user), # Dieser Endpunkt ist authentifiziert
 ):
-    """Sucht die PDF-Quelle und streamt die Datei direkt an das Frontend."""
-    # 1. Versuche die direkte PDF-URL über Unpaywall zu ermitteln
-    pdf_url = await download_service.get_pdf_download_url(
-        doi,
-        current_user.email,  # Korrekter Zugriff auf die E-Mail des SQLModel-Benutzers
-    )
-
-    if not pdf_url:
-        raise HTTPException(
-            status_code=404,
-            detail="Keine legale Open-Access-PDF-URL für diese DOI gefunden.",
-        )
-
-    # 2. Dateinamen säubern
+    """
+    Versucht, die PDF herunterzuladen. Nur bei Erfolg wird ein
+    Token für den Zugriff auf die lokale Datei zurückgegeben.
+    """
     safe_title = "".join(
-        [c for c in title if c.isalpha() or c.isdigit() or c == " "]
-    ).rstrip()
+        [c for c in title if c.isalpha() or c.isdigit() or c == " "]).rstrip()
     filename = f"{safe_title[:50]}.pdf".replace(" ", "_")
-
-    # 3. PDF auf den Server spiegeln
     filepath = await download_service.download_pdf(pdf_url, filename)
 
     if not filepath or not os.path.exists(filepath):
@@ -330,8 +321,32 @@ async def download_paper(
             detail="Der automatische Download vom Verlags-Server ist fehlgeschlagen.",
         )
 
-    # 4. Datei als Download an React zurückgeben
-    return FileResponse(path=filepath, filename=filename, media_type="application/pdf")
+    token = download_service.create_download_token(filepath, filename)
+    # Gib die vollständige URL zurück, die das Frontend öffnen kann
+    return {"download_url": f"/api/download?token={token}"}
+
+# Angepasster /api/download Endpunkt, der jetzt einen Token erwartet
+@app.get("/api/download")
+async def download_paper_with_token(
+    token: str, # Erwartet jetzt einen Token
+    background_tasks: BackgroundTasks,
+):
+    """Sucht die PDF-Quelle und streamt die Datei direkt an das Frontend."""
+    payload = download_service.decode_download_token(token) # Validiert den Token
+    filepath: str = payload.get("filepath")
+    filename: str = payload.get("filename")
+
+    if not filepath or not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Datei nicht gefunden oder Link abgelaufen.")
+
+    background_tasks.add_task(os.remove, filepath)
+    return FileResponse(
+        path=filepath,
+        filename=filename,
+        media_type="application/pdf",
+        content_disposition_type="inline",  # Wichtig: Datei im Browser anzeigen, nicht herunterladen
+        background=background_tasks,
+    )
 
 
 if __name__ == "__main__":

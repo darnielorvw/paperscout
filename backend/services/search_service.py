@@ -87,7 +87,7 @@ class SearchService:
 
         # OpenAlex Filter: Quelle(n), Startdatum und Enddatum
         filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date}"
-        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships"
+        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships,best_oa_location"
 
         params = {
             "search": keywords,
@@ -105,19 +105,24 @@ class SearchService:
         meta = data.get("meta", {})
         results = []
         for work in data.get("results", []):
+            # Sichere Extraktion von verschachtelten Objekten.
+            # 'or {}' fängt sowohl fehlende Schlüssel als auch 'None'-Werte ab.
+            primary_loc = work.get("primary_location") or {}
+            source = primary_loc.get("source") or {}
+            best_oa = work.get("best_oa_location") or {}
+            primary_topic = work.get("primary_topic") or {}
+
             results.append(
                 {
                     "id": work.get("id"),
                     "title": work.get("title"),
                     "doi": work.get("doi"),
                     "publication_date": work.get("publication_date"),
-                    "journal_name": work.get("primary_location", {})
-                    .get("source", {})
-                    .get("display_name"),
-                    "abstract": self._extract_abstract(
-                        work.get("abstract_inverted_index", {})
-                    ),
-                    "topic": (work.get("primary_topic") or {}).get("display_name"),
+                    "journal_name": source.get("display_name"),
+                    "pdf_url": best_oa.get("pdf_url"),
+                    "pdf_landing_page": best_oa.get("landing_page_url"),
+                    "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
+                    "topic": primary_topic.get("display_name"),
                     "author": format_authors_apa(work.get("authorships", [])),
                     
                 }
@@ -130,7 +135,7 @@ class SearchService:
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]]) -> str:
         """OpenAlex liefert Abstracts aus Urheberrechtsgründen 'invertiert'. Das baut es wieder zusammen."""
-        if not inverted_index:
+        if not inverted_index:  # Fängt None oder leeres Dictionary ab
             return "Kein Abstract verfügbar."
 
         # Rekonstruiere den Text aus dem Positions-Index

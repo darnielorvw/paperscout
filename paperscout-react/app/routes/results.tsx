@@ -1,9 +1,12 @@
 import { format } from "date-fns";
-import { Suspense, useTransition } from "react";
+import { Suspense, useState, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
 import { SkeletonList } from "~/components/skeletons";
 
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import {
   Pagination,
   PaginationContent,
@@ -13,7 +16,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "~/components/ui/pagination";
-import { apiFetch } from "~/lib/api";
+import { API_BASE_URL, apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
@@ -23,6 +26,8 @@ export type Article = {
   title: string;
   doi: string | null;
   publication_date: string;
+  pdf_landing_page: string;
+  pdf_url: string;
   journal_name: string;
   abstract: string;
   topic: string;
@@ -63,15 +68,18 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
     };
   }
 
-  const articlePromise = apiFetch(`/api/articles?${paramsString}`).then((data) => {
-    const meta = data.meta || {}; const results = (data.results as Article[]) || [];
-    return {
-      articles: results,
-      totalCount: meta.count || 0,
-      perPage: meta.per_page || 25,
-      currentPage: meta.page || 1,
-    };
-  });
+  const articlePromise = apiFetch(`/api/articles?${paramsString}`).then(
+    (data) => {
+      const meta = data.meta || {};
+      const results = (data.results as Article[]) || [];
+      return {
+        articles: results,
+        totalCount: meta.count || 0,
+        perPage: meta.per_page || 25,
+        currentPage: meta.page || 1,
+      };
+    },
+  );
 
   return { articlePromise };
 }
@@ -81,6 +89,39 @@ export default function Results() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isPending, startTransition] = useTransition();
+  const [openingPdf, setOpeningPdf] = useState<Record<string, boolean>>({});
+
+  const handleOpenPdf = async (article: Article) => {
+    if (!article.pdf_url) return;
+    setOpeningPdf((prev) => ({ ...prev, [article.id]: true }));
+    try {
+      const params = new URLSearchParams({
+        pdf_url: article.pdf_url,
+        title: article.title,
+      });
+
+      // Zuerst den signierten Download-Link vom Backend abrufen
+      const { download_url } = await apiFetch<{ download_url: string }>(
+        `/api/prepare-download?${params.toString()}`,
+        {
+          responseType: "json", // Dieser Endpunkt gibt JSON zurück
+        },
+      );
+      // Dann den signierten Link in einem neuen Tab öffnen
+      const fullUrl = `${API_BASE_URL}${download_url}`;
+      window.open(fullUrl, "_blank");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Ein unbekannter Fehler ist aufgetreten.";
+      console.error("Fehler beim Abrufen des Download-Links:", error);
+      toast(errorMessage, { position: "top-center" })
+
+    } finally {
+      setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
+    }
+  };
 
   const handlePageChange = (page: number) => {
     startTransition(() => {
@@ -101,10 +142,12 @@ export default function Results() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="mb-6 flex">
-        <h1 className="text-2xl font-bold">Search Results</h1>
+        <h1 className="text-2xl font-bold sticky top-0 bg-background py-2">
+          Search Results
+        </h1>
       </div>
       <div
-        className="flex flex-col flex-1 min-h-0 overflow-hidden"
+        className="flex-1 overflow-y-auto"
         style={{ opacity: isPending ? 0.3 : 1, transition: "opacity 1s" }}
       >
         <Suspense fallback={<SkeletonList />}>
@@ -118,24 +161,40 @@ export default function Results() {
 
               return (
                 <>
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2">
+                  <div className="space-y-4 pr-2">
                     {articles.length > 0 ? (
                       articles.map((article) => (
                         <div
                           key={article.id}
                           className="rounded-lg border bg-card p-6 shadow-sm"
                         >
-                          <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
-                            <Badge variant="outline">
-                              {article.journal_name}
-                            </Badge>
-                            <Badge variant="outline">
-                              {article.author} (
-                              {format(article.publication_date, "yyyy-MM")})
-                            </Badge>
-                            <Badge variant="outline">{article.topic}</Badge>
+                          <div className="flex items-center justify-between">
+                            <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
+                              <Badge variant="outline">
+                                {article.journal_name}
+                              </Badge>
+                              <Badge variant="outline">
+                                {article.author} (
+                                {format(article.publication_date, "yyyy-MM")})
+                              </Badge>
+                              <Badge variant="outline">{article.topic}</Badge>
+                            </div>
+                            {article.pdf_url && (
+                              <Button
+                                onClick={() => handleOpenPdf(article)}
+                                size="icon"
+                                disabled={openingPdf[article.id]}
+                              >
+                                <Download
+                                  className={
+                                    openingPdf[article.id]
+                                      ? "animate-pulse"
+                                      : ""
+                                  }
+                                />
+                              </Button>
+                            )}
                           </div>
-
                           <h2 className="mb-2 text-xl font-semibold leading-tight">
                             {article.title}
                           </h2>
