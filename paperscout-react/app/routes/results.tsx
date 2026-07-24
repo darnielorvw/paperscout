@@ -3,7 +3,7 @@ import { Suspense, useState, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
 import { SkeletonList } from "~/components/skeletons";
 
-import { Download } from "lucide-react";
+import { Download, ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -16,6 +16,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "~/components/ui/pagination";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { API_BASE_URL, apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
@@ -116,11 +121,14 @@ export default function Results() {
           ? error.message
           : "Ein unbekannter Fehler ist aufgetreten.";
       console.error("Fehler beim Abrufen des Download-Links:", error);
-      toast(errorMessage, { position: "top-center" })
-
+      toast.error(errorMessage, { position: "top-center" });
     } finally {
       setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
     }
+  };
+
+  const handleOpenLandingPage = (url: string) => {
+    window.open(url, "_blank");
   };
 
   const handlePageChange = (page: number) => {
@@ -179,21 +187,45 @@ export default function Results() {
                               </Badge>
                               <Badge variant="outline">{article.topic}</Badge>
                             </div>
-                            {article.pdf_url && (
-                              <Button
-                                onClick={() => handleOpenPdf(article)}
-                                size="icon"
-                                disabled={openingPdf[article.id]}
-                              >
-                                <Download
-                                  className={
-                                    openingPdf[article.id]
-                                      ? "animate-pulse"
-                                      : ""
-                                  }
-                                />
-                              </Button>
-                            )}
+                            <div>
+                              <Tooltip>
+                                <TooltipTrigger className="mr-2">
+                                  <Button
+                                    onClick={() => handleOpenPdf(article)}
+                                    size="icon"
+                                    disabled={openingPdf[article.id] || !article.pdf_url}
+                                  >
+                                    <Download
+                                      className={
+                                        openingPdf[article.id]
+                                          ? "animate-pulse"
+                                          : ""
+                                      }
+                                    />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Download PDF</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <Button
+                                    onClick={() =>
+                                      handleOpenLandingPage(
+                                        article.pdf_landing_page,
+                                      )
+                                    }
+                                    size="icon"
+                                  >
+                                    <ExternalLinkIcon />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Zur Verlagsseite</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           </div>
                           <h2 className="mb-2 text-xl font-semibold leading-tight">
                             {article.title}

@@ -13,6 +13,7 @@ import { AppLayout } from "~/layouts/app-layout"; // Importieren
 import type { Route } from "./+types/root";
 
 import "./app.css";
+import { TooltipProvider } from "./components/ui/tooltip";
 import { AuthLayout } from "./layouts/auth-layout";
 
 export const links: Route.LinksFunction = () => [
@@ -42,20 +43,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AuthProvider>
-            {useAppLayout ? (
-              <AppLayout>{children}</AppLayout>
-            ) : (
-              <AuthLayout>{children}</AuthLayout>
-            )}
-          </AuthProvider>
-        </ThemeProvider>
+        <TooltipProvider delayDuration={500}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <AuthProvider>
+              {useAppLayout ? (
+                <AppLayout>{children}</AppLayout>
+              ) : (
+                <AuthLayout>{children}</AuthLayout>
+              )}
+            </AuthProvider>
+          </ThemeProvider>
+        </TooltipProvider>
 
         <ScrollRestoration />
         <Scripts />
