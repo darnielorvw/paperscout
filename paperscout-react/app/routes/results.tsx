@@ -148,154 +148,156 @@ export default function Results() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
-      <div className="mb-6 flex">
-        <h1 className="text-2xl font-bold sticky top-0 bg-background py-2">
-          Search Results
-        </h1>
-      </div>
-      <div
-        className="flex-1 overflow-y-auto"
-        style={{ opacity: isPending ? 0.3 : 1, transition: "opacity 1s" }}
-      >
-        <Suspense fallback={<SkeletonList />}>
-          <Await resolve={articlePromise}>
-            {(resolvedData) => {
-              const { articles, totalCount, perPage, currentPage } =
-                resolvedData;
-              const totalPages = Math.ceil(
-                Math.min(totalCount, 10000) / perPage,
-              );
+    <Suspense fallback={<SkeletonList />}>
+      <Await resolve={articlePromise}>
+        {(resolvedData) => {
+          const { articles, totalCount, perPage, currentPage } = resolvedData;
+          const totalPages = Math.ceil(
+            Math.min(totalCount, 10000) / perPage,
+          );
 
-              return (
-                <>
-                  <div className="space-y-4 pr-2">
-                    {articles.length > 0 ? (
-                      articles.map((article) => (
-                        <div
-                          key={article.id}
-                          className="rounded-lg border bg-card p-6 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
-                              <Badge variant="outline">
-                                {article.journal_name}
-                              </Badge>
-                              <Badge variant="outline">
-                                {article.author} (
-                                {format(article.publication_date, "yyyy-MM")})
-                              </Badge>
-                              <Badge variant="outline">{article.topic}</Badge>
-                            </div>
-                            <div>
-                              <Tooltip>
-                                <TooltipTrigger className="mr-2">
-                                  <Button
-                                    onClick={() => handleOpenPdf(article)}
-                                    size="icon"
-                                    disabled={openingPdf[article.id] || !article.pdf_url}
-                                  >
-                                    <Download
-                                      className={
-                                        openingPdf[article.id]
-                                          ? "animate-pulse"
-                                          : ""
-                                      }
-                                    />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Download PDF</p>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger>
-                                  <Button
-                                    onClick={() =>
-                                      handleOpenLandingPage(
-                                        article.pdf_landing_page,
-                                      )
-                                    }
-                                    size="icon"
-                                  >
-                                    <ExternalLinkIcon />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Zur Verlagsseite</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
+          return (
+            <div className="flex h-full w-full flex-col overflow-hidden">
+              {/* Scrollbarer Bereich für die Artikel */}
+              <div
+                className="flex-1 overflow-y-auto"
+                style={{
+                  opacity: isPending ? 0.3 : 1,
+                  transition: "opacity 1s",
+                }}
+              >
+                <div className="space-y-4 pr-2 py-4">
+                  {articles.length > 0 ? (
+                    articles.map((article) => (
+                      <div
+                        key={article.id}
+                        className="rounded-lg border bg-card p-6 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
+                            <Badge variant="outline">
+                              {article.journal_name}
+                            </Badge>
+                            <Badge variant="outline">
+                              {article.author} (
+                              {format(article.publication_date, "yyyy-MM")})
+                            </Badge>
+                            <Badge variant="outline">{article.topic}</Badge>
                           </div>
-                          <h2 className="mb-2 text-xl font-semibold leading-tight">
-                            {article.title}
-                          </h2>
-                          <p className="text-sm text-muted-foreground">
-                            {article.abstract}
-                          </p>
+                          <div>
+                            <Tooltip>
+                              <TooltipTrigger asChild className="mr-2">
+                                <Button
+                                  onClick={() => handleOpenPdf(article)}
+                                  size="icon"
+                                  disabled={
+                                    openingPdf[article.id] || !article.pdf_url
+                                  }
+                                >
+                                  <Download
+                                    className={
+                                      openingPdf[article.id]
+                                        ? "animate-pulse"
+                                        : ""
+                                    }
+                                  />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Download PDF</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  onClick={() =>
+                                    handleOpenLandingPage(
+                                      article.pdf_landing_page,
+                                    )
+                                  }
+                                  size="icon"
+                                >
+                                  <ExternalLinkIcon />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Zur Verlagsseite</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                         </div>
-                      ))
-                    ) : (
-                      <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
-                        Keine Artikel gefunden.
+                        <h2 className="mb-2 text-xl font-semibold leading-tight">
+                          {article.title}
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                          {article.abstract}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                  {totalPages > 1 && (
-                    <Pagination className="mt-6">
-                      <PaginationContent className="w-full justify-between">
-                        <PaginationItem>
-                          <PaginationPrevious
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage <= 1}
-                          />
-                        </PaginationItem>
-
-                        <div className="flex items-center justify-center gap-0.5">
-                          {[...Array(totalPages)].map((_, i) => {
-                            const page = i + 1;
-                            if (
-                              page === currentPage ||
-                              page <= 2 ||
-                              page >= totalPages - 1 ||
-                              Math.abs(currentPage - page) <= 1
-                            ) {
-                              return (
-                                <PaginationItem key={page}>
-                                  <PaginationLink
-                                    onClick={() => handlePageChange(page)}
-                                    isActive={currentPage === page}
-                                  >
-                                    {page}
-                                  </PaginationLink>
-                                </PaginationItem>
-                              );
-                            }
-                            if (
-                              page === currentPage - 2 ||
-                              page === currentPage + 2
-                            ) {
-                              return <PaginationEllipsis key={page} />;
-                            }
-                            return null;
-                          })}
-                        </div>
-
-                        <PaginationItem>
-                          <PaginationNext
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage >= totalPages}
-                          />
-                        </PaginationItem>
-                      </PaginationContent>
-                    </Pagination>
+                    ))
+                  ) : (
+                    <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
+                      Keine Artikel gefunden.
+                    </div>
                   )}
-                </>
-              );
-            }}
-          </Await>
-        </Suspense>
-      </div>
-    </div>
+                </div>
+              </div>
+
+              {/* Fester Bereich für die Paginierung */}
+              {totalPages > 1 && (
+                <div className="mt-auto border-t bg-background p-4">
+                  <Pagination>
+                    <PaginationContent className="w-full justify-between">
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage <= 1}
+                        />
+                      </PaginationItem>
+
+                      <div className="flex items-center justify-center gap-0.5">
+                        {[...Array(totalPages)].map((_, i) => {
+                          const page = i + 1;
+                          if (
+                            page === currentPage ||
+                            page <= 2 ||
+                            page >= totalPages - 1 ||
+                            Math.abs(currentPage - page) <= 1
+                          ) {
+                            return (
+                              <PaginationItem key={page}>
+                                <PaginationLink
+                                  onClick={() => handlePageChange(page)}
+                                  isActive={currentPage === page}
+                                >
+                                  {page}
+                                </PaginationLink>
+                              </PaginationItem>
+                            );
+                          }
+                          if (
+                            page === currentPage - 2 ||
+                            page === currentPage + 2
+                          ) {
+                            return <PaginationEllipsis key={page} />;
+                          }
+                          return null;
+                        })}
+                      </div>
+
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage >= totalPages}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </div>
+          );
+        }}
+      </Await>
+    </Suspense>
   );
 }

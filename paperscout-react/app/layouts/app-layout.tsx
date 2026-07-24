@@ -14,7 +14,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarInset className="flex h-svh flex-col overflow-hidden">
             <AppHeader showSidebarTrigger={true} showProfiles={true} />
 
-            <main className="flex-1 min-h-0 p-4 md:p-4">{children}</main>
+            <main className="flex-1 min-h-0 px-4">{children}</main>
             <Toaster/>
           </SidebarInset>
         </SidebarProvider>
