@@ -15,4 +15,7 @@ class Settings(BaseSettings):
     SMTP_SERVER: str = "mail.fh-swf.de"
     SMTP_PORT: int = 587
 
+    # OpenAlex API-Konfiguration
+    OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
+
 settings = Settings()

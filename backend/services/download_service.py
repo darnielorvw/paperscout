@@ -1,5 +1,9 @@
-import logging  # Importiere das Logging-Modul
+import io
+import logging
 import os
+import re
+import unicodedata
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -7,12 +11,16 @@ import jwt
 from config import settings
 from fastapi import HTTPException
 
-# Konfiguriere Logging (kann auch global in main.py erfolgen, hier für den Diff)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class DownloadService:
     def __init__(self):
         self.DOWNLOAD_TOKEN_EXPIRE_MINUTES = 5
+
+    async def aclose(self) -> None:
+        """Cleanup hook für den Lifespan-Manager."""
+        return None
 
     def create_download_token(self, filepath: str, filename: str) -> str:
         """Erstellt einen kurzlebigen JWT für einen sicheren Download-Link."""
@@ -42,40 +50,79 @@ class DownloadService:
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail="Ungültiger Download-Link.")
 
-    async def download_pdf(self, pdf_url: str, filename: str) -> str | None:
-        """Lädt das PDF herunter und speichert es temporär auf dem Server."""
-        os.makedirs("downloads", exist_ok=True)
-        filepath = os.path.join("downloads", filename)
-        
-        # Wichtig: Ein realistischer User-Agent verhindert, dass Hoster blockieren
+    def _sanitize_filename(self, title: str, fallback: str) -> str:
+        """Erstellt einen sicheren Dateinamen aus Titel und Fallback."""
+        normalized = unicodedata.normalize("NFKD", title or fallback)
+        ascii_text = "".join(
+            char for char in normalized if not unicodedata.combining(char)
+        )
+        cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", ascii_text).strip("._-")
+        return cleaned or fallback
+
+    async def _download_pdf_bytes(self, openalex_id: str) -> bytes | None:
+        """Lädt eine einzelne PDF-Datei von OpenAlex herunter."""
+        clean_id = openalex_id.split("/")[-1]
+        download_url = (
+            f"https://content.openalex.org/works/{clean_id}.pdf"
+            f"?api_key={settings.OPENALEX_API_KEY}"
+        )
+
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "User-Agent": "MyAppName/1.0 (mailto:deine-email@domain.com)",
         }
-        logging.info(f"Attempting to download PDF from: {pdf_url}")
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            try:
-                response = await client.get(pdf_url, headers=headers, timeout=20.0) # Timeout leicht erhöht
-                
-                if response.status_code == 200: # Erfolgreicher Download
-                    # Prüfe den Content-Type, um sicherzustellen, dass es wirklich eine PDF ist
-                    content_type = response.headers.get("Content-Type", "")
-                    if "application/pdf" in content_type:
-                        with open(filepath, "wb") as f:
-                            f.write(response.content)
-                        logging.info(f"Successfully downloaded PDF to: {filepath}")
-                        return filepath
-                    else:
-                        logging.warning(f"Download failed for {pdf_url}: Expected 'application/pdf', got '{content_type}'. Status: {response.status_code}. Response body start: {response.text[:200]}...")
-                        return None
-                else: # Nicht-200 Statuscode
-                    logging.error(f"Download failed for {pdf_url}: HTTP Status {response.status_code}. Response body start: {response.text[:200]}...")
-                    return None
-            except httpx.HTTPStatusError as e: # Fehlerhafte HTTP-Antwort (z.B. 4xx, 5xx)
-                logging.error(f"HTTP Status Error during download from {pdf_url}: {e.response.status_code} - {e.response.text}")
+
+        logging.info(f"Downloading PDF from OpenAlex: {download_url}")
+
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                response = await client.get(download_url, headers=headers, timeout=30.0)
+
+            if response.status_code != 200:
+                logging.error(
+                    f"OpenAlex download failed [{response.status_code}]: {response.text[:200]}"
+                )
                 return None
-            except httpx.RequestError as e: # Netzwerkfehler (z.B. Timeout, DNS-Problem)
-                logging.error(f"Network Error during download from {pdf_url}: {e}")
+
+            content_type = response.headers.get("Content-Type", "")
+            if "application/pdf" not in content_type and "octet-stream" not in content_type:
+                logging.warning(
+                    f"Download failed for {download_url}: Expected PDF, got '{content_type}'."
+                )
                 return None
-            except Exception as e: # Alle anderen unerwarteten Fehler
-                logging.error(f"Unexpected Error during download from {pdf_url}: {e}")
-                return None
+
+            return response.content
+
+        except httpx.RequestError as e:
+            logging.error(f"Network error downloading from OpenAlex ({download_url}): {e}")
+            return None
+        except Exception as e:
+            logging.error(f"Unexpected error downloading from OpenAlex ({download_url}): {e}")
+            return None
+
+
+    async def download_pdf_from_openalex(
+        self, papers: list[tuple[str, str | None]]
+    ) -> bytes | None:
+        """Lädt mehrere PDFs über die OpenAlex Content API herunter und gibt sie als ZIP zurück."""
+        os.makedirs("downloads", exist_ok=True)
+
+        if not papers:
+            return None
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for openalex_id, title in papers:
+                clean_id = openalex_id.split("/")[-1]
+                pdf_bytes = await self._download_pdf_bytes(openalex_id)
+                if not pdf_bytes:
+                    continue
+
+                safe_title = self._sanitize_filename(title, clean_id)
+                safe_name = f"{safe_title}.pdf"
+                archive.writestr(safe_name, pdf_bytes)
+                logging.info(f"Successfully added PDF to ZIP: {safe_name}")
+
+        if buffer.tell() == 0:
+            return None
+
+        return buffer.getvalue()

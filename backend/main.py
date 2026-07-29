@@ -1,16 +1,13 @@
-import os
+import json
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from time import sleep
 from typing import List
 
-from config import settings  # Importiere settings
 from database import models
 from database.database import engine, get_session
-from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException, Query,
-                     status)
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from schemas import ProfileCreate, ProfileSettings, UserCreate, UserPublic
 from services import auth_service, user_service
@@ -29,6 +26,7 @@ async def lifespan(app: FastAPI):
     print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
 
     yield  # Hier läuft die FastAPI App
+    await download_service.aclose()
 
     # ---- BEIM BEENDEN DER APP ----
     print("🛑 Server wird heruntergefahren...", flush=True)
@@ -300,52 +298,39 @@ async def read_users_me(
     return current_user
 
 
-@app.get("/api/prepare-download")
-async def prepare_download(
-    pdf_url: str,
-    title: str,
-    _: models.User = Depends(auth_service.get_current_user), # Dieser Endpunkt ist authentifiziert
+@app.get("/api/bulk-download")
+async def bulk_download(
+    work_ids: str,
+    titles: str | None = None,
+    _: models.User = Depends(auth_service.get_current_user),
 ):
-    """
-    Versucht, die PDF herunterzuladen. Nur bei Erfolg wird ein
-    Token für den Zugriff auf die lokale Datei zurückgegeben.
-    """
-    safe_title = "".join(
-        [c for c in title if c.isalpha() or c.isdigit() or c == " "]).rstrip()
-    filename = f"{safe_title[:50]}.pdf".replace(" ", "_")
-    filepath = await download_service.download_pdf(pdf_url, filename)
+    ids = [work_id for work_id in work_ids.split(",") if work_id]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Keine Work-IDs übergeben.")
 
-    if not filepath or not os.path.exists(filepath):
+    parsed_titles: list[str] = []
+    if titles:
+        try:
+            parsed_titles = json.loads(titles)
+        except json.JSONDecodeError:
+            parsed_titles = []
+
+    papers = [
+        (work_id, parsed_titles[index] if index < len(parsed_titles) else None)
+        for index, work_id in enumerate(ids)
+    ]
+
+    archive_bytes = await download_service.download_pdf_from_openalex(papers)
+    if not archive_bytes:
         raise HTTPException(
             status_code=500,
-            detail="Der automatische Download vom Verlags-Server ist fehlgeschlagen.",
+            detail="Der Bulk-Download konnte nicht erstellt werden.",
         )
 
-    token = download_service.create_download_token(filepath, filename)
-    # Gib die vollständige URL zurück, die das Frontend öffnen kann
-    return {"download_url": f"/api/download?token={token}"}
-
-# Angepasster /api/download Endpunkt, der jetzt einen Token erwartet
-@app.get("/api/download")
-async def download_paper_with_token(
-    token: str, # Erwartet jetzt einen Token
-    background_tasks: BackgroundTasks,
-):
-    """Sucht die PDF-Quelle und streamt die Datei direkt an das Frontend."""
-    payload = download_service.decode_download_token(token) # Validiert den Token
-    filepath: str = payload.get("filepath")
-    filename: str = payload.get("filename")
-
-    if not filepath or not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Datei nicht gefunden oder Link abgelaufen.")
-
-    background_tasks.add_task(os.remove, filepath)
-    return FileResponse(
-        path=filepath,
-        filename=filename,
-        media_type="application/pdf",
-        content_disposition_type="inline",  # Wichtig: Datei im Browser anzeigen, nicht herunterladen
-        background=background_tasks,
+    return StreamingResponse(
+        iter([archive_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=papers.zip"},
     )
 
 

@@ -1,27 +1,13 @@
-import { format } from "date-fns";
+import { Download } from "lucide-react";
 import { Suspense, useState, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
+import { ArticleCard } from "~/components/article-card";
+import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
-
-import { Download, ExternalLinkIcon } from "lucide-react";
-import { toast } from "sonner";
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "~/components/ui/pagination";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
-import { API_BASE_URL, apiFetch } from "~/lib/api";
+
+import { toast } from "sonner";
+import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
@@ -89,46 +75,143 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
   return { articlePromise };
 }
 
+type DirectoryPickerWindow = Window &
+  typeof globalThis & {
+    showDirectoryPicker?: (options?: { mode: "readwrite" }) => Promise<any>;
+  };
+
 export default function Results() {
   const { articlePromise, error } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isPending, startTransition] = useTransition();
   const [openingPdf, setOpeningPdf] = useState<Record<string, boolean>>({});
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(
+    new Set(),
+  );
 
-  const handleOpenPdf = async (article: Article) => {
+  const getSafeFileName = (article: Article) => {
+    const baseName = article.title
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80);
+
+    return `${baseName || article.id}.pdf`;
+  };
+
+  const chooseDownloadDirectory = async () => {
+    const pickerWindow = window as DirectoryPickerWindow;
+
+    if (typeof window === "undefined" || !pickerWindow.showDirectoryPicker) {
+      return null;
+    }
+
+    try {
+      return await pickerWindow.showDirectoryPicker({ mode: "readwrite" });
+    } catch {
+      return null;
+    }
+  };
+
+  const handleOpenPdfInNewTab = async (article: Article) => {
     if (!article.pdf_url) return;
     setOpeningPdf((prev) => ({ ...prev, [article.id]: true }));
     try {
-      const params = new URLSearchParams({
-        pdf_url: article.pdf_url,
-        title: article.title,
-      });
-
-      // Zuerst den signierten Download-Link vom Backend abrufen
-      const { download_url } = await apiFetch<{ download_url: string }>(
-        `/api/prepare-download?${params.toString()}`,
-        {
-          responseType: "json", // Dieser Endpunkt gibt JSON zurück
-        },
-      );
-      // Dann den signierten Link in einem neuen Tab öffnen
-      const fullUrl = `${API_BASE_URL}${download_url}`;
-      window.open(fullUrl, "_blank");
+      window.open(article.pdf_url, "_blank", "noopener,noreferrer");
     } catch (error) {
       const errorMessage =
         error instanceof Error
           ? error.message
           : "Ein unbekannter Fehler ist aufgetreten.";
-      console.error("Fehler beim Abrufen des Download-Links:", error);
+      console.error("Fehler beim Öffnen der PDF:", error);
       toast.error(errorMessage, { position: "top-center" });
     } finally {
       setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
     }
   };
 
+  
   const handleOpenLandingPage = (url: string) => {
     window.open(url, "_blank");
+  };
+
+  const toggleSelectedArticle = (articleId: string, checked: boolean) => {
+    setSelectedArticleIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(articleId);
+      } else {
+        next.delete(articleId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllCurrentPage = (articles: Article[]) => {
+    setSelectedArticleIds((prev) => {
+      const next = new Set(prev);
+      articles.forEach((article) => {
+        if (article.pdf_url) {
+          next.add(article.id);
+        }
+      });
+      return next;
+    });
+  };
+
+  const clearAllSelections = () => {
+    setSelectedArticleIds(new Set());
+  };
+
+  const handleBulkDownload = async (articles: Article[]) => {
+    const selectedArticles = articles.filter((article) =>
+      selectedArticleIds.has(article.id),
+    );
+
+    const downloadableArticles = selectedArticles.filter(
+      (article) => article.pdf_url,
+    );
+
+    if (downloadableArticles.length === 0) {
+      toast.error("Keine herunterladbaren PDFs ausgewählt.", {
+        position: "top-center",
+      });
+      return;
+    }
+
+    const workIds = downloadableArticles.map((article) => article.id).join(",");
+    const titles = downloadableArticles.map((article) => article.title);
+    const params = new URLSearchParams({
+      work_ids: workIds,
+      titles: JSON.stringify(titles),
+    });
+
+    try {
+      const response = await apiFetch<Blob>(
+        `/api/bulk-download?${params.toString()}`,
+        {
+          responseType: "blob",
+        },
+      );
+
+      const objectUrl = URL.createObjectURL(response);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "papers.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      toast.success(`${downloadableArticles.length} Dateien wurden als ZIP heruntergeladen.`, {
+        position: "top-center",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Bulk-Download fehlgeschlagen.";
+      toast.error(message, { position: "top-center" });
+    }
   };
 
   const handlePageChange = (page: number) => {
@@ -152,9 +235,7 @@ export default function Results() {
       <Await resolve={articlePromise}>
         {(resolvedData) => {
           const { articles, totalCount, perPage, currentPage } = resolvedData;
-          const totalPages = Math.ceil(
-            Math.min(totalCount, 10000) / perPage,
-          );
+          const totalPages = Math.ceil(Math.min(totalCount, 10000) / perPage);
 
           return (
             <div className="flex h-full w-full flex-col overflow-hidden">
@@ -167,72 +248,51 @@ export default function Results() {
                 }}
               >
                 <div className="space-y-4 pr-2 py-4">
+                  <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border bg-background/90 px-4 py-3 shadow-sm backdrop-blur">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        {selectedArticleIds.size > 0
+                          ? `${selectedArticleIds.size} ausgewählt`
+                          : "Keine Auswahl"}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => selectAllCurrentPage(articles)}
+                        disabled={articles.length === 0}
+                      >
+                        Alle auf dieser Seite
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearAllSelections}
+                        disabled={selectedArticleIds.size === 0}
+                      >
+                        Auswahl löschen
+                      </Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => handleBulkDownload(articles)}
+                      disabled={selectedArticleIds.size === 0}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Bulk Download
+                    </Button>
+                  </div>
+
                   {articles.length > 0 ? (
                     articles.map((article) => (
-                      <div
+                      <ArticleCard
                         key={article.id}
-                        className="rounded-lg border bg-card p-6 shadow-sm"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="[&>*]:text-muted-foreground [&>*]:text-sm flex space-x-2 mb-2">
-                            <Badge variant="outline">
-                              {article.journal_name}
-                            </Badge>
-                            <Badge variant="outline">
-                              {article.author} (
-                              {format(article.publication_date, "yyyy-MM")})
-                            </Badge>
-                            <Badge variant="outline">{article.topic}</Badge>
-                          </div>
-                          <div>
-                            <Tooltip>
-                              <TooltipTrigger asChild className="mr-2">
-                                <Button
-                                  onClick={() => handleOpenPdf(article)}
-                                  size="icon"
-                                  disabled={
-                                    openingPdf[article.id] || !article.pdf_url
-                                  }
-                                >
-                                  <Download
-                                    className={
-                                      openingPdf[article.id]
-                                        ? "animate-pulse"
-                                        : ""
-                                    }
-                                  />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Download PDF</p>
-                              </TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  onClick={() =>
-                                    handleOpenLandingPage(
-                                      article.pdf_landing_page,
-                                    )
-                                  }
-                                  size="icon"
-                                >
-                                  <ExternalLinkIcon />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Zur Verlagsseite</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </div>
-                        <h2 className="mb-2 text-xl font-semibold leading-tight">
-                          {article.title}
-                        </h2>
-                        <p className="text-sm text-muted-foreground">
-                          {article.abstract}
-                        </p>
-                      </div>
+                        article={article}
+                        openingPdf={openingPdf[article.id] || false}
+                        isSelected={selectedArticleIds.has(article.id)}
+                        onToggleSelect={toggleSelectedArticle}
+                        onOpenPdf={handleOpenPdfInNewTab}
+                        onOpenLandingPage={handleOpenLandingPage}
+                      />
                     ))
                   ) : (
                     <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
@@ -242,58 +302,11 @@ export default function Results() {
                 </div>
               </div>
 
-              {/* Fester Bereich für die Paginierung */}
-              {totalPages > 1 && (
-                <div className="mt-auto border-t bg-background p-4">
-                  <Pagination>
-                    <PaginationContent className="w-full justify-between">
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => handlePageChange(currentPage - 1)}
-                          disabled={currentPage <= 1}
-                        />
-                      </PaginationItem>
-
-                      <div className="flex items-center justify-center gap-0.5">
-                        {[...Array(totalPages)].map((_, i) => {
-                          const page = i + 1;
-                          if (
-                            page === currentPage ||
-                            page <= 2 ||
-                            page >= totalPages - 1 ||
-                            Math.abs(currentPage - page) <= 1
-                          ) {
-                            return (
-                              <PaginationItem key={page}>
-                                <PaginationLink
-                                  onClick={() => handlePageChange(page)}
-                                  isActive={currentPage === page}
-                                >
-                                  {page}
-                                </PaginationLink>
-                              </PaginationItem>
-                            );
-                          }
-                          if (
-                            page === currentPage - 2 ||
-                            page === currentPage + 2
-                          ) {
-                            return <PaginationEllipsis key={page} />;
-                          }
-                          return null;
-                        })}
-                      </div>
-
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => handlePageChange(currentPage + 1)}
-                          disabled={currentPage >= totalPages}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                </div>
-              )}
+              <ResultsPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
             </div>
           );
         }}
