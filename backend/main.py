@@ -319,7 +319,6 @@ async def bulk_download(
         (work_id, parsed_titles[index] if index < len(parsed_titles) else None)
         for index, work_id in enumerate(ids)
     ]
-
     archive_bytes = await download_service.download_pdf_from_openalex(papers)
     if not archive_bytes:
         raise HTTPException(

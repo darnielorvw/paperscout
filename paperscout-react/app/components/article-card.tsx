@@ -3,9 +3,9 @@ import { Download, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "~/components/ui/tooltip";
 import type { Article } from "~/routes/results";
 import { Checkbox } from "./ui/checkbox";
@@ -39,7 +39,6 @@ export function ArticleCard({
               onCheckedChange={(checked) =>
                 onToggleSelect(article.id, checked === true)
               }
-              disabled={!article.pdf_url}
             />
             <FieldLabel htmlFor={`select-${article.id}`} className="sr-only">
               Artikel „{article.title}" auswählen

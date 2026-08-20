@@ -7,6 +7,7 @@ import { SkeletonList } from "~/components/skeletons";
 import { Button } from "~/components/ui/button";
 
 import { toast } from "sonner";
+import { Spinner } from "~/components/ui/spinner";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
@@ -75,11 +76,6 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
   return { articlePromise };
 }
 
-type DirectoryPickerWindow = Window &
-  typeof globalThis & {
-    showDirectoryPicker?: (options?: { mode: "readwrite" }) => Promise<any>;
-  };
-
 export default function Results() {
   const { articlePromise, error } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
@@ -89,31 +85,6 @@ export default function Results() {
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(
     new Set(),
   );
-
-  const getSafeFileName = (article: Article) => {
-    const baseName = article.title
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9._-]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 80);
-
-    return `${baseName || article.id}.pdf`;
-  };
-
-  const chooseDownloadDirectory = async () => {
-    const pickerWindow = window as DirectoryPickerWindow;
-
-    if (typeof window === "undefined" || !pickerWindow.showDirectoryPicker) {
-      return null;
-    }
-
-    try {
-      return await pickerWindow.showDirectoryPicker({ mode: "readwrite" });
-    } catch {
-      return null;
-    }
-  };
 
   const handleOpenPdfInNewTab = async (article: Article) => {
     if (!article.pdf_url) return;
@@ -132,7 +103,6 @@ export default function Results() {
     }
   };
 
-  
   const handleOpenLandingPage = (url: string) => {
     window.open(url, "_blank");
   };
@@ -153,9 +123,7 @@ export default function Results() {
     setSelectedArticleIds((prev) => {
       const next = new Set(prev);
       articles.forEach((article) => {
-        if (article.pdf_url) {
-          next.add(article.id);
-        }
+        next.add(article.id);
       });
       return next;
     });
@@ -165,29 +133,28 @@ export default function Results() {
     setSelectedArticleIds(new Set());
   };
 
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const handleBulkDownload = async (articles: Article[]) => {
     const selectedArticles = articles.filter((article) =>
       selectedArticleIds.has(article.id),
     );
 
-    const downloadableArticles = selectedArticles.filter(
-      (article) => article.pdf_url,
-    );
-
-    if (downloadableArticles.length === 0) {
+    if (selectedArticles.length === 0) {
       toast.error("Keine herunterladbaren PDFs ausgewählt.", {
         position: "top-center",
       });
       return;
     }
 
-    const workIds = downloadableArticles.map((article) => article.id).join(",");
-    const titles = downloadableArticles.map((article) => article.title);
+    const workIds = selectedArticles.map((article) => article.id).join(",");
+    const titles = selectedArticles.map((article) => article.title);
     const params = new URLSearchParams({
       work_ids: workIds,
       titles: JSON.stringify(titles),
     });
 
+    setIsDownloading(true);
     try {
       const response = await apiFetch<Blob>(
         `/api/bulk-download?${params.toString()}`,
@@ -205,12 +172,20 @@ export default function Results() {
       link.remove();
       URL.revokeObjectURL(objectUrl);
 
-      toast.success(`${downloadableArticles.length} Dateien wurden als ZIP heruntergeladen.`, {
-        position: "top-center",
-      });
+      toast.success(
+        `${selectedArticles.length} Dateien wurden als ZIP heruntergeladen.`,
+        {
+          position: "top-center",
+        },
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Bulk-Download fehlgeschlagen.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Bulk-Download fehlgeschlagen.";
       toast.error(message, { position: "top-center" });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -247,8 +222,8 @@ export default function Results() {
                   transition: "opacity 1s",
                 }}
               >
-                <div className="space-y-4 pr-2 py-4">
-                  <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border bg-background/90 px-4 py-3 shadow-sm backdrop-blur">
+                <div className="space-y-4 pt-4 pr-2">
+                  <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
                         {selectedArticleIds.size > 0
@@ -275,9 +250,13 @@ export default function Results() {
                     <Button
                       size="sm"
                       onClick={() => handleBulkDownload(articles)}
-                      disabled={selectedArticleIds.size === 0}
+                      disabled={selectedArticleIds.size === 0 || isDownloading}
                     >
-                      <Download className="mr-2 h-4 w-4" />
+                      {isDownloading ? (
+                        <Spinner data-icon="inline-start" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
                       Bulk Download
                     </Button>
                   </div>

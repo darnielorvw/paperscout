@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -11,7 +12,9 @@ import jwt
 from config import settings
 from fastapi import HTTPException
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 
 class DownloadService:
@@ -84,7 +87,10 @@ class DownloadService:
                 return None
 
             content_type = response.headers.get("Content-Type", "")
-            if "application/pdf" not in content_type and "octet-stream" not in content_type:
+            if (
+                "application/pdf" not in content_type
+                and "octet-stream" not in content_type
+            ):
                 logging.warning(
                     f"Download failed for {download_url}: Expected PDF, got '{content_type}'."
                 )
@@ -93,28 +99,46 @@ class DownloadService:
             return response.content
 
         except httpx.RequestError as e:
-            logging.error(f"Network error downloading from OpenAlex ({download_url}): {e}")
+            logging.error(
+                f"Network error downloading from OpenAlex ({download_url}): {e}"
+            )
             return None
         except Exception as e:
-            logging.error(f"Unexpected error downloading from OpenAlex ({download_url}): {e}")
+            logging.error(
+                f"Unexpected error downloading from OpenAlex ({download_url}): {e}"
+            )
             return None
-
 
     async def download_pdf_from_openalex(
         self, papers: list[tuple[str, str | None]]
     ) -> bytes | None:
-        """Lädt mehrere PDFs über die OpenAlex Content API herunter und gibt sie als ZIP zurück."""
+        """Lädt mehrere PDFs parallel über die OpenAlex Content API herunter und gibt sie als ZIP zurück."""
         os.makedirs("downloads", exist_ok=True)
 
         if not papers:
             return None
 
+        async def fetch_one(openalex_id: str, title: str | None):
+            clean_id = openalex_id.split("/")[-1]
+            pdf_bytes = await self._download_pdf_bytes(openalex_id)
+            return clean_id, title, pdf_bytes
+
+        # Parallel herunterladen
+        results = await asyncio.gather(
+            *(fetch_one(openalex_id, title) for openalex_id, title in papers),
+            return_exceptions=True,
+        )
+
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for openalex_id, title in papers:
-                clean_id = openalex_id.split("/")[-1]
-                pdf_bytes = await self._download_pdf_bytes(openalex_id)
+            for result in results:
+                if isinstance(result, Exception):
+                    logging.warning(f"Download fehlgeschlagen: {result}")
+                    continue
+
+                clean_id, title, pdf_bytes = result
                 if not pdf_bytes:
+                    logging.warning(f"Kein PDF erhalten für {clean_id}")
                     continue
 
                 safe_title = self._sanitize_filename(title, clean_id)

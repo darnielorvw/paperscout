@@ -48,7 +48,7 @@ class SearchService:
                 return {}
 
     async def fetch_external_journals(self) -> List[Dict[str, Any]]:
-        """Sucht extern bei OpenAlex nach Journals (Sources)."""
+        """Sucht extern bei OpenAlex nach Journals (Sources) für den Import."""
         params = {"filter": "type:journal", "per_page": 50}
         data = await self._fetch_from_api("/sources", params)
         return data.get("results", [])
@@ -78,7 +78,6 @@ class SearchService:
         # 2. Im Cache nach einem gültigen Eintrag suchen
         cached_data = self.cache.get(cache_key)
         if cached_data:
-            print(f"✅ Treffer im Backend-Cache für Schlüssel: {cache_key[:50]}...")
             return cached_data
 
         # Bereinige die IDs (wir brauchen nur den Teil nach dem letzten Slash, z.B. S123)
@@ -86,7 +85,7 @@ class SearchService:
         clean_ids = "|".join([jid.split("/")[-1] for jid in journal_ids])
 
         # OpenAlex Filter: Quelle(n), Startdatum und Enddatum
-        filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date}"
+        filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date},is_oa:true,has_fulltext:true"
         select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships,best_oa_location"
 
         params = {
@@ -99,8 +98,6 @@ class SearchService:
 
         # Abfrage des /works Endpunkts für Artikel statt /sources für Journals
         data = await self._fetch_from_api("/works", params)
-        
-
 
         meta = data.get("meta", {})
         results = []
