@@ -15,22 +15,22 @@ export function TopLoader({ loading }: { loading: boolean }) {
     if (loading) {
       setShouldRender(true);
       setVisible(true);
-      setProgress(5); // Kleiner Start-Sprung für sofortiges Feedback
+      setProgress(5); // Small initial jump for immediate feedback
 
       progressInterval = setInterval(() => {
         setProgress((prev) => {
           if (prev >= 90) return 90;
-          // Je näher an 90%, desto kleiner die Schritte (Trickle)
+          // The closer to 90%, the smaller the steps (trickle)
           const remaining = 90 - prev;
-          return prev + remaining * 0.1; 
+          return prev + remaining * 0.1;
         });
-      }, 300); 
+      }, 300);
     } else {
       setProgress(100);
-      // Erst kurz auf 100% verweilen, dann ausblenden
+      // Briefly stay at 100% first, then fade out
       fadeTimer = setTimeout(() => {
         setVisible(false);
-        // Warten, bis duration-500 (CSS) vorbei ist, dann erst unmounten
+        // Wait until duration-500 (CSS) is over, only then unmount
         unmountTimer = setTimeout(() => {
           setShouldRender(false);
           setProgress(0);

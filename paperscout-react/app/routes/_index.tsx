@@ -12,7 +12,7 @@ import RangePage from "~/pages/range/range";
 import SearchPage from "~/pages/search/search";
 
 export function clientLoader(): { journals: Promise<Journal[]> } {
-  // Schütze diese Seite: Wenn kein Token, wird hier abgebrochen und umgeleitet.
+  // Protect this page: if there's no token, execution stops here and redirects.
   protectPage();
 
   const journals = apiFetch("/api/journals")
@@ -24,7 +24,7 @@ export function clientLoader(): { journals: Promise<Journal[]> } {
 }
 
 export default function Home() {
-  // Auswahlzustand für die Journals
+  // Selection state for the journals
   const { journals } = useLoaderData<typeof clientLoader>();
   const {
     rowSelection,
@@ -35,11 +35,11 @@ export default function Home() {
     setSearchTerm,
   } = useSearch();
 
-  // Zustand für die Ergebnisse
-  const navigate = useNavigate(); // Hook für die Navigation
+  // State for the results
+  const navigate = useNavigate(); // Hook for navigation
   const location = useLocation();
 
-  // Effekt, um sicherzustellen, dass die Startseite immer auf #journals zeigt.
+  // Effect to ensure the home page always points to #journals.
   useEffect(() => {
     if (location.pathname === "/" && !location.hash) {
       navigate("/#journals", { replace: true, preventScrollReset: true });
@@ -51,7 +51,7 @@ export default function Home() {
     navigate(resultsUrl);
   };
 
-  // Memoize die Inhalte der Akkordeon-Elemente, um unnötiges Remounting zu verhindern
+  // Memoize the accordion item contents to prevent unnecessary remounting
   const journalsContent = useMemo(
     () => (
       <JournalsPage
@@ -104,7 +104,7 @@ export default function Home() {
     <div className="h-full w-full">
       <InputAccordion
         title="PaperScout Dashboard"
-        description="Wähle eine Aktion aus dem Menü."
+        description="Choose an action from the menu."
         items={accordionItems}
         onFinish={handleSearch}
       />

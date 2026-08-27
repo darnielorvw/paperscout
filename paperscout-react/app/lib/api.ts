@@ -9,18 +9,18 @@ export class UnauthorizedError extends Error {
 }
 
 interface ApiFetchOptions extends RequestInit {
-  // Erlaubt dem Aufrufer, den erwarteten Antworttyp zu spezifizieren.
+  // Allows the caller to specify the expected response type.
   responseType?: 'json' | 'blob' | 'text';
 }
 
 /**
- * Ein globaler Wrapper für die `fetch`-API, der automatisch
- * bei einem 401-Fehler (Unauthorized) zur Login-Seite weiterleitet.
+ * A global wrapper for the `fetch` API that automatically
+ * redirects to the login page on a 401 error (Unauthorized).
  *
- * @param route Der API-Endpunkt, der aufgerufen werden soll (z.B. /api/login).
- * @param options Die `fetch`-Optionen.
- * @param handleUnauthorized Ob bei einem 401-Fehler automatisch umgeleitet werden soll.
- * @returns Eine Promise, die mit den JSON-Daten der API-Antwort aufgelöst wird.
+ * @param route The API endpoint to call (e.g. /api/login).
+ * @param options The `fetch` options.
+ * @param handleUnauthorized Whether to automatically redirect on a 401 error.
+ * @returns A promise that resolves with the JSON data of the API response.
  */
 export async function apiFetch<T = any>(
   route: string,
@@ -30,7 +30,7 @@ export async function apiFetch<T = any>(
   const token = localStorage.getItem("auth_token");
   const url = `${API_BASE_URL}${route}`;
 
-  // Extrahiere unsere benutzerdefinierte Option, bevor wir sie an `fetch` übergeben.
+  // Extract our custom option before passing the rest to `fetch`.
   const { responseType = 'json', ...fetchOptions } = options;
 
   const headers = new Headers(options.headers);
@@ -40,28 +40,28 @@ export async function apiFetch<T = any>(
 
   const response = await fetch(url, { ...fetchOptions, headers });
 
-  // Wenn der Server einen 401-Fehler zurückgibt (Token ungültig/abgelaufen),
-  // leiten wir den Benutzer zur Login-Seite weiter.
-  if (response.status === 401) {    
+  // If the server returns a 401 error (token invalid/expired),
+  // we redirect the user to the login page.
+  if (response.status === 401) {
     if (handleUnauthorized) {
-      // Token entfernen, um Endlosschleifen zu vermeiden
+      // Remove the token to avoid infinite loops
       localStorage.removeItem("auth_token");
-      // Zur Login-Seite navigieren. window.location, da wir außerhalb von React sind.
+      // Navigate to the login page. window.location since we're outside of React here.
       window.location.href = "/login";
-      // Wir werfen einen Fehler, um die weitere Ausführung zu stoppen.
-      throw new UnauthorizedError("Session abgelaufen. Bitte neu einloggen.");
+      // Throw an error to stop further execution.
+      throw new UnauthorizedError("Session expired. Please log in again.");
     } else {
-      throw new UnauthorizedError("Token ist ungültig.");
+      throw new UnauthorizedError("Token is invalid.");
     }
   }
 
-  // Prüfen, ob die Anfrage generell fehlgeschlagen ist (z.B. 400, 404, 500)
+  // Check whether the request failed in general (e.g. 400, 404, 500)
   if (!response.ok) {
-    // Wir versuchen, die Fehlerdetails aus dem Body zu lesen,
-    // da die API oft eine JSON-Antwort mit einer 'detail'-Eigenschaft sendet.
-    const errorData = await response.json().catch(() => ({})); // Leeres Objekt, falls Body kein JSON ist
-    const errorMessage = errorData.detail || `API-Fehler: ${response.status} ${response.statusText}`;
-    // Wir werfen einen generischen Fehler, der dann in der aufrufenden Komponente gefangen wird.
+    // Try to read the error details from the body,
+    // since the API often sends a JSON response with a 'detail' property.
+    const errorData = await response.json().catch(() => ({})); // Empty object if the body isn't JSON
+    const errorMessage = errorData.detail || `API error: ${response.status} ${response.statusText}`;
+    // Throw a generic error, which is then caught in the calling component.
     throw new Error(errorMessage);
   }
 
@@ -69,12 +69,12 @@ export async function apiFetch<T = any>(
     return undefined as T;
   }
 
-  // Wenn die Antwort einen 204 No Content Status hat, gibt es keinen Body zum Parsen.
+  // If the response has a 204 No Content status, there's no body to parse.
   if (response.status === 204) {
     return undefined as T;
   }
 
-  // Verarbeite den Antwort-Body basierend auf dem angeforderten Typ.
+  // Process the response body based on the requested type.
   switch (responseType) {
     case 'blob':
       return response.blob() as Promise<T>;

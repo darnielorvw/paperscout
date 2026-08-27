@@ -65,10 +65,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setIsMounted(true);
   }, []);
 
-  // Baue die Results-URL basierend auf dem globalen Zustand.
-  // useMemo sorgt dafür, dass dies nur bei Änderungen neu berechnet wird.
+  // Build the results URL based on the global state.
+  // useMemo ensures this is only recalculated on changes.
   const resultsUrl = React.useMemo(() => {
-    if (!isInitialized) return "/results"; // Warten, bis der Zustand aus dem Storage geladen ist
+    if (!isInitialized) return "/results"; // Wait until the state has been loaded from storage
     return buildResultsUrl({ rowSelection, date, searchTerm });
   }, [rowSelection, date, searchTerm, isInitialized]);
 
@@ -81,20 +81,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {item.items.map((subItem, index) => {
-                  // Vor der Hydration gehen wir (wie der Server) von keinem Hash aus
+                  // Before hydration we assume (like the server) that there is no hash
                   const hash = isMounted ? location.hash : "";
                   const normalizedHash = subItem.url.startsWith("/#")
                     ? subItem.url.replace("/", "")
                     : "";
 
                   let finalUrl = subItem.url;
-                  // Wenn es der "Results"-Link ist und wir auf der Startseite sind,
-                  // bauen wir die URL mit den Daten aus dem Session Storage.
+                  // If this is the "Results" link and we're on the home page,
+                  // build the URL with the data from session storage.
                   if (subItem.url === "/results") {
                     finalUrl = resultsUrl;
                   }
 
-                  // Aktiv, wenn der URL-Hash übereinstimmt ODER wenn gar kein Hash da ist und es das erste Item ist.
+                  // Active if the URL hash matches OR if there's no hash at all and this is the first item.
                   const isActive =
                     location.pathname === subItem.url ||
                     (location.pathname === "/" &&

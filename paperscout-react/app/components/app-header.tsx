@@ -33,7 +33,7 @@ function ProfileSelector() {
   };
 
   if (profileItems.length <= 1) {
-    return null; // Zeige nichts an, wenn nur "Default" vorhanden ist
+    return null; // Show nothing if only "Default" is present
   }
 
   return (

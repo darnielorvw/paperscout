@@ -22,11 +22,11 @@ class DownloadService:
         self.DOWNLOAD_TOKEN_EXPIRE_MINUTES = 5
 
     async def aclose(self) -> None:
-        """Cleanup hook für den Lifespan-Manager."""
+        """Cleanup hook for the lifespan manager."""
         return None
 
     def create_download_token(self, filepath: str, filename: str) -> str:
-        """Erstellt einen kurzlebigen JWT für einen sicheren Download-Link."""
+        """Creates a short-lived JWT for a secure download link."""
         to_encode = {
             "filepath": filepath,
             "filename": filename,
@@ -38,7 +38,7 @@ class DownloadService:
         )
 
     def decode_download_token(self, token: str) -> dict:
-        """Dekodiert und validiert einen Download-Token."""
+        """Decodes and validates a download token."""
         try:
             payload = jwt.decode(
                 token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
@@ -46,18 +46,18 @@ class DownloadService:
             filepath: str = payload.get("filepath")
             filename: str = payload.get("filename")
             if not filepath or not filename:
-                raise HTTPException(status_code=400, detail="Ungültiges Token-Format.")
+                raise HTTPException(status_code=400, detail="Invalid token format.")
             return payload
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Download-Link abgelaufen.")
+            raise HTTPException(status_code=401, detail="Download link expired.")
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Ungültiger Download-Link.")
+            raise HTTPException(status_code=401, detail="Invalid download link.")
 
     def create_bulk_download_token(self, work_ids: list[str], expire_days: int) -> str:
-        """Erstellt einen langlebigen, signierten Token für einen ZIP-Bulk-Download (z.B. für Digest-Mails).
+        """Creates a long-lived, signed token for a bulk ZIP download (e.g. for digest emails).
 
-        Enthält bewusst nur die kurzen Work-IDs (keine Titel), damit der resultierende
-        Link kurz genug bleibt, um von Mail-Clients nicht abgeschnitten zu werden.
+        Deliberately contains only the short work IDs (no titles), so the resulting
+        link stays short enough not to be truncated by mail clients.
         """
         to_encode = {
             "work_ids": work_ids,
@@ -68,21 +68,21 @@ class DownloadService:
         )
 
     def decode_bulk_download_token(self, token: str) -> dict:
-        """Dekodiert und validiert einen Bulk-Download-Token."""
+        """Decodes and validates a bulk download token."""
         try:
             payload = jwt.decode(
                 token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
             )
             if not payload.get("work_ids"):
-                raise HTTPException(status_code=400, detail="Ungültiges Token-Format.")
+                raise HTTPException(status_code=400, detail="Invalid token format.")
             return payload
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Download-Link abgelaufen.")
+            raise HTTPException(status_code=401, detail="Download link expired.")
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Ungültiger Download-Link.")
+            raise HTTPException(status_code=401, detail="Invalid download link.")
 
     def sanitize_filename(self, title: str, fallback: str) -> str:
-        """Erstellt einen sicheren Dateinamen aus Titel und Fallback."""
+        """Creates a safe filename from a title and a fallback."""
         normalized = unicodedata.normalize("NFKD", title or fallback)
         ascii_text = "".join(
             char for char in normalized if not unicodedata.combining(char)
@@ -91,7 +91,7 @@ class DownloadService:
         return cleaned or fallback
 
     async def _download_pdf_bytes(self, openalex_id: str) -> bytes | None:
-        """Lädt eine einzelne PDF-Datei von OpenAlex herunter."""
+        """Downloads a single PDF file from OpenAlex."""
         clean_id = openalex_id.split("/")[-1]
         download_url = (
             f"https://content.openalex.org/works/{clean_id}.pdf"
@@ -99,7 +99,7 @@ class DownloadService:
         )
 
         headers = {
-            "User-Agent": "MyAppName/1.0 (mailto:deine-email@domain.com)",
+            "User-Agent": "MyAppName/1.0 (mailto:your-email@domain.com)",
         }
 
         logging.info(f"Downloading PDF from OpenAlex: {download_url}")
@@ -140,7 +140,7 @@ class DownloadService:
     async def download_pdf_from_openalex(
         self, papers: list[tuple[str, str | None]]
     ) -> bytes | None:
-        """Lädt mehrere PDFs parallel über die OpenAlex Content API herunter und gibt sie als ZIP zurück."""
+        """Downloads multiple PDFs in parallel via the OpenAlex Content API and returns them as a ZIP."""
         os.makedirs("downloads", exist_ok=True)
 
         if not papers:
@@ -151,7 +151,7 @@ class DownloadService:
             pdf_bytes = await self._download_pdf_bytes(openalex_id)
             return clean_id, title, pdf_bytes
 
-        # Parallel herunterladen
+        # Download in parallel
         results = await asyncio.gather(
             *(fetch_one(openalex_id, title) for openalex_id, title in papers),
             return_exceptions=True,
@@ -161,12 +161,12 @@ class DownloadService:
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             for result in results:
                 if isinstance(result, Exception):
-                    logging.warning(f"Download fehlgeschlagen: {result}")
+                    logging.warning(f"Download failed: {result}")
                     continue
 
                 clean_id, title, pdf_bytes = result
                 if not pdf_bytes:
-                    logging.warning(f"Kein PDF erhalten für {clean_id}")
+                    logging.warning(f"No PDF received for {clean_id}")
                     continue
 
                 safe_title = self.sanitize_filename(title, clean_id)

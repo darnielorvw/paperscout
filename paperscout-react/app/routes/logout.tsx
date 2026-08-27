@@ -8,6 +8,6 @@ export default function LogoutPage() {
     logout();
   }, [logout]);
 
-  // Zeige eine Ladeanzeige, während die Weiterleitung stattfindet.
+  // Show a loading indicator while the redirect happens.
   return <div>Logging out...</div>;
 }

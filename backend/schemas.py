@@ -4,14 +4,14 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
-# Schema für die Erstellung eines neuen Benutzers (Registrierung)
+# Schema for creating a new user (registration)
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     name: str
 
 
-# Schema für die öffentliche Darstellung eines Benutzers (ohne Passwort)
+# Schema for the public representation of a user (without password)
 class UserPublic(BaseModel):
     id: int
     email: EmailStr
@@ -19,13 +19,13 @@ class UserPublic(BaseModel):
     institution: str
 
 
-# Schema für das Login
+# Schema for login
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
 
-# Schema für die Einstellungen innerhalb eines Suchprofils
+# Schema for the settings within a search profile
 class ProfileSettings(BaseModel):
     rowSelection: Dict[str, bool] = Field(default_factory=dict)
     startDate: datetime
@@ -34,29 +34,29 @@ class ProfileSettings(BaseModel):
     emailNotifications: bool = True
 
 
-# Schema für die Erstellung eines neuen Profils
+# Schema for creating a new profile
 class ProfileCreate(BaseModel):
     name: str
     settings: ProfileSettings
 
 
-# Schema zum Umschalten der E-Mail-Benachrichtigungen eines Profils
+# Schema for toggling email notifications for a profile
 class ProfileNotificationsUpdate(BaseModel):
     emailNotifications: bool
 
 
-# Schema zum Ändern der E-Mail-Adresse (Bestätigung per aktuellem Passwort)
+# Schema for changing the email address (confirmed via current password)
 class ChangeEmailRequest(BaseModel):
     currentPassword: str
     newEmail: EmailStr
 
 
-# Schema zum Ändern des Passworts
+# Schema for changing the password
 class ChangePasswordRequest(BaseModel):
     currentPassword: str
     newPassword: str
 
 
-# Schema zum Löschen des eigenen Accounts
+# Schema for deleting one's own account
 class DeleteAccountRequest(BaseModel):
     currentPassword: str

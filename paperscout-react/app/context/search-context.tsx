@@ -27,12 +27,12 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [date, setDateState] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
 
-  // Wrapper um setDate, um sicherzustellen, dass die Uhrzeit immer auf 00:00:00 UTC gesetzt wird.
+  // Wrapper around setDate to ensure the time is always set to 00:00:00 UTC.
   const setDate = (newDate: DateRange | undefined) => {
     setDateState(normalizeDateRange(newDate));
   };
 
-  // Beim ersten Laden die Daten aus dem sessionStorage wiederherstellen
+  // Restore data from sessionStorage on first load
   useEffect(() => {
     try {
       const savedSelection = sessionStorage.getItem("ps_row_selection");
@@ -56,7 +56,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Änderungen zurück in den sessionStorage schreiben
+  // Write changes back to sessionStorage
   useEffect(() => {
     if (isInitialized) {
       sessionStorage.setItem("ps_row_selection", JSON.stringify(rowSelection));

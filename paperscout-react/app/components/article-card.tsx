@@ -41,7 +41,7 @@ export function ArticleCard({
               }
             />
             <FieldLabel htmlFor={`select-${article.id}`} className="sr-only">
-              Artikel „{article.title}" auswählen
+              Select article "{article.title}"
             </FieldLabel>
           </Field>
           <Badge variant="outline">{article.journal_name}</Badge>
@@ -75,7 +75,7 @@ export function ArticleCard({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Zur Verlagsseite</p>
+              <p>Go to publisher page</p>
             </TooltipContent>
           </Tooltip>
         </div>

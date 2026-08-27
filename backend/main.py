@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
             )
             conn.commit()
 
-    print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
+    print("🚀 Database has been checked and is ready!", flush=True)
 
     scheduler.add_job(
         digest_service.run_monthly_digest,
@@ -59,19 +59,19 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     scheduler.start()
-    print(f"📅 Monatlicher Digest-Versand geplant ({settings.DIGEST_CRON}).", flush=True)
+    print(f"📅 Monthly digest send scheduled ({settings.DIGEST_CRON}).", flush=True)
 
-    yield  # Hier läuft die FastAPI App
+    yield  # The FastAPI app runs here
     scheduler.shutdown()
     await download_service.aclose()
 
-    # ---- BEIM BEENDEN DER APP ----
-    print("🛑 Server wird heruntergefahren...", flush=True)
+    # ---- ON APP SHUTDOWN ----
+    print("🛑 Server is shutting down...", flush=True)
 
 
 app = FastAPI(title="PaperScout API", lifespan=lifespan, version="1.0")
 
-# CORS-Mapping: Erlaubt deinem React-Frontend (Vite läuft meist auf Port 5173) den Zugriff
+# CORS mapping: allows your React frontend (Vite usually runs on port 5173) to access the API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -90,13 +90,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 @app.post("/api/register", status_code=202)
 async def register_user(user: UserCreate, session: Session = Depends(get_session)):
-    """Startet die Registrierung: verschickt einen Bestätigungslink per E-Mail.
+    """Starts registration: sends a confirmation link by email.
 
-    Der Account wird erst angelegt, wenn der Link geklickt wird (siehe /api/verify-email).
-    Das verhindert, dass Bots die DB mit unbegrenzt vielen Fake-Registrierungen fluten.
+    The account is only created once the link is clicked (see /api/verify-email).
+    This prevents bots from flooding the DB with an unlimited number of fake registrations.
     """
     if auth_service.get_user_by_email(session, user.email):
-        raise HTTPException(status_code=400, detail="E-Mail bereits registriert.")
+        raise HTTPException(status_code=400, detail="Email already registered.")
 
     hashed_password = user_service.get_password_hash(user.password)
     token = auth_service.create_email_verification_token(
@@ -108,33 +108,33 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
     verify_link = f"{settings.BACKEND_URL}/api/verify-email?token={token}"
     html_body = (
         "<div style='font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;'>"
-        "<h1 style='margin-bottom:4px;'>Willkommen bei PaperScout</h1>"
-        "<p style='color:#666;'>Bitte bestätige deine E-Mail-Adresse, um deine Registrierung abzuschließen.</p>"
+        "<h1 style='margin-bottom:4px;'>Welcome to PaperScout</h1>"
+        "<p style='color:#666;'>Please confirm your email address to complete your registration.</p>"
         f"<p><a href='{verify_link}' style='display:inline-block;padding:8px 14px;"
         "background:#1a56db;color:#fff;border-radius:6px;text-decoration:none;'>"
-        "E-Mail-Adresse bestätigen</a></p>"
-        f"<p style='color:#999;font-size:12px;'>Der Link ist {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} Stunden gültig.</p>"
+        "Confirm email address</a></p>"
+        f"<p style='color:#999;font-size:12px;'>This link is valid for {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} hours.</p>"
         "</div>"
     )
     await mail_service.send_email(
         to=user.email,
-        subject="Bitte bestätige deine E-Mail-Adresse",
+        subject="Please confirm your email address",
         html_body=html_body,
     )
 
     return {
-        "message": "Bitte bestätige deine E-Mail-Adresse über den Link, den wir dir geschickt haben."
+        "message": "Please confirm your email address using the link we sent you."
     }
 
 
 @app.get("/api/verify-email")
 async def verify_email(token: str, session: Session = Depends(get_session)):
-    """Schließt die Registrierung ab und legt den Nutzer erst jetzt in der DB an."""
+    """Completes registration and only now creates the user in the DB."""
     payload = auth_service.decode_email_verification_token(token)
     email = payload["email"]
 
     if auth_service.get_user_by_email(session, email):
-        raise HTTPException(status_code=400, detail="E-Mail bereits registriert.")
+        raise HTTPException(status_code=400, detail="Email already registered.")
 
     new_user = user_service.create_db_user_from_hash(
         session, email=email, name=payload["name"], hashed_password=payload["hashed_password"]
@@ -150,16 +150,16 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
 ):
-    """Authentifiziert einen Benutzer und gibt ein JWT-Token zurück."""
+    """Authenticates a user and returns a JWT token."""
     user = auth_service.get_user_by_email(
         session, form_data.username
-    )  # username ist die E-Mail
+    )  # username is the email
     if not user or not user_service.verify_password(
         form_data.password, user.hashed_password
     ):
         raise HTTPException(
             status_code=401,
-            detail="Falsche E-Mail oder Passwort.",
+            detail="Incorrect email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -191,7 +191,7 @@ async def get_journals(
         )
 
     if not results:
-        return {"message": "Keine Journals gefunden.", "results": []}
+        return {"message": "No journals found.", "results": []}
     return {"results": results}
 
 
@@ -200,7 +200,7 @@ async def import_journals(
     session: Session = Depends(get_session),
     _: models.User = Depends(auth_service.get_current_user),
 ):
-    """Sucht Journals bei OpenAlex und speichert sie in der lokalen Datenbank."""
+    """Searches for journals on OpenAlex and stores them in the local database."""
     external_results = await search_service.fetch_external_journals()
 
     imported_journals = []
@@ -226,7 +226,7 @@ async def import_journals(
 
     session.commit()
     return {
-        "message": f"{len(imported_journals)} Journals importiert.",
+        "message": f"{len(imported_journals)} journals imported.",
         "results": imported_journals,
     }
 
@@ -241,7 +241,7 @@ async def search_articles(
     session: Session = Depends(get_session),
     _: models.User = Depends(auth_service.get_current_user),
 ):
-    """Sucht nach wissenschaftlichen Artikeln in den gewählten Journals."""
+    """Searches for scientific articles in the selected journals."""
     statement = select(models.Journals.id).where(models.Journals.id.in_(journal_ids))
     oa_ids = session.exec(statement).all()
 
@@ -262,12 +262,12 @@ async def create_profile(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Erstellt ein neues Suchprofil für den aktuellen Benutzer."""
+    """Creates a new search profile for the current user."""
 
     start = profile_data.settings.startDate
     end = profile_data.settings.endDate
 
-    # 2. Neues DB-Profil mit den flachen Spalten befüllen
+    # 2. Populate the new DB profile with the flat columns
     new_profile = models.Profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
@@ -292,7 +292,7 @@ async def create_profile(
             detail="A profile with the same name or settings already exists.",
         )
 
-    # Kombiniere die Daten für die Antwort, wie vom Frontend erwartet
+    # Combine the data for the response, as expected by the frontend
     response_data = {
         "name": new_profile.profile_name,
         "id": new_profile.id,
@@ -309,12 +309,12 @@ async def get_profiles(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Gibt alle Suchprofile des aktuellen Benutzers zurück."""
+    """Returns all search profiles of the current user."""
     profiles = session.exec(
         select(models.Profile).where(models.Profile.user_id == current_user.id)
     ).all()
 
-    # Transformiere die Daten, um dem Frontend-Format zu entsprechen
+    # Transform the data to match the frontend format
     results = [
         {
             "id": p.id,
@@ -336,12 +336,12 @@ async def update_profile(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Aktualisiert ein bestehendes Suchprofil."""
+    """Updates an existing search profile."""
     profile = session.get(models.Profile, profile_id)
     if not profile or profile.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+        raise HTTPException(status_code=404, detail="Profile not found.")
 
-    # Update der Felder
+    # Update the fields
     profile.row_selection = settings.rowSelection
     profile.searchTerm = settings.searchTerm
     profile.start_date = settings.startDate
@@ -371,10 +371,10 @@ async def update_profile_notifications(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Schaltet die E-Mail-Benachrichtigungen für ein Suchprofil um."""
+    """Toggles email notifications for a search profile."""
     profile = session.get(models.Profile, profile_id)
     if not profile or profile.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+        raise HTTPException(status_code=404, detail="Profile not found.")
 
     profile.email_notifications = payload.emailNotifications
     session.add(profile)
@@ -397,10 +397,10 @@ async def delete_profile(
     session: Session = Depends(get_session),
     _: models.User = Depends(auth_service.get_current_user),
 ):
-    """Löscht ein bestimmtes Suchprofil."""
+    """Deletes a specific search profile."""
     profile = session.get(models.Profile, profile_id)
     if not profile:
-        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+        raise HTTPException(status_code=404, detail="Profile not found.")
     session.delete(profile)
     session.commit()
 
@@ -409,7 +409,7 @@ async def delete_profile(
 async def read_users_me(
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Gibt die Daten des aktuell authentifizierten Benutzers zurück."""
+    """Returns the data of the currently authenticated user."""
     return current_user
 
 
@@ -419,15 +419,15 @@ async def update_email(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Ändert die E-Mail-Adresse des aktuellen Benutzers und stellt ein neues Token aus,
-    da das alte Token auf die vorherige E-Mail-Adresse ausgestellt war."""
+    """Changes the email address of the current user and issues a new token,
+    since the old token was issued for the previous email address."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+        raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if payload.newEmail != current_user.email and auth_service.get_user_by_email(
         session, payload.newEmail
     ):
-        raise HTTPException(status_code=400, detail="Diese E-Mail-Adresse wird bereits verwendet.")
+        raise HTTPException(status_code=400, detail="This email address is already in use.")
 
     current_user.email = payload.newEmail
     session.add(current_user)
@@ -447,20 +447,20 @@ async def update_password(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Ändert das Passwort des aktuellen Benutzers."""
+    """Changes the password of the current user."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+        raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if len(payload.newPassword) < 8:
         raise HTTPException(
-            status_code=400, detail="Das neue Passwort muss mindestens 8 Zeichen lang sein."
+            status_code=400, detail="The new password must be at least 8 characters long."
         )
 
     current_user.hashed_password = user_service.get_password_hash(payload.newPassword)
     session.add(current_user)
     session.commit()
 
-    return {"message": "Passwort wurde erfolgreich geändert."}
+    return {"message": "Password changed successfully."}
 
 
 @app.delete("/api/users/me", status_code=204)
@@ -469,9 +469,9 @@ async def delete_account(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Löscht den Account des aktuellen Benutzers unwiderruflich, inklusive aller Suchprofile."""
+    """Irrevocably deletes the current user's account, including all search profiles."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+        raise HTTPException(status_code=400, detail="Incorrect password.")
 
     profiles = session.exec(
         select(models.Profile).where(models.Profile.user_id == current_user.id)
@@ -491,7 +491,7 @@ async def bulk_download(
 ):
     ids = [work_id for work_id in work_ids.split(",") if work_id]
     if not ids:
-        raise HTTPException(status_code=400, detail="Keine Work-IDs übergeben.")
+        raise HTTPException(status_code=400, detail="No work IDs provided.")
 
     parsed_titles: list[str] = []
     if titles:
@@ -508,7 +508,7 @@ async def bulk_download(
     if not archive_bytes:
         raise HTTPException(
             status_code=500,
-            detail="Der Bulk-Download konnte nicht erstellt werden.",
+            detail="The bulk download could not be created.",
         )
 
     return StreamingResponse(
@@ -520,10 +520,10 @@ async def bulk_download(
 
 @app.get("/api/digest/download")
 async def digest_download(token: str, zip_name: str = "papers"):
-    """Öffentlicher Download-Endpunkt für die signierten ZIP-Links aus Digest-Mails.
+    """Public download endpoint for the signed ZIP links from digest emails.
 
-    Erfordert keinen Login, da der Link direkt aus der E-Mail geklickt wird –
-    der Token selbst übernimmt die Autorisierung (siehe DownloadService.create_bulk_download_token).
+    Requires no login since the link is clicked directly from the email —
+    the token itself handles the authorization (see DownloadService.create_bulk_download_token).
     """
     payload = download_service.decode_bulk_download_token(token)
     work_ids: List[str] = payload.get("work_ids", [])
@@ -534,7 +534,7 @@ async def digest_download(token: str, zip_name: str = "papers"):
     if not archive_bytes:
         raise HTTPException(
             status_code=500,
-            detail="Der Download konnte nicht erstellt werden.",
+            detail="The download could not be created.",
         )
 
     safe_name = download_service.sanitize_filename(zip_name, "papers")
@@ -550,14 +550,14 @@ async def send_test_digest(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Verschickt den monatlichen Digest sofort an den aktuell eingeloggten Nutzer (zu Testzwecken)."""
+    """Sends the monthly digest immediately to the currently logged-in user (for testing purposes)."""
     sent = await digest_service.send_digest_to_user(session, current_user)
     if not sent:
         raise HTTPException(
             status_code=400,
-            detail="Kein Digest verschickt (keine Suchprofile vorhanden oder SMTP nicht konfiguriert – siehe Server-Logs).",
+            detail="No digest sent (no search profiles found or SMTP not configured — see server logs).",
         )
-    return {"message": f"Digest wurde an {current_user.email} verschickt."}
+    return {"message": f"Digest sent to {current_user.email}."}
 
 
 if __name__ == "__main__":

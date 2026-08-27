@@ -7,14 +7,14 @@ load_dotenv()
 
 
 class Settings(BaseSettings):
-    # "dev" für lokale Entwicklung ohne Mail-Zwang, "prod" für echten Betrieb
+    # "dev" for local development without mail requirements, "prod" for real operation
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "dev")
-    
-    # Geheimschlüssel für die JWT-Verschlüsselung (In Prod unbedingt ändern!)
+
+    # Secret key for JWT signing (make sure to change this in prod!)
     JWT_SECRET: str = os.getenv("JWT_SECRET", "super-secret-key-for-local-testing")
     JWT_ALGORITHM: str = "HS256"
-    
-    # Mail-Server-Konfiguration (nur für Prod relevant)
+
+    # Mail server configuration (only relevant for prod)
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "mail.fh-swf.de")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USER: str = os.getenv("SMTP_USER", "")
@@ -22,26 +22,26 @@ class Settings(BaseSettings):
     SMTP_FROM: str = os.getenv("SMTP_FROM", "PaperScout <noreply@paperscout.local>")
     SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 
-    # Basis-URL des Frontends, für Links in E-Mails
+    # Base URL of the frontend, for links in emails
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-    # Basis-URL des Backends, für Download-Links in E-Mails (muss von außen erreichbar sein)
+    # Base URL of the backend, for download links in emails (must be reachable from outside)
     BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-    # Cron-Ausdruck für den monatlichen Digest-Versand (Standard: 1. jedes Monats, 07:00 Uhr)
+    # Cron expression for the monthly digest send (default: 1st of every month, 07:00)
     DIGEST_CRON: str = os.getenv("DIGEST_CRON", "0 7 1 * *")
 
-    # Gültigkeitsdauer der PDF-Download-Links in den Digest-Mails (in Tagen)
+    # Validity period of the PDF download links in digest emails (in days)
     DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS: int = int(
         os.getenv("DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS", "90")
     )
 
-    # Gültigkeitsdauer des E-Mail-Bestätigungslinks bei der Registrierung (in Stunden)
+    # Validity period of the email confirmation link during registration (in hours)
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(
         os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24")
     )
 
-    # OpenAlex API-Konfiguration
+    # OpenAlex API configuration
     OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
 
 settings = Settings()

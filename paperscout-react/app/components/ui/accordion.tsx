@@ -7,7 +7,7 @@ function Accordion({
   className,
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Root>) {
-  // Standarddauer für die Animation
+  // Default duration for the animation
   const duration = "100ms"; 
 
   return (

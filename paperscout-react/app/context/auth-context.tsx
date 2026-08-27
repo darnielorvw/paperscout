@@ -8,7 +8,7 @@ import React, {
 import { useNavigate } from "react-router";
 import { apiFetch, UnauthorizedError } from "~/lib/api";
 
-// Basierend auf dem UserPublic-Schema in FastAPI
+// Based on the UserPublic schema in FastAPI
 export interface User {
   id: number;
   name: string;
@@ -21,7 +21,7 @@ interface AuthContextType {
   login: (token: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
-  isLoading: boolean; // Gibt an, ob der initiale Auth-Check läuft
+  isLoading: boolean; // Indicates whether the initial auth check is running
   refreshSession: (token: string) => Promise<void>;
 }
 
@@ -59,8 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     navigate("/");
   }, [navigate]);
 
-  // Ersetzt das Token, ohne zu navigieren – z.B. nachdem sich die E-Mail-Adresse
-  // geändert hat, wodurch das alte Token (dessen "sub" die alte E-Mail ist) ungültig wird.
+  // Replaces the token without navigating – e.g. after the email address has
+  // changed, which invalidates the old token (whose "sub" is the old email).
   const refreshSession = useCallback(async (token: string) => {
     localStorage.setItem("auth_token", token);
     const userData = await apiFetch("/api/users/me", { method: "GET" });

@@ -26,14 +26,14 @@ def format_authors_apa(authorships: list) -> str:
 class SearchService:
     def __init__(self):
         self.base_url = "https://api.openalex.org"
-        
-        # Initialisiere unsere neue, ausgelagerte Cache-Klasse
+
+        # Initialize our extracted cache class
         self.cache = LRUCache(max_size=100, ttl=3600)
 
     async def _fetch_from_api(
         self, endpoint: str, params: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Zentrale Methode für API-Anfragen, um redundanten Code zu vermeiden."""
+        """Central method for API requests, to avoid redundant code."""
         async with httpx.AsyncClient(
             base_url=self.base_url, timeout=10.0
         ) as client:
@@ -44,17 +44,17 @@ class SearchService:
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
-                print(f"Fehler bei OpenAlex-Abfrage ({endpoint}): {e}")
+                print(f"Error during OpenAlex request ({endpoint}): {e}")
                 return {}
 
     async def fetch_external_journals(self) -> List[Dict[str, Any]]:
-        """Sucht extern bei OpenAlex nach Journals (Sources) für den Import."""
+        """Searches OpenAlex externally for journals (sources) to import."""
         params = {"filter": "type:journal", "per_page": 50}
         data = await self._fetch_from_api("/sources", params)
         return data.get("results", [])
 
     async def fetch_titles_by_ids(self, work_ids: List[str]) -> Dict[str, str]:
-        """Schlägt die Titel zu einer Liste kurzer OpenAlex-Work-IDs (z.B. 'W123') nach."""
+        """Looks up the titles for a list of short OpenAlex work IDs (e.g. 'W123')."""
         if not work_ids:
             return {}
 
@@ -80,9 +80,9 @@ class SearchService:
         limit: int,
         page: int,
     ) -> Dict[str, Any]:
-        """Sucht nach wissenschaftlichen Artikeln (Works) innerhalb spezifischer Journals in einem Zeitraum."""
-        # 1. Eindeutigen und stabilen Cache-Schlüssel aus den Parametern erstellen
-        # Wir sortieren die journal_ids, damit die Reihenfolge keine Rolle spielt.
+        """Searches for scientific articles (works) within specific journals in a date range."""
+        # 1. Build a unique and stable cache key from the parameters
+        # We sort the journal_ids so that order doesn't matter.
         key_parts = (
             tuple(sorted(journal_ids)),
             keywords,
@@ -93,16 +93,16 @@ class SearchService:
         )
         cache_key = str(key_parts)
 
-        # 2. Im Cache nach einem gültigen Eintrag suchen
+        # 2. Look for a valid entry in the cache
         cached_data = self.cache.get(cache_key)
         if cached_data:
             return cached_data
 
-        # Bereinige die IDs (wir brauchen nur den Teil nach dem letzten Slash, z.B. S123)
-        # OpenAlex erlaubt mehrere IDs getrennt durch ein Pipe-Symbol |
+        # Clean up the IDs (we only need the part after the last slash, e.g. S123)
+        # OpenAlex allows multiple IDs separated by a pipe symbol |
         clean_ids = "|".join([jid.split("/")[-1] for jid in journal_ids])
 
-        # OpenAlex Filter: Quelle(n), Startdatum und Enddatum
+        # OpenAlex filter: source(s), start date and end date
         filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date},is_oa:true,has_fulltext:true"
         select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships,best_oa_location"
 
@@ -114,14 +114,14 @@ class SearchService:
             "select": select,
         }
 
-        # Abfrage des /works Endpunkts für Artikel statt /sources für Journals
+        # Query the /works endpoint for articles instead of /sources for journals
         data = await self._fetch_from_api("/works", params)
 
         meta = data.get("meta", {})
         results = []
         for work in data.get("results", []):
-            # Sichere Extraktion von verschachtelten Objekten.
-            # 'or {}' fängt sowohl fehlende Schlüssel als auch 'None'-Werte ab.
+            # Safe extraction of nested objects.
+            # 'or {}' catches both missing keys and 'None' values.
             primary_loc = work.get("primary_location") or {}
             source = primary_loc.get("source") or {}
             best_oa = work.get("best_oa_location") or {}
@@ -149,11 +149,11 @@ class SearchService:
         return data
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]]) -> str:
-        """OpenAlex liefert Abstracts aus Urheberrechtsgründen 'invertiert'. Das baut es wieder zusammen."""
-        if not inverted_index:  # Fängt None oder leeres Dictionary ab
-            return "Kein Abstract verfügbar."
+        """OpenAlex delivers abstracts 'inverted' for copyright reasons. This reconstructs them."""
+        if not inverted_index:  # Catches None or an empty dict
+            return "No abstract available."
 
-        # Rekonstruiere den Text aus dem Positions-Index
+        # Reconstruct the text from the position index
         word_positions = {}
         for word, positions in inverted_index.items():
             for pos in positions:

@@ -17,7 +17,7 @@ export default function RegisterPage() {
       typeof email !== "string" ||
       typeof password !== "string"
     ) {
-      throw new Error("Ungültige Eingabedaten.");
+      throw new Error("Invalid input data.");
     }
 
     const response = await apiFetch(
@@ -33,7 +33,7 @@ export default function RegisterPage() {
     if (response.message) {
       setSubmittedEmail(email);
     } else {
-      throw new Error(response.detail || "Registrierung fehlgeschlagen.");
+      throw new Error(response.detail || "Registration failed.");
     }
   };
 
@@ -42,15 +42,15 @@ export default function RegisterPage() {
       <div className="flex h-full w-full flex-col items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">Fast geschafft!</CardTitle>
+            <CardTitle className="text-2xl font-bold">Almost done!</CardTitle>
             <CardDescription className="my-2">
-              Wir haben eine Bestätigungsmail an <strong>{submittedEmail}</strong> geschickt.
-              Klicke auf den Link darin, um dein Konto zu aktivieren.
+              We've sent a confirmation email to <strong>{submittedEmail}</strong>.
+              Click the link in it to activate your account.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center text-sm text-muted-foreground">
             <Link to="/login" className="font-semibold text-primary">
-              Zurück zur Anmeldung
+              Back to login
             </Link>
           </CardContent>
         </Card>
@@ -60,22 +60,22 @@ export default function RegisterPage() {
 
   const fields: AuthField[] = [
     { id: "name", name: "name", label: "Name", type: "text", required: true },
-    { id: "email", name: "email", label: "E-Mail", type: "email", required: true },
-    { id: "password", name: "password", label: "Passwort", type: "password", required: true },
+    { id: "email", name: "email", label: "Email", type: "email", required: true },
+    { id: "password", name: "password", label: "Password", type: "password", required: true },
   ];
 
   return (
     <AuthCard
-      title="Konto erstellen"
-      description="Erstelle ein neues Konto, um PaperScout zu nutzen."
+      title="Create account"
+      description="Create a new account to use PaperScout."
       fields={fields}
-      submitButtonText="Konto erstellen"
+      submitButtonText="Create account"
       onSubmit={handleRegister}
       footerContent={
         <p className="text-sm text-muted-foreground">
-          Du hast bereits ein Konto?{" "}
+          Already have an account?{" "}
           <Link to="/login" className="font-semibold text-primary">
-            Anmelden
+            Log in
           </Link>
         </p>
       }

@@ -29,11 +29,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 def create_email_verification_token(
     email: str, name: str, hashed_password: str, expire_hours: int
 ) -> str:
-    """Erstellt einen signierten Token mit den Registrierungsdaten für den Bestätigungslink.
+    """Creates a signed token with the registration data for the confirmation link.
 
-    Es wird bewusst noch kein User in der DB angelegt – erst der Klick auf den
-    Link in der Mail (also der Beweis, dass die Adresse dem Absender gehört)
-    erzeugt den Account.
+    We deliberately don't create a user in the DB yet – only clicking the
+    link in the email (i.e. proof that the address belongs to the sender)
+    creates the account.
     """
     to_encode = {
         "purpose": "email_verification",
@@ -46,25 +46,25 @@ def create_email_verification_token(
 
 
 def decode_email_verification_token(token: str) -> dict:
-    """Dekodiert und validiert einen E-Mail-Bestätigungstoken."""
+    """Decodes and validates an email confirmation token."""
     try:
         payload = jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
         if payload.get("purpose") != "email_verification" or not payload.get("email"):
-            raise HTTPException(status_code=400, detail="Ungültiger Bestätigungslink.")
+            raise HTTPException(status_code=400, detail="Invalid confirmation link.")
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=401,
-            detail="Der Bestätigungslink ist abgelaufen. Bitte registriere dich erneut.",
+            detail="The confirmation link has expired. Please register again.",
         )
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Ungültiger Bestätigungslink.")
+        raise HTTPException(status_code=401, detail="Invalid confirmation link.")
 
 
 def get_user_by_email(session: Session, email: str) -> Optional[models.User]:
-    """Holt einen Benutzer anhand seiner E-Mail-Adresse aus der DB."""
+    """Fetches a user by their email address from the DB."""
     statement = select(models.User).where(models.User.email == email)
     return session.exec(statement).first()
 
@@ -73,7 +73,7 @@ async def get_current_user(
     session: Session = Depends(get_session),
     credentials: HTTPAuthorizationCredentials = Security(security),
 ) -> models.User:
-    # Wenn kein Token da ist UND wir im Dev-Modus sind, geben wir einen Dummy-User zurück.
+    # If there's no token AND we're in dev mode, return a dummy user.
 
     # if not credentials and settings.ENVIRONMENT == "dev":
     #     return {
@@ -85,7 +85,7 @@ async def get_current_user(
     if not credentials:
         raise HTTPException(
             status_code=401,
-            detail="Authentifizierung erforderlich. 'Authorization'-Header fehlt.",
+            detail="Authentication required. 'Authorization' header missing.",
         )
 
     token = credentials.credentials
@@ -95,12 +95,12 @@ async def get_current_user(
         )
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=401, detail="Ungültiges Token (kein 'sub').")
+            raise HTTPException(status_code=401, detail="Invalid token (no 'sub').")
         user = get_user_by_email(session, email)
         if user is None:
-            raise HTTPException(status_code=401, detail="Benutzer nicht gefunden.")
+            raise HTTPException(status_code=401, detail="User not found.")
         return user
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Das Login-Token ist abgelaufen.")
+        raise HTTPException(status_code=401, detail="The login token has expired.")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Ungültiges Authentifizierungs-Token.")
+        raise HTTPException(status_code=401, detail="Invalid authentication token.")

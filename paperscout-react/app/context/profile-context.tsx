@@ -77,10 +77,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     fetchProfiles();
   }, [fetchProfiles]);
 
-  // Effekt zur Synchronisierung des aktiven Profils mit dem aktuellen Suchstatus
+  // Effect to sync the active profile with the current search state
   useEffect(() => {
     const currentSearchState = { rowSelection, date, searchTerm };
-    // Finde ein Profil, das den aktuellen Sucheinstellungen entspricht.
+    // Find a profile that matches the current search settings.
     const matchingProfile = profiles.find((profile) =>
       areFiltersEqual(profile, currentSearchState)
     );
@@ -99,13 +99,13 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         };
         const newSearchTerm = profile.searchTerm;
 
-        // Den globalen State mit den neuen Werten aktualisieren.
+        // Update the global state with the new values.
         setRowSelection(newRowSelection);
         setDate(newDate);
         setSearchTerm(newSearchTerm);
         setActiveProfileId(profile.id);
 
-        // Die URL mit den neuen Werten bauen, nicht mit den alten aus dem Hook-State.
+        // Build the URL with the new values, not the old ones from the hook state.
         const resultsURL = buildResultsUrl({
           rowSelection: newRowSelection,
           date: newDate,
@@ -119,7 +119,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const clearActiveProfile = useCallback(() => {
     setActiveProfileId(null);
-    // Setze die Suchparameter auf ihre Standardwerte zurück
+    // Reset the search parameters to their default values
     setRowSelection({});
     const now = new Date();
     setDate({ from: startOfMonth(now), to: endOfMonth(now) });
@@ -139,7 +139,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           searchTerm,
         }),
       });
-      // Ersetze nur das eine, aktualisierte Profil im State.
+      // Replace only the one, updated profile in the state.
       setProfiles((prevProfiles) =>
         prevProfiles.map((p) => (p.id === profileId ? updatedProfile : p)),
       );
@@ -189,7 +189,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const deleteProfile = useCallback(
     async (profileId: number) => {
       await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
-      // Entferne das gelöschte Profil aus dem State, um ein Neuladen zu vermeiden.
+      // Remove the deleted profile from the state to avoid a reload.
       setProfiles((prevProfiles) =>
         prevProfiles.filter((p) => p.id !== profileId),
       );

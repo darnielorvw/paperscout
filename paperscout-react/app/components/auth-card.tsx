@@ -50,7 +50,7 @@ export function AuthCard({
     try {
       await onSubmit(formData);
     } catch (err: any) {
-      setError(err.message || "Ein unbekannter Fehler ist aufgetreten.");
+      setError(err.message || "An unknown error occurred.");
     } finally {
       setIsSubmitting(false);
     }
@@ -80,7 +80,7 @@ export function AuthCard({
           </CardContent>
           <CardFooter className="flex-col gap-4">
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Bitte warten..." : submitButtonText}
+              {isSubmitting ? "Please wait..." : submitButtonText}
             </Button>
             {footerContent}
           </CardFooter>

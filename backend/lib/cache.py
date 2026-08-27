@@ -4,44 +4,44 @@ from typing import Any, Dict, Optional
 
 class LRUCache:
     """
-    Eine einfache In-Memory LRU (Least Recently Used) Cache-Implementierung
-    mit einer TTL (Time To Live) für die Einträge.
+    A simple in-memory LRU (Least Recently Used) cache implementation
+    with a TTL (Time To Live) for entries.
     """
 
     def __init__(self, max_size: int = 100, ttl: int = 3600):
         """
-        Initialisiert den Cache.
-        :param max_size: Maximale Anzahl an Einträgen im Cache.
-        :param ttl: Lebensdauer eines Eintrags in Sekunden.
+        Initializes the cache.
+        :param max_size: Maximum number of entries in the cache.
+        :param ttl: Lifetime of an entry in seconds.
         """
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.max_size = max_size
         self.ttl = ttl
 
     def get(self, key: str) -> Optional[Any]:
-        """Holt einen Eintrag aus dem Cache, falls er existiert und gültig ist."""
+        """Retrieves an entry from the cache if it exists and is still valid."""
         if key not in self.cache:
 
             return None
 
         cached_item = self.cache[key]
         if time.time() - cached_item["timestamp"] > self.ttl:
-            # Eintrag ist abgelaufen, entferne ihn
+            # Entry has expired, remove it
             del self.cache[key]
             return None
 
-        # Markiere als "zuletzt verwendet", indem der Eintrag ans Ende verschoben wird
+        # Mark as "most recently used" by moving the entry to the end
         self.cache[key] = self.cache.pop(key)
         return cached_item["data"]
 
     def set(self, key: str, value: Any):
-        """Fügt einen neuen Eintrag zum Cache hinzu oder aktualisiert einen bestehenden."""
-        # Prüfe, ob der Cache voll ist, bevor ein neuer Schlüssel hinzugefügt wird
+        """Adds a new entry to the cache or updates an existing one."""
+        # Check if the cache is full before adding a new key
         if key not in self.cache and len(self.cache) >= self.max_size:
-            # Entferne den ältesten Eintrag (den ersten im Dictionary in Python 3.7+)
+            # Remove the oldest entry (the first one in the dict in Python 3.7+)
             oldest_key = next(iter(self.cache))
             del self.cache[oldest_key]
-            print(f"🗑️ Cache voll. Ältester Eintrag entfernt: {oldest_key[:50]}...")
+            print(f"🗑️ Cache full. Removed oldest entry: {oldest_key[:50]}...")
 
-        # Füge den neuen Eintrag mit Zeitstempel hinzu
+        # Add the new entry with a timestamp
         self.cache[key] = {"data": value, "timestamp": time.time()}

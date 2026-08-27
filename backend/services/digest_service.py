@@ -21,7 +21,7 @@ MAX_DOWNLOAD_PAPERS_PER_PROFILE = 25
 
 
 class DigestService:
-    """Erstellt und versendet den monatlichen Paper-Digest für registrierte Nutzer."""
+    """Creates and sends the monthly paper digest for registered users."""
 
     def __init__(
         self,
@@ -39,10 +39,10 @@ class DigestService:
         return one_month_ago.isoformat(), today.isoformat()
 
     def _build_download_link(self, profile_name: str, articles: List[dict]) -> str | None:
-        """Erzeugt einen langlebigen, signierten Link zum Download aller Paper eines Profils als ZIP.
+        """Creates a long-lived, signed link to download all papers of a profile as a ZIP.
 
-        Kodiert bewusst nur die kurzen OpenAlex-IDs (nicht die vollen URLs oder Titel) in den
-        Token, damit der Link kurz genug bleibt, um von Mail-Clients nicht abgeschnitten zu werden.
+        Deliberately encodes only the short OpenAlex IDs (not the full URLs or titles) in the
+        token, so the link stays short enough not to be truncated by mail clients.
         """
         clean_ids = [
             a["id"].split("/")[-1] for a in articles if a.get("id")
@@ -62,12 +62,12 @@ class DigestService:
         if not articles:
             return (
                 f"<h2 style='margin-top:32px;'>{escape(profile_name)}</h2>"
-                f"<p style='color:#666;'>Keine neuen Treffer in diesem Zeitraum.</p>"
+                f"<p style='color:#666;'>No new results in this period.</p>"
             )
 
         items = []
         for article in articles:
-            title = escape(article.get("title") or "Ohne Titel")
+            title = escape(article.get("title") or "Untitled")
             author = escape(article.get("author") or "")
             journal = escape(article.get("journal_name") or "")
             date = escape(article.get("publication_date") or "")
@@ -83,8 +83,8 @@ class DigestService:
             f"<p style='margin:8px 0 16px;'>"
             f"<a href='{escape(download_link)}' style='display:inline-block;padding:8px 14px;"
             f"background:#1a56db;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;'>"
-            f"Alle PDFs dieses Profils als ZIP herunterladen</a>"
-            f"<br/><span style='color:#999;font-size:12px;'>Link gültig für {settings.DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS} Tage.</span>"
+            f"Download all PDFs of this profile as ZIP</a>"
+            f"<br/><span style='color:#999;font-size:12px;'>Link valid for {settings.DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS} days.</span>"
             f"</p>"
             if download_link
             else ""
@@ -97,7 +97,7 @@ class DigestService:
         )
 
     async def _build_user_digest(self, session: Session, user: models.User) -> str | None:
-        """Baut die HTML-Digest-Mail für einen Nutzer. Gibt None zurück, wenn er keine Profile hat."""
+        """Builds the HTML digest email for a user. Returns None if they have no profiles."""
         profiles = session.exec(
             select(models.Profile).where(
                 models.Profile.user_id == user.id,
@@ -136,8 +136,8 @@ class DigestService:
         body = "".join(sections)
         return (
             "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;'>"
-            f"<h1 style='margin-bottom:4px;'>Ihr monatlicher PaperScout-Digest</h1>"
-            f"<p style='color:#666;'>Neue Paper vom {from_date} bis {to_date}, sortiert nach Ihren Suchprofilen.</p>"
+            f"<h1 style='margin-bottom:4px;'>Your monthly PaperScout digest</h1>"
+            f"<p style='color:#666;'>New papers from {from_date} to {to_date}, sorted by your search profiles.</p>"
             f"{body}"
             "</div>"
         )
@@ -148,13 +148,13 @@ class DigestService:
             return False
         return await self.mail_service.send_email(
             to=user.email,
-            subject="Ihr monatlicher PaperScout-Digest",
+            subject="Your monthly PaperScout digest",
             html_body=html,
         )
 
     async def run_monthly_digest(self) -> None:
-        """Erzeugt und verschickt den Digest an alle registrierten Nutzer mit mindestens einem Profil."""
-        logging.info("Starte monatlichen Paper-Digest-Versand...")
+        """Generates and sends the digest to all registered users with at least one profile."""
+        logging.info("Starting monthly paper digest send...")
         sent_count = 0
         with Session(engine) as session:
             users = session.exec(select(models.User)).all()
@@ -163,5 +163,5 @@ class DigestService:
                     if await self.send_digest_to_user(session, user):
                         sent_count += 1
                 except Exception as e:
-                    logging.error(f"Digest-Versand an {user.email} fehlgeschlagen: {e}")
-        logging.info(f"Monatlicher Digest-Versand abgeschlossen. {sent_count} E-Mail(s) versendet.")
+                    logging.error(f"Digest send to {user.email} failed: {e}")
+        logging.info(f"Monthly digest send complete. {sent_count} email(s) sent.")

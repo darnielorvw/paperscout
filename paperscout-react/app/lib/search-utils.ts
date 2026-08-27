@@ -10,9 +10,9 @@ interface SearchParams {
 }
 
 /**
- * Baut die Such-URL für die Ergebnisseite aus den übergebenen Parametern.
- * @param params - Ein Objekt, das rowSelection, date und searchTerm enthält.
- * @returns Den relativen URL-String für die Ergebnisseite, z.B. /results?journal_ids=...
+ * Builds the search URL for the results page from the given parameters.
+ * @param params - An object containing rowSelection, date, and searchTerm.
+ * @returns The relative URL string for the results page, e.g. /results?journal_ids=...
  */
 export function buildResultsUrl({
   rowSelection,
@@ -34,12 +34,12 @@ export function buildResultsUrl({
 }
 
 /**
- * Vergleicht die Filtereinstellungen von zwei Profilen oder Suchzuständen.
- * Die Funktion prüft auf tiefe Gleichheit der Journal-Auswahl, des Datumsbereichs und des Suchbegriffs.
+ * Compares the filter settings of two profiles or search states.
+ * The function checks for deep equality of journal selection, date range, and search term.
  *
- * @param a Das erste Profil oder der erste Suchzustand.
- * @param b Das zweite Profil oder der zweite Suchzustand.
- * @returns `true`, wenn die Filter identisch sind, andernfalls `false`.
+ * @param a The first profile or search state.
+ * @param b The second profile or search state.
+ * @returns `true` if the filters are identical, otherwise `false`.
  */
 export function areFiltersEqual(a: SearchParams, b: SearchParams): boolean {
   return a.searchTerm.trim() === b.searchTerm.trim() &&

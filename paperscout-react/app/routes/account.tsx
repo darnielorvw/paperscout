@@ -70,7 +70,7 @@ export default function AccountPage() {
           newEmail,
         }),
       });
-      // Das Token war auf die alte E-Mail ausgestellt und wird jetzt ersetzt.
+      // The token was issued for the old email and is now replaced.
       await refreshSession(response.access_token);
       setEmailSuccess("Email address updated.");
       setNewEmail("");

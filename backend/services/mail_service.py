@@ -10,22 +10,22 @@ logging.basicConfig(
 
 
 class MailService:
-    """Versendet E-Mails über den in der Konfiguration hinterlegten SMTP-Server."""
+    """Sends emails via the SMTP server configured in settings."""
 
     async def send_email(self, to: str, subject: str, html_body: str) -> bool:
         if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
             logging.warning(
-                f"SMTP nicht konfiguriert (SMTP_USER/SMTP_PASSWORD fehlen) – "
-                f"E-Mail an {to} wird nicht gesendet, Inhalt wird stattdessen geloggt."
+                f"SMTP not configured (SMTP_USER/SMTP_PASSWORD missing) – "
+                f"email to {to} will not be sent, content is logged instead."
             )
-            logging.info(f"--- Mail-Vorschau für {to} ---\nBetreff: {subject}\n{html_body}")
+            logging.info(f"--- Mail preview for {to} ---\nSubject: {subject}\n{html_body}")
             return False
 
         message = EmailMessage()
         message["From"] = settings.SMTP_FROM
         message["To"] = to
         message["Subject"] = subject
-        message.set_content("Ihr E-Mail-Client unterstützt kein HTML.")
+        message.set_content("Your email client does not support HTML.")
         message.add_alternative(html_body, subtype="html")
 
         try:
@@ -37,8 +37,8 @@ class MailService:
                 password=settings.SMTP_PASSWORD,
                 start_tls=settings.SMTP_USE_TLS,
             )
-            logging.info(f"E-Mail erfolgreich an {to} gesendet.")
+            logging.info(f"Email successfully sent to {to}.")
             return True
         except Exception as e:
-            logging.error(f"Fehler beim Senden der E-Mail an {to}: {e}")
+            logging.error(f"Error sending email to {to}: {e}")
             return False

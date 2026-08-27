@@ -4,10 +4,10 @@ import { format, startOfDay, isValid } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 /**
- * Normalisiert ein einzelnes Datum, indem die Uhrzeit auf 00:00:00 UTC gesetzt wird.
- * Dies ist der wichtigste Schritt, um Zeitzonenprobleme zu vermeiden.
- * @param date Das zu normalisierende Datum (kann ein Date-Objekt oder ein String sein).
- * @returns Ein neues Date-Objekt, das auf den Tagesanfang normalisiert ist, oder null bei ungültiger Eingabe.
+ * Normalizes a single date by setting the time to 00:00:00 UTC.
+ * This is the most important step to avoid timezone issues.
+ * @param date The date to normalize (can be a Date object or a string).
+ * @returns A new Date object normalized to the start of the day, or null on invalid input.
  */
 export function normalizeToStartOfDay(date: Date | string | undefined | null): Date | null {
   if (!date) return null;
@@ -16,9 +16,9 @@ export function normalizeToStartOfDay(date: Date | string | undefined | null): D
 }
 
 /**
- * Normalisiert einen gesamten Datumsbereich.
- * @param dateRange Der zu normalisierende Bereich.
- * @returns Ein neuer DateRange mit normalisierten Daten oder undefined.
+ * Normalizes an entire date range.
+ * @param dateRange The range to normalize.
+ * @returns A new DateRange with normalized dates, or undefined.
  */
 export function normalizeDateRange(dateRange: DateRange | undefined): DateRange | undefined {
   if (!dateRange) return undefined;
@@ -28,18 +28,18 @@ export function normalizeDateRange(dateRange: DateRange | undefined): DateRange 
 }
 
 /**
- * Formatiert ein Datum sicher für die Verwendung in API-Aufrufen oder URL-Parametern.
- * @param date Das zu formatierende Datum.
- * @returns Ein String im Format "yyyy-MM-dd" oder undefined.
+ * Safely formats a date for use in API calls or URL parameters.
+ * @param date The date to format.
+ * @returns A string in the format "yyyy-MM-dd" or undefined.
  */
 export function formatDateForApi(date: Date | undefined | null): string | undefined {
   return date && isValid(date) ? format(date, "yyyy-MM-dd") : undefined;
 }
 
 /**
- * Formatiert ein Datum für die Anzeige in der Benutzeroberfläche.
- * @param date Das zu formatierende Datum.
- * @returns Ein String im Format "MMM yyyy" oder ein leerer String.
+ * Formats a date for display in the user interface.
+ * @param date The date to format.
+ * @returns A string in the format "MMM yyyy" or an empty string.
  */
 export function formatDateForDisplay(date: Date | string | undefined | null): string {
     const d = normalizeToStartOfDay(date);

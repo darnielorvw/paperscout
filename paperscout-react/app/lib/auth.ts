@@ -1,17 +1,17 @@
 import { redirect } from "react-router";
 
 /**
- * Eine client-seitige Hilfsfunktion, die prüft, ob ein Authentifizierungs-Token
- * im `localStorage` vorhanden ist. Wenn nicht, wird eine sofortige Umleitung
- * zur Login-Seite ausgelöst.
+ * A client-side helper function that checks whether an authentication token
+ * is present in `localStorage`. If not, it triggers an immediate redirect
+ * to the login page.
  *
- * Diese Funktion sollte am Anfang jedes `clientLoader` für geschützte
- * Routen aufgerufen werden.
+ * This function should be called at the start of every `clientLoader` for
+ * protected routes.
  *
- * @returns {void} Wirft eine `Response` (Umleitung), wenn kein Token vorhanden ist.
+ * @returns {void} Throws a `Response` (redirect) if no token is present.
  */
 export function protectPage(): void {
-  // Dieser Code läuft nur im Browser, daher ist der Zugriff auf localStorage sicher.
+  // This code only runs in the browser, so accessing localStorage is safe.
   const token = localStorage.getItem("auth_token");
 
   if (!token) throw redirect("/login");

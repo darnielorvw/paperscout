@@ -13,7 +13,7 @@ export default function LoginPage() {
     const password = formData.get("password");
 
     if (typeof email !== "string" || typeof password !== "string") {
-      throw new Error("Ungültige Eingabedaten.");
+      throw new Error("Invalid input data.");
     }
 
     const loginFormData = new URLSearchParams();
@@ -40,24 +40,24 @@ export default function LoginPage() {
   };
 
   const fields: AuthField[] = [
-    { id: "email", name: "email", label: "E-Mail", type: "email", required: true },
-    { id: "password", name: "password", label: "Passwort", type: "password", required: true },
+    { id: "email", name: "email", label: "Email", type: "email", required: true },
+    { id: "password", name: "password", label: "Password", type: "password", required: true },
   ];
 
   return (
     <AuthCard
-      title="Anmeldung"
+      title="Login"
       description={
         justVerified
-          ? "E-Mail bestätigt! Du kannst dich jetzt anmelden."
-          : "Bitte melde dich an, um auf PaperScout zuzugreifen."
+          ? "Email confirmed! You can now log in."
+          : "Please log in to access PaperScout."
       }
       fields={fields}
       submitButtonText="Anmelden"
       onSubmit={handleLogin}
       footerContent={
         <p className="text-sm text-muted-foreground">
-          Du hast noch kein Konto?{" "}
+          Don't have an account yet?{" "}
           <Link to="/register" className="font-semibold text-primary">
             Registrieren
           </Link>

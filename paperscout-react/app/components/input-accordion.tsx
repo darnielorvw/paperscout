@@ -30,17 +30,17 @@ export function InputAccordion({ items, onFinish }: InputAccordionProps) {
   const navigate = useNavigate();
   const hashItem = location.hash.replace("#", "");
 
-  // Um Hydration Mismatches zu vermeiden, initialisieren wir den State
-  // mit dem Server-Zustand (ohne Hash) und verlassen uns
-  // für die echte Client-Ansicht auf den useEffect unten.
+  // To avoid hydration mismatches, we initialize the state
+  // with the server state (without hash) and rely on the
+  // useEffect below for the real client-side view.
   const [activeItem, setActiveItem] = useState<string | undefined>(
     items[0]?.value,
   );
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const lastFocusedItem = useRef<string | undefined>(undefined);
 
-  // Wenn sich der Hash in der URL ändert (z.B. durch Klick in der Sidebar),
-  // synchronisieren wir den State des Accordions.
+  // When the hash in the URL changes (e.g. by clicking in the sidebar),
+  // we sync the accordion's state.
   useEffect(() => {
     if (hashItem && items.some((item) => item.value === hashItem)) {
       setActiveItem(hashItem);
@@ -49,7 +49,7 @@ export function InputAccordion({ items, onFinish }: InputAccordionProps) {
     }
   }, [hashItem, items]);
 
-  // Hilfsfunktion: Setzt das Accordion & aktualisiert gleichzeitig die URL
+  // Helper function: sets the accordion & updates the URL at the same time
   const updateActiveItem = (newValue: string | undefined) => {
     setActiveItem(newValue);
     navigate(newValue ? `#${newValue}` : "", { replace: true });
@@ -69,10 +69,10 @@ export function InputAccordion({ items, onFinish }: InputAccordionProps) {
     }
   };
 
-  // Globale Tastatur-Navigation (Pfeil nach unten / oben)
+  // Global keyboard navigation (arrow down / up)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignoriere Tasteneingaben, wenn der Benutzer in einem Textfeld tippt
+      // Ignore key presses while the user is typing in a text field
       const activeTag = document.activeElement?.tagName;
       if (activeTag === "INPUT" || activeTag === "TEXTAREA") {
         return;
@@ -92,9 +92,9 @@ export function InputAccordion({ items, onFinish }: InputAccordionProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeItem, items]); // Abhängigkeiten für aktuelles Item und Liste
+  }, [activeItem, items]); // Dependencies for current item and list
 
-  // Zentralisierte Logik für den Fokus-Callback
+  // Centralized logic for the focus callback
   const setFocusRef = (el: HTMLButtonElement | null, value: string, index: number) => {
     buttonRefs.current[index] = el;
     if (el && value === activeItem && activeItem !== lastFocusedItem.current) {

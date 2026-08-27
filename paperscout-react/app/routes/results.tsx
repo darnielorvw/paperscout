@@ -12,7 +12,7 @@ import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
-// Definiere den Artikel-Typ basierend auf der Rückgabe der search_service.py
+// Define the article type based on the return value of search_service.py
 export type Article = {
   id: string;
   title: string;
@@ -37,7 +37,7 @@ type LoaderData = {
 };
 
 export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
-  // Schütze diese Seite: Wenn kein Token, wird hier abgebrochen und umgeleitet.
+  // Protect this page: if there's no token, execution stops here and redirects.
   protectPage();
 
   const url = new URL(request.url);
@@ -46,7 +46,7 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
 
   const paramsString = url.searchParams.toString();
 
-  // Wenn wir immer noch keine Parameter haben, können wir nichts laden.
+  // If we still have no parameters, we can't load anything.
   if (!url.searchParams.has("journal_ids")) {
     return {
       articlePromise: Promise.resolve({
@@ -56,7 +56,7 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
         currentPage: 1,
       }),
       error:
-        "Keine Suchparameter gefunden. Bitte führen Sie zuerst eine Suche durch.",
+        "No search parameters found. Please run a search first.",
     };
   }
 
@@ -95,8 +95,8 @@ export default function Results() {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Ein unbekannter Fehler ist aufgetreten.";
-      console.error("Fehler beim Öffnen der PDF:", error);
+          : "An unknown error occurred.";
+      console.error("Error opening the PDF:", error);
       toast.error(errorMessage, { position: "top-center" });
     } finally {
       setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
@@ -141,7 +141,7 @@ export default function Results() {
     );
 
     if (selectedArticles.length === 0) {
-      toast.error("Keine herunterladbaren PDFs ausgewählt.", {
+      toast.error("No downloadable PDFs selected.", {
         position: "top-center",
       });
       return;
@@ -214,7 +214,7 @@ export default function Results() {
 
           return (
             <div className="flex h-full w-full flex-col overflow-hidden">
-              {/* Scrollbarer Bereich für die Artikel */}
+              {/* Scrollable area for the articles */}
               <div
                 className="flex-1 overflow-y-auto"
                 style={{
@@ -227,7 +227,7 @@ export default function Results() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
                         {selectedArticleIds.size > 0
-                          ? `${selectedArticleIds.size} ausgewählt`
+                          ? `${selectedArticleIds.size} selected`
                           : "Keine Auswahl"}
                       </p>
                       <Button
@@ -244,7 +244,7 @@ export default function Results() {
                         onClick={clearAllSelections}
                         disabled={selectedArticleIds.size === 0}
                       >
-                        Auswahl löschen
+                        Clear selection
                       </Button>
                     </div>
                     <Button

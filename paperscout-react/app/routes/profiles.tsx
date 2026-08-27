@@ -46,7 +46,7 @@ export default function Profiles() {
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = { rowSelection, date, searchTerm: currentSearchTerm };
 
-  // Ein Profil kann nur gespeichert oder aktualisiert werden, wenn mindestens ein Journal ausgewählt ist.
+  // A profile can only be saved or updated if at least one journal is selected.
   const canSaveOrUpdate = Object.keys(rowSelection).length > 0;
 
   const handleSaveProfile = async () => {
@@ -103,7 +103,7 @@ export default function Profiles() {
     }
   };
 
-  // Wenn die Seite geladen wird, stellen wir sicher, dass die Profilliste aktuell ist.
+  // When the page loads, make sure the profile list is up to date.
   useEffect(() => {
     reloadProfiles();
   }, [reloadProfiles]);
@@ -156,9 +156,9 @@ export default function Profiles() {
             {profiles.length > 0 ? (
               profiles.map((profile) => {
                 const isApplied = areFiltersEqual(profile, currentSearchState);
-                // Der Update-Button ist deaktiviert, wenn:
-                // 1. Die aktuellen Filter bereits dem Profil entsprechen (isApplied).
-                // 2. Ein anderes Profil aktiv ist (activeProfileId ist nicht null und nicht die ID dieses Profils) ODER keine Journale ausgewählt sind.
+                // The update button is disabled if:
+                // 1. The current filters already match the profile (isApplied).
+                // 2. Another profile is active (activeProfileId is not null and not this profile's ID) OR no journals are selected.
                 const isUpdateDisabled = isApplied || (activeProfileId !== null && activeProfileId !== profile.id);
                 return (
                   <Card key={profile.id}>
