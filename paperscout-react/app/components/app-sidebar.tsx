@@ -51,10 +51,6 @@ const data = [
         title: "Profiles",
         url: "/profiles",
       },
-      {
-        title: "Account",
-        url: "/account",
-      },
     ],
   },
 ];
@@ -123,9 +119,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="w-full justify-start">
-              <UserIcon className="size-4" />
-              <span className="truncate">{user?.name}</span>
+            <SidebarMenuButton
+              asChild
+              size="lg"
+              className="w-full data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+            >
+              <NavLink to="/account">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <UserIcon className="size-4" />
+                </div>
+                <div className="flex flex-col flex-1 min-w-0 text-left leading-tight">
+                  <span className="truncate text-sm font-medium">
+                    {user?.name}
+                  </span>
+                  <span className="truncate text-xs text-sidebar-foreground/60">
+                    {user?.email}
+                  </span>
+                </div>
+              </NavLink>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
