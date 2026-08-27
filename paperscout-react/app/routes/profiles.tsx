@@ -164,7 +164,7 @@ export default function Profiles() {
                   <Card key={profile.id}>
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
-                      <CardDescription className="text-xs pt-2">
+                      <CardDescription>
                         {Object.keys(profile.rowSelection).length} Journals | {formatDateForDisplay(profile.date?.from)}
                         {" "}-{" "}
                         {formatDateForDisplay(profile.date?.to)}{" "}

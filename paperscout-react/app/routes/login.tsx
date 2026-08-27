@@ -53,13 +53,13 @@ export default function LoginPage() {
           : "Please log in to access PaperScout."
       }
       fields={fields}
-      submitButtonText="Anmelden"
+      submitButtonText="Sign in"
       onSubmit={handleLogin}
       footerContent={
         <p className="text-sm text-muted-foreground">
           Don't have an account yet?{" "}
           <Link to="/register" className="font-semibold text-primary">
-            Registrieren
+            Register
           </Link>
         </p>
       }

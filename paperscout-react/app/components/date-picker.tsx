@@ -143,7 +143,7 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
         {/* Presets Sidebar */}
         <div className="flex w-40 shrink-0 flex-col gap-2">
           <div className="mb-2 text-center text-sm font-medium text-muted-foreground">
-            Schnellauswahl
+            Quick Select
           </div>
           {presets.map((preset) => (
             <Button

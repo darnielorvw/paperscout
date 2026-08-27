@@ -228,7 +228,7 @@ export default function Results() {
                       <p className="text-sm text-muted-foreground">
                         {selectedArticleIds.size > 0
                           ? `${selectedArticleIds.size} selected`
-                          : "Keine Auswahl"}
+                          : "Nothing selected"}
                       </p>
                       <Button
                         variant="outline"
@@ -236,7 +236,7 @@ export default function Results() {
                         onClick={() => selectAllCurrentPage(articles)}
                         disabled={articles.length === 0}
                       >
-                        Alle auf dieser Seite
+                        Select all elements on this page
                       </Button>
                       <Button
                         variant="outline"
