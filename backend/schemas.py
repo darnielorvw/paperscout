@@ -43,3 +43,20 @@ class ProfileCreate(BaseModel):
 # Schema zum Umschalten der E-Mail-Benachrichtigungen eines Profils
 class ProfileNotificationsUpdate(BaseModel):
     emailNotifications: bool
+
+
+# Schema zum Ändern der E-Mail-Adresse (Bestätigung per aktuellem Passwort)
+class ChangeEmailRequest(BaseModel):
+    currentPassword: str
+    newEmail: EmailStr
+
+
+# Schema zum Ändern des Passworts
+class ChangePasswordRequest(BaseModel):
+    currentPassword: str
+    newPassword: str
+
+
+# Schema zum Löschen des eigenen Accounts
+class DeleteAccountRequest(BaseModel):
+    currentPassword: str

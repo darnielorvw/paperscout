@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         os.getenv("DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS", "90")
     )
 
+    # Gültigkeitsdauer des E-Mail-Bestätigungslinks bei der Registrierung (in Stunden)
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(
+        os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24")
+    )
+
     # OpenAlex API-Konfiguration
     OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
 

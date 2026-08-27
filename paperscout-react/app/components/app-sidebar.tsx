@@ -51,6 +51,10 @@ const data = [
         title: "Profiles",
         url: "/profiles",
       },
+      {
+        title: "Account",
+        url: "/account",
+      },
     ],
   },
 ];

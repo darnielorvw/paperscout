@@ -1,6 +1,5 @@
 from database import models
 from passlib.context import CryptContext
-from schemas import UserCreate
 from sqlmodel import Session
 
 # Setup für das Passwort-Hashing (bcrypt ist der Standard)
@@ -17,14 +16,13 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_db_user(session: Session, user: UserCreate) -> models.User:
-    hashed_password = get_password_hash(user.password)
-    institution = user.email.split('@')[-1]
-
-    # Erstelle das Datenbank-Modell. Wir übergeben die Felder aus dem UserCreate-Schema
-    # manuell und fügen die serverseitig generierten Felder hinzu.
+def create_db_user_from_hash(
+    session: Session, email: str, name: str, hashed_password: str
+) -> models.User:
+    """Legt einen User anhand eines bereits gehashten Passworts an (z.B. nach E-Mail-Bestätigung)."""
+    institution = email.split('@')[-1]
     db_user = models.User(
-        name=user.name, email=user.email, hashed_password=hashed_password, institution=institution
+        name=name, email=email, hashed_password=hashed_password, institution=institution
     )
     session.add(db_user)
     return db_user

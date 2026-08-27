@@ -1,10 +1,12 @@
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { AuthCard, type AuthField } from "~/components/auth-card";
 import { useAuth } from "~/context/auth-context";
 import { apiFetch } from "~/lib/api";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const justVerified = searchParams.get("verified") === "true";
 
   const handleLogin = async (formData: FormData) => {
     const email = formData.get("email");
@@ -45,7 +47,11 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Anmeldung"
-      description="Bitte melde dich an, um auf PaperScout zuzugreifen."
+      description={
+        justVerified
+          ? "E-Mail bestätigt! Du kannst dich jetzt anmelden."
+          : "Bitte melde dich an, um auf PaperScout zuzugreifen."
+      }
       fields={fields}
       submitButtonText="Anmelden"
       onSubmit={handleLogin}

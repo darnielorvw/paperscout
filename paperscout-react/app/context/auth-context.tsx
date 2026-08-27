@@ -22,6 +22,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean; // Gibt an, ob der initiale Auth-Check läuft
+  refreshSession: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,6 +59,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     navigate("/");
   }, [navigate]);
 
+  // Ersetzt das Token, ohne zu navigieren – z.B. nachdem sich die E-Mail-Adresse
+  // geändert hat, wodurch das alte Token (dessen "sub" die alte E-Mail ist) ungültig wird.
+  const refreshSession = useCallback(async (token: string) => {
+    localStorage.setItem("auth_token", token);
+    const userData = await apiFetch("/api/users/me", { method: "GET" });
+    setUser(userData);
+  }, []);
+
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem("auth_token");
@@ -70,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     isAuthenticated: !!user,
     isLoading,
+    refreshSession,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

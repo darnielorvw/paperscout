@@ -9,9 +9,12 @@ from database import models
 from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from schemas import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
     ProfileCreate,
     ProfileNotificationsUpdate,
     ProfileSettings,
@@ -85,17 +88,61 @@ digest_service = DigestService(search_service, mail_service, download_service)
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
-@app.post("/api/register", response_model=UserPublic, status_code=201)
+@app.post("/api/register", status_code=202)
 async def register_user(user: UserCreate, session: Session = Depends(get_session)):
-    """Registriert einen neuen Benutzer in der Datenbank."""
-    db_user = auth_service.get_user_by_email(session, user.email)
-    if db_user:
+    """Startet die Registrierung: verschickt einen Bestätigungslink per E-Mail.
+
+    Der Account wird erst angelegt, wenn der Link geklickt wird (siehe /api/verify-email).
+    Das verhindert, dass Bots die DB mit unbegrenzt vielen Fake-Registrierungen fluten.
+    """
+    if auth_service.get_user_by_email(session, user.email):
         raise HTTPException(status_code=400, detail="E-Mail bereits registriert.")
 
-    new_user = user_service.create_db_user(session, user)
+    hashed_password = user_service.get_password_hash(user.password)
+    token = auth_service.create_email_verification_token(
+        email=user.email,
+        name=user.name,
+        hashed_password=hashed_password,
+        expire_hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS,
+    )
+    verify_link = f"{settings.BACKEND_URL}/api/verify-email?token={token}"
+    html_body = (
+        "<div style='font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;'>"
+        "<h1 style='margin-bottom:4px;'>Willkommen bei PaperScout</h1>"
+        "<p style='color:#666;'>Bitte bestätige deine E-Mail-Adresse, um deine Registrierung abzuschließen.</p>"
+        f"<p><a href='{verify_link}' style='display:inline-block;padding:8px 14px;"
+        "background:#1a56db;color:#fff;border-radius:6px;text-decoration:none;'>"
+        "E-Mail-Adresse bestätigen</a></p>"
+        f"<p style='color:#999;font-size:12px;'>Der Link ist {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} Stunden gültig.</p>"
+        "</div>"
+    )
+    await mail_service.send_email(
+        to=user.email,
+        subject="Bitte bestätige deine E-Mail-Adresse",
+        html_body=html_body,
+    )
+
+    return {
+        "message": "Bitte bestätige deine E-Mail-Adresse über den Link, den wir dir geschickt haben."
+    }
+
+
+@app.get("/api/verify-email")
+async def verify_email(token: str, session: Session = Depends(get_session)):
+    """Schließt die Registrierung ab und legt den Nutzer erst jetzt in der DB an."""
+    payload = auth_service.decode_email_verification_token(token)
+    email = payload["email"]
+
+    if auth_service.get_user_by_email(session, email):
+        raise HTTPException(status_code=400, detail="E-Mail bereits registriert.")
+
+    new_user = user_service.create_db_user_from_hash(
+        session, email=email, name=payload["name"], hashed_password=payload["hashed_password"]
+    )
     session.commit()
     session.refresh(new_user)
-    return new_user
+
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?verified=true")
 
 
 @app.post("/api/login")
@@ -364,6 +411,76 @@ async def read_users_me(
 ):
     """Gibt die Daten des aktuell authentifizierten Benutzers zurück."""
     return current_user
+
+
+@app.put("/api/users/me/email")
+async def update_email(
+    payload: ChangeEmailRequest,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Ändert die E-Mail-Adresse des aktuellen Benutzers und stellt ein neues Token aus,
+    da das alte Token auf die vorherige E-Mail-Adresse ausgestellt war."""
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+
+    if payload.newEmail != current_user.email and auth_service.get_user_by_email(
+        session, payload.newEmail
+    ):
+        raise HTTPException(status_code=400, detail="Diese E-Mail-Adresse wird bereits verwendet.")
+
+    current_user.email = payload.newEmail
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
+
+    access_token = auth_service.create_access_token(
+        data={"sub": current_user.email},
+        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.put("/api/users/me/password")
+async def update_password(
+    payload: ChangePasswordRequest,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Ändert das Passwort des aktuellen Benutzers."""
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+
+    if len(payload.newPassword) < 8:
+        raise HTTPException(
+            status_code=400, detail="Das neue Passwort muss mindestens 8 Zeichen lang sein."
+        )
+
+    current_user.hashed_password = user_service.get_password_hash(payload.newPassword)
+    session.add(current_user)
+    session.commit()
+
+    return {"message": "Passwort wurde erfolgreich geändert."}
+
+
+@app.delete("/api/users/me", status_code=204)
+async def delete_account(
+    payload: DeleteAccountRequest,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Löscht den Account des aktuellen Benutzers unwiderruflich, inklusive aller Suchprofile."""
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Falsches Passwort.")
+
+    profiles = session.exec(
+        select(models.Profile).where(models.Profile.user_id == current_user.id)
+    ).all()
+    for profile in profiles:
+        session.delete(profile)
+
+    session.delete(current_user)
+    session.commit()
 
 
 @app.get("/api/bulk-download")

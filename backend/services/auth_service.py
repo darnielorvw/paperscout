@@ -26,6 +26,43 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
+def create_email_verification_token(
+    email: str, name: str, hashed_password: str, expire_hours: int
+) -> str:
+    """Erstellt einen signierten Token mit den Registrierungsdaten für den Bestätigungslink.
+
+    Es wird bewusst noch kein User in der DB angelegt – erst der Klick auf den
+    Link in der Mail (also der Beweis, dass die Adresse dem Absender gehört)
+    erzeugt den Account.
+    """
+    to_encode = {
+        "purpose": "email_verification",
+        "email": email,
+        "name": name,
+        "hashed_password": hashed_password,
+        "exp": datetime.now(timezone.utc) + timedelta(hours=expire_hours),
+    }
+    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+
+def decode_email_verification_token(token: str) -> dict:
+    """Dekodiert und validiert einen E-Mail-Bestätigungstoken."""
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
+        if payload.get("purpose") != "email_verification" or not payload.get("email"):
+            raise HTTPException(status_code=400, detail="Ungültiger Bestätigungslink.")
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Der Bestätigungslink ist abgelaufen. Bitte registriere dich erneut.",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Ungültiger Bestätigungslink.")
+
+
 def get_user_by_email(session: Session, email: str) -> Optional[models.User]:
     """Holt einen Benutzer anhand seiner E-Mail-Adresse aus der DB."""
     statement = select(models.User).where(models.User.email == email)
