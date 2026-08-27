@@ -20,6 +20,7 @@ export interface SearchProfile {
   rowSelection: Record<string, boolean>;
   date: DateRange;
   searchTerm: string;
+  emailNotifications: boolean;
 }
 
 interface ProfileContextState {
@@ -32,6 +33,10 @@ interface ProfileContextState {
   updateProfile: (profileId: number) => Promise<void>;
   saveProfile: (name: string) => Promise<void>;
   deleteProfile: (profileId: number) => Promise<void>;
+  toggleProfileNotifications: (
+    profileId: number,
+    emailNotifications: boolean,
+  ) => Promise<void>;
   setActiveProfileId: (profileId: number | null) => void;
   reloadProfiles: () => void;
 }
@@ -164,6 +169,23 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     [rowSelection, date, searchTerm],
   );
 
+  const toggleProfileNotifications = useCallback(
+    async (profileId: number, emailNotifications: boolean) => {
+      const updatedProfile = await apiFetch(
+        `/api/profiles/${profileId}/notifications`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ emailNotifications }),
+        },
+      );
+      setProfiles((prevProfiles) =>
+        prevProfiles.map((p) => (p.id === profileId ? updatedProfile : p)),
+      );
+    },
+    [],
+  );
+
   const deleteProfile = useCallback(
     async (profileId: number) => {
       await apiFetch(`/api/profiles/${profileId}`, { method: "DELETE" });
@@ -186,6 +208,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       clearActiveProfile,
       saveProfile,
       deleteProfile,
+      toggleProfileNotifications,
       setActiveProfileId,
       reloadProfiles: fetchProfiles,
     }),
@@ -199,6 +222,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       clearActiveProfile,
       saveProfile,
       deleteProfile,
+      toggleProfileNotifications,
       fetchProfiles,
     ],
   );

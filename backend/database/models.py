@@ -29,6 +29,7 @@ class Profile(SQLModel, table=True):
     end_date: datetime
     searchTerm: str
     settings_hash: str = Field(unique=True, index=True)
+    email_notifications: bool = Field(default=True)
     user: User = Relationship(back_populates="profiles")
 
     def generate_hash(self):

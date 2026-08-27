@@ -31,9 +31,15 @@ class ProfileSettings(BaseModel):
     startDate: datetime
     endDate: datetime
     searchTerm: str = ""
+    emailNotifications: bool = True
 
 
 # Schema für die Erstellung eines neuen Profils
 class ProfileCreate(BaseModel):
     name: str
     settings: ProfileSettings
+
+
+# Schema zum Umschalten der E-Mail-Benachrichtigungen eines Profils
+class ProfileNotificationsUpdate(BaseModel):
+    emailNotifications: bool

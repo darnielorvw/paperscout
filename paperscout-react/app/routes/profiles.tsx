@@ -11,7 +11,9 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Skeleton } from "~/components/ui/skeleton";
+import { Switch } from "~/components/ui/switch";
 import { useProfiles } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
 import { protectPage } from "~/lib/auth";
@@ -30,7 +32,17 @@ export default function Profiles() {
     date,
     searchTerm: currentSearchTerm,
   } = useSearch();
-  const { profiles, isLoading, saveProfile, deleteProfile, applyProfile, updateProfile, reloadProfiles, activeProfileId } = useProfiles();
+  const {
+    profiles,
+    isLoading,
+    saveProfile,
+    deleteProfile,
+    applyProfile,
+    updateProfile,
+    toggleProfileNotifications,
+    reloadProfiles,
+    activeProfileId,
+  } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = { rowSelection, date, searchTerm: currentSearchTerm };
 
@@ -77,6 +89,17 @@ export default function Profiles() {
       await updateProfile(profileId);
     } catch (error: any) {
       setError(error.message || "Error updating profile.");
+    }
+  };
+
+  const handleToggleNotifications = async (
+    profileId: number,
+    emailNotifications: boolean,
+  ) => {
+    try {
+      await toggleProfileNotifications(profileId, emailNotifications);
+    } catch (error: any) {
+      setError(error.message || "Error updating notification setting.");
     }
   };
 
@@ -149,6 +172,20 @@ export default function Profiles() {
                         {profile.searchTerm}
                       </CardDescription>
                     </CardHeader>
+                    <CardContent>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`notify-${profile.id}`}
+                          checked={profile.emailNotifications}
+                          onCheckedChange={(checked) =>
+                            handleToggleNotifications(profile.id, checked)
+                          }
+                        />
+                        <Label htmlFor={`notify-${profile.id}`}>
+                          Email notifications
+                        </Label>
+                      </div>
+                    </CardContent>
                     <CardFooter className="flex justify-between gap-2">
                       <Button className="flex-1" onClick={() => applyProfile(profile.id)} disabled={isApplied}>
                         Apply

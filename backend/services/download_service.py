@@ -53,7 +53,35 @@ class DownloadService:
         except jwt.InvalidTokenError:
             raise HTTPException(status_code=401, detail="Ungültiger Download-Link.")
 
-    def _sanitize_filename(self, title: str, fallback: str) -> str:
+    def create_bulk_download_token(self, work_ids: list[str], expire_days: int) -> str:
+        """Erstellt einen langlebigen, signierten Token für einen ZIP-Bulk-Download (z.B. für Digest-Mails).
+
+        Enthält bewusst nur die kurzen Work-IDs (keine Titel), damit der resultierende
+        Link kurz genug bleibt, um von Mail-Clients nicht abgeschnitten zu werden.
+        """
+        to_encode = {
+            "work_ids": work_ids,
+            "exp": datetime.now(timezone.utc) + timedelta(days=expire_days),
+        }
+        return jwt.encode(
+            to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
+        )
+
+    def decode_bulk_download_token(self, token: str) -> dict:
+        """Dekodiert und validiert einen Bulk-Download-Token."""
+        try:
+            payload = jwt.decode(
+                token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+            )
+            if not payload.get("work_ids"):
+                raise HTTPException(status_code=400, detail="Ungültiges Token-Format.")
+            return payload
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Download-Link abgelaufen.")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Ungültiger Download-Link.")
+
+    def sanitize_filename(self, title: str, fallback: str) -> str:
         """Erstellt einen sicheren Dateinamen aus Titel und Fallback."""
         normalized = unicodedata.normalize("NFKD", title or fallback)
         ascii_text = "".join(
@@ -141,7 +169,7 @@ class DownloadService:
                     logging.warning(f"Kein PDF erhalten für {clean_id}")
                     continue
 
-                safe_title = self._sanitize_filename(title, clean_id)
+                safe_title = self.sanitize_filename(title, clean_id)
                 safe_name = f"{safe_title}.pdf"
                 archive.writestr(safe_name, pdf_bytes)
                 logging.info(f"Successfully added PDF to ZIP: {safe_name}")

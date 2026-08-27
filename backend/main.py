@@ -3,19 +3,33 @@ from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import List
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from database import models
 from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from schemas import ProfileCreate, ProfileSettings, UserCreate, UserPublic
+from schemas import (
+    ProfileCreate,
+    ProfileNotificationsUpdate,
+    ProfileSettings,
+    UserCreate,
+    UserPublic,
+)
 from services import auth_service, user_service
+from services.digest_service import DigestService
 from services.download_service import DownloadService
+from services.mail_service import MailService
 from services.search_service import SearchService
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
+
+from config import settings
+
+scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
@@ -23,9 +37,29 @@ async def lifespan(app: FastAPI):
 
     SQLModel.metadata.create_all(engine)
 
+    with engine.connect() as conn:
+        existing_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
+        }
+        if "email_notifications" not in existing_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE profile ADD COLUMN email_notifications BOOLEAN DEFAULT 1"
+            )
+            conn.commit()
+
     print("🚀 Datenbank wurde überprüft und ist bereit!", flush=True)
 
+    scheduler.add_job(
+        digest_service.run_monthly_digest,
+        CronTrigger.from_crontab(settings.DIGEST_CRON),
+        id="monthly_paper_digest",
+        replace_existing=True,
+    )
+    scheduler.start()
+    print(f"📅 Monatlicher Digest-Versand geplant ({settings.DIGEST_CRON}).", flush=True)
+
     yield  # Hier läuft die FastAPI App
+    scheduler.shutdown()
     await download_service.aclose()
 
     # ---- BEIM BEENDEN DER APP ----
@@ -45,6 +79,8 @@ app.add_middleware(
 
 search_service = SearchService()
 download_service = DownloadService()
+mail_service = MailService()
+digest_service = DigestService(search_service, mail_service, download_service)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -192,6 +228,7 @@ async def create_profile(
         searchTerm=profile_data.settings.searchTerm,
         start_date=start,
         end_date=end,
+        email_notifications=profile_data.settings.emailNotifications,
     )
 
     new_profile.settings_hash = new_profile.generate_hash()
@@ -215,6 +252,7 @@ async def create_profile(
         "rowSelection": new_profile.row_selection,
         "searchTerm": new_profile.searchTerm,
         "date": {"from": new_profile.start_date, "to": new_profile.end_date},
+        "emailNotifications": new_profile.email_notifications,
     }
     return response_data
 
@@ -237,6 +275,7 @@ async def get_profiles(
             "rowSelection": p.row_selection,
             "searchTerm": p.searchTerm,
             "date": {"from": p.start_date, "to": p.end_date},
+            "emailNotifications": p.email_notifications,
         }
         for p in profiles
     ]
@@ -260,6 +299,7 @@ async def update_profile(
     profile.searchTerm = settings.searchTerm
     profile.start_date = settings.startDate
     profile.end_date = settings.endDate
+    profile.email_notifications = settings.emailNotifications
     profile.settings_hash = profile.generate_hash()
 
     session.add(profile)
@@ -272,8 +312,36 @@ async def update_profile(
         "rowSelection": profile.row_selection,
         "searchTerm": profile.searchTerm,
         "date": {"from": profile.start_date, "to": profile.end_date},
+        "emailNotifications": profile.email_notifications,
     }
     return response_data
+
+
+@app.patch("/api/profiles/{profile_id}/notifications")
+async def update_profile_notifications(
+    profile_id: int,
+    payload: ProfileNotificationsUpdate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Schaltet die E-Mail-Benachrichtigungen für ein Suchprofil um."""
+    profile = session.get(models.Profile, profile_id)
+    if not profile or profile.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Profil nicht gefunden.")
+
+    profile.email_notifications = payload.emailNotifications
+    session.add(profile)
+    session.commit()
+    session.refresh(profile)
+
+    return {
+        "id": profile.id,
+        "name": profile.profile_name,
+        "rowSelection": profile.row_selection,
+        "searchTerm": profile.searchTerm,
+        "date": {"from": profile.start_date, "to": profile.end_date},
+        "emailNotifications": profile.email_notifications,
+    }
 
 
 @app.delete("/api/profiles/{profile_id}", status_code=204)
@@ -331,6 +399,48 @@ async def bulk_download(
         media_type="application/zip",
         headers={"Content-Disposition": "attachment; filename=papers.zip"},
     )
+
+
+@app.get("/api/digest/download")
+async def digest_download(token: str, zip_name: str = "papers"):
+    """Öffentlicher Download-Endpunkt für die signierten ZIP-Links aus Digest-Mails.
+
+    Erfordert keinen Login, da der Link direkt aus der E-Mail geklickt wird –
+    der Token selbst übernimmt die Autorisierung (siehe DownloadService.create_bulk_download_token).
+    """
+    payload = download_service.decode_bulk_download_token(token)
+    work_ids: List[str] = payload.get("work_ids", [])
+    titles_by_id = await search_service.fetch_titles_by_ids(work_ids)
+    papers = [(work_id, titles_by_id.get(work_id)) for work_id in work_ids]
+
+    archive_bytes = await download_service.download_pdf_from_openalex(papers)
+    if not archive_bytes:
+        raise HTTPException(
+            status_code=500,
+            detail="Der Download konnte nicht erstellt werden.",
+        )
+
+    safe_name = download_service.sanitize_filename(zip_name, "papers")
+    return StreamingResponse(
+        iter([archive_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={safe_name}.zip"},
+    )
+
+
+@app.post("/api/digest/send-test")
+async def send_test_digest(
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Verschickt den monatlichen Digest sofort an den aktuell eingeloggten Nutzer (zu Testzwecken)."""
+    sent = await digest_service.send_digest_to_user(session, current_user)
+    if not sent:
+        raise HTTPException(
+            status_code=400,
+            detail="Kein Digest verschickt (keine Suchprofile vorhanden oder SMTP nicht konfiguriert – siehe Server-Logs).",
+        )
+    return {"message": f"Digest wurde an {current_user.email} verschickt."}
 
 
 if __name__ == "__main__":

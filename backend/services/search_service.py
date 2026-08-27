@@ -53,6 +53,24 @@ class SearchService:
         data = await self._fetch_from_api("/sources", params)
         return data.get("results", [])
 
+    async def fetch_titles_by_ids(self, work_ids: List[str]) -> Dict[str, str]:
+        """Schlägt die Titel zu einer Liste kurzer OpenAlex-Work-IDs (z.B. 'W123') nach."""
+        if not work_ids:
+            return {}
+
+        clean_ids = [wid.split("/")[-1] for wid in work_ids]
+        params = {
+            "filter": f"openalex_id:{'|'.join(clean_ids)}",
+            "per_page": len(clean_ids),
+            "select": "id,title",
+        }
+        data = await self._fetch_from_api("/works", params)
+        return {
+            work.get("id", "").split("/")[-1]: work.get("title")
+            for work in data.get("results", [])
+            if work.get("id") and work.get("title")
+        }
+
     async def search(
         self,
         journal_ids: List[str],

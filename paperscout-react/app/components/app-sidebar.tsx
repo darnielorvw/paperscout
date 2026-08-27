@@ -36,7 +36,7 @@ const data = [
     ],
   },
   {
-    title: "Results",
+    title: "Output",
     items: [
       {
         title: "Results",
