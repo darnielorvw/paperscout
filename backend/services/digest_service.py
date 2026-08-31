@@ -71,7 +71,7 @@ class DigestService:
             author = escape(article.get("author") or "")
             journal = escape(article.get("journal_name") or "")
             date = escape(article.get("publication_date") or "")
-            link = article.get("pdf_landing_page") or article.get("pdf_url") or article.get("doi") or "#"
+            link = article.get("pdf_url") or article.get("pdf_landing_page") or article.get("doi") or "#"
             items.append(
                 "<li style='margin-bottom:14px;'>"
                 f"<a href='{escape(link)}' style='font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"

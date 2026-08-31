@@ -16,22 +16,20 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import { useProfiles } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
+import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import { formatDateForDisplay } from "~/lib/date-utils";
 import { areFiltersEqual } from "~/lib/search-utils";
 
-export function clientLoader() { // protectPage bleibt hier wichtig
+export function clientLoader() {
+  // protectPage bleibt hier wichtig
   protectPage();
   return null;
 }
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-  const {
-    rowSelection,
-    date,
-    searchTerm: currentSearchTerm,
-  } = useSearch();
+  const { rowSelection, date, searchTerm: currentSearchTerm } = useSearch();
   const {
     profiles,
     isLoading,
@@ -44,7 +42,11 @@ export default function Profiles() {
     activeProfileId,
   } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
-  const currentSearchState = { rowSelection, date, searchTerm: currentSearchTerm };
+  const currentSearchState = {
+    rowSelection,
+    date,
+    searchTerm: currentSearchTerm,
+  };
 
   // A profile can only be saved or updated if at least one journal is selected.
   const canSaveOrUpdate = Object.keys(rowSelection).length > 0;
@@ -67,7 +69,7 @@ export default function Profiles() {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
+    if (event.key === "Enter") {
       handleSaveProfile();
     }
   };
@@ -89,6 +91,14 @@ export default function Profiles() {
       await updateProfile(profileId);
     } catch (error: any) {
       setError(error.message || "Error updating profile.");
+    }
+  };
+
+  const sendTestMail = async () => {
+    try {
+      await apiFetch("/api/digest/send-test", { method: "POST" });
+    } catch (error: any) {
+      setError(error.message);
     }
   };
 
@@ -142,11 +152,12 @@ export default function Profiles() {
             open={!!error}
             title="Error Saving Profile"
             description={error || ""}
-            onClose={() => setError(null)} />
+            onClose={() => setError(null)}
+          />
         </CardContent>
       </Card>
 
-      {/* Gespeicherte Profile */}
+      {/* Saved profiles */}
       <div>
         <h2 className="mb-4 text-xl font-semibold">Saved Profiles</h2>
         {isLoading ? (
@@ -159,14 +170,16 @@ export default function Profiles() {
                 // The update button is disabled if:
                 // 1. The current filters already match the profile (isApplied).
                 // 2. Another profile is active (activeProfileId is not null and not this profile's ID) OR no journals are selected.
-                const isUpdateDisabled = isApplied || (activeProfileId !== null && activeProfileId !== profile.id);
+                const isUpdateDisabled =
+                  isApplied ||
+                  (activeProfileId !== null && activeProfileId !== profile.id);
                 return (
                   <Card key={profile.id}>
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
                       <CardDescription>
-                        {Object.keys(profile.rowSelection).length} Journals | {formatDateForDisplay(profile.date?.from)}
-                        {" "}-{" "}
+                        {Object.keys(profile.rowSelection).length} Journals |{" "}
+                        {formatDateForDisplay(profile.date?.from)} -{" "}
                         {formatDateForDisplay(profile.date?.to)}{" "}
                         {profile.searchTerm && "| "}
                         {profile.searchTerm}
@@ -187,12 +200,17 @@ export default function Profiles() {
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-between gap-2">
-                      <Button className="flex-1" onClick={() => applyProfile(profile.id)} disabled={isApplied}>
+                      <Button
+                        className="flex-1"
+                        onClick={() => applyProfile(profile.id)}
+                        disabled={isApplied}
+                      >
                         Apply
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => handleUpdateProfile(profile.id)} disabled={isUpdateDisabled}
+                        onClick={() => handleUpdateProfile(profile.id)}
+                        disabled={isUpdateDisabled}
                       >
                         Save to Profile
                       </Button>
@@ -214,6 +232,10 @@ export default function Profiles() {
             )}
           </div>
         )}
+      </div>
+      <div>
+        <h2 className="mb-4 text-xl font-semibold">Email Test</h2>
+        <Button onClick={sendTestMail}>Send Mail</Button>
       </div>
     </div>
   );
