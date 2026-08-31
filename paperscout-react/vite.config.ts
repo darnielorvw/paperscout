@@ -7,4 +7,7 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    allowedHosts: ["finds-randy-denver-melbourne.trycloudflare.com"]
+  }
 });

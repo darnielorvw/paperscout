@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     # Base URL of the frontend, for links in emails
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+    # Comma-separated list of allowed CORS origins (in addition to FRONTEND_URL)
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+
+    # Regex for additional allowed origins (e.g. Cloudflare quick tunnels)
+    CORS_ORIGIN_REGEX: str = os.getenv(
+        "CORS_ORIGIN_REGEX", r"https://.*\.trycloudflare\.com"
+    )
+
     # Base URL of the backend, for download links in emails (must be reachable from outside)
     BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
 

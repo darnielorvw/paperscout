@@ -1,5 +1,8 @@
 
-export const API_BASE_URL = "http://localhost:8000";
+// Configurable via `VITE_API_BASE_URL` (e.g. the backend's Cloudflare tunnel URL).
+// Falls back to localhost for plain local development.
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {

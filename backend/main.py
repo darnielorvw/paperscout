@@ -72,9 +72,14 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="PaperScout API", lifespan=lifespan, version="1.0")
 
 # CORS mapping: allows your React frontend (Vite usually runs on port 5173) to access the API
+_cors_origins = sorted(
+    {settings.FRONTEND_URL}
+    | {o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()}
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
