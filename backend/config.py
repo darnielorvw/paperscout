@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Regex for additional allowed origins (e.g. Cloudflare quick tunnels)
     CORS_ORIGIN_REGEX: str = os.getenv(
-        "CORS_ORIGIN_REGEX", r"https://.*\.trycloudflare\.com"
+        "CORS_ORIGIN_REGEX", r""
     )
 
     # Base URL of the backend, for download links in emails (must be reachable from outside)
