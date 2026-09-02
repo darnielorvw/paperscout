@@ -8,6 +8,5 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   server: {
-    allowedHosts: ["finds-randy-denver-melbourne.trycloudflare.com"]
   }
 });
