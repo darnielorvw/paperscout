@@ -104,3 +104,12 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="The login token has expired.")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid authentication token.")
+
+
+async def require_admin(
+    user: models.User = Depends(get_current_user),
+) -> models.User:
+    """Like get_current_user, but only lets admins through (403 otherwise)."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin privileges required.")
+    return user

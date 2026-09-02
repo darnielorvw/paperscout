@@ -47,11 +47,23 @@ class SearchService:
                 print(f"Error during OpenAlex request ({endpoint}): {e}")
                 return {}
 
-    async def fetch_external_journals(self) -> List[Dict[str, Any]]:
-        """Searches OpenAlex externally for journals (sources) to import."""
-        params = {"filter": "type:journal", "per_page": 50}
+    async def fetch_journal_by_name(self, name: str) -> Dict[str, Any] | None:
+        """Looks up a single journal on OpenAlex by (approximate) name.
+
+        Returns the best-matching source, preferring an exact (case-insensitive)
+        name match over OpenAlex's plain relevance ranking, or None if nothing
+        was found.
+        """
+        params = {"search": name, "filter": "type:journal", "per_page": 5}
         data = await self._fetch_from_api("/sources", params)
-        return data.get("results", [])
+        results = data.get("results", [])
+        if not results:
+            return None
+
+        for result in results:
+            if (result.get("display_name") or "").strip().lower() == name.strip().lower():
+                return result
+        return results[0]
 
     async def fetch_titles_by_ids(self, work_ids: List[str]) -> Dict[str, str]:
         """Looks up the titles for a list of short OpenAlex work IDs (e.g. 'W123')."""

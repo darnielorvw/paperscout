@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -60,3 +60,8 @@ class ChangePasswordRequest(BaseModel):
 # Schema for deleting one's own account
 class DeleteAccountRequest(BaseModel):
     currentPassword: str
+
+
+# Schema for importing one or more journals by name (admin only)
+class JournalImportByName(BaseModel):
+    names: List[str]
