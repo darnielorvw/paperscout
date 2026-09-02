@@ -5,22 +5,17 @@ from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from config import settings
 from database import models
 from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from schemas import (
-    ChangeEmailRequest,
-    ChangePasswordRequest,
-    DeleteAccountRequest,
-    ProfileCreate,
-    ProfileNotificationsUpdate,
-    ProfileSettings,
-    UserCreate,
-    UserPublic,
-)
+from schemas import (ChangeEmailRequest, ChangePasswordRequest,
+                     DeleteAccountRequest, ProfileCreate,
+                     ProfileNotificationsUpdate, ProfileSettings, UserCreate,
+                     UserPublic)
 from services import auth_service, user_service
 from services.digest_service import DigestService
 from services.download_service import DownloadService
@@ -29,8 +24,6 @@ from services.search_service import SearchService
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, select
-
-from config import settings
 
 scheduler = AsyncIOScheduler()
 
@@ -127,9 +120,7 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
         html_body=html_body,
     )
 
-    return {
-        "message": "Please confirm your email address using the link we sent you."
-    }
+    return {"message": "Please confirm your email address using the link we sent you."}
 
 
 @app.get("/api/verify-email")
@@ -142,7 +133,10 @@ async def verify_email(token: str, session: Session = Depends(get_session)):
         raise HTTPException(status_code=400, detail="Email already registered.")
 
     new_user = user_service.create_db_user_from_hash(
-        session, email=email, name=payload["name"], hashed_password=payload["hashed_password"]
+        session,
+        email=email,
+        name=payload["name"],
+        hashed_password=payload["hashed_password"],
     )
     session.commit()
     session.refresh(new_user)
@@ -198,6 +192,11 @@ async def get_journals(
     if not results:
         return {"message": "No journals found.", "results": []}
     return {"results": results}
+
+
+@app.get("/api/test")
+async def test():
+    return "hallo"
 
 
 @app.post("/api/journals/import")
@@ -426,13 +425,17 @@ async def update_email(
 ):
     """Changes the email address of the current user and issues a new token,
     since the old token was issued for the previous email address."""
-    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+    if not user_service.verify_password(
+        payload.currentPassword, current_user.hashed_password
+    ):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if payload.newEmail != current_user.email and auth_service.get_user_by_email(
         session, payload.newEmail
     ):
-        raise HTTPException(status_code=400, detail="This email address is already in use.")
+        raise HTTPException(
+            status_code=400, detail="This email address is already in use."
+        )
 
     current_user.email = payload.newEmail
     session.add(current_user)
@@ -453,12 +456,15 @@ async def update_password(
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Changes the password of the current user."""
-    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+    if not user_service.verify_password(
+        payload.currentPassword, current_user.hashed_password
+    ):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if len(payload.newPassword) < 8:
         raise HTTPException(
-            status_code=400, detail="The new password must be at least 8 characters long."
+            status_code=400,
+            detail="The new password must be at least 8 characters long.",
         )
 
     current_user.hashed_password = user_service.get_password_hash(payload.newPassword)
@@ -475,7 +481,9 @@ async def delete_account(
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Irrevocably deletes the current user's account, including all search profiles."""
-    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
+    if not user_service.verify_password(
+        payload.currentPassword, current_user.hashed_password
+    ):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     profiles = session.exec(
