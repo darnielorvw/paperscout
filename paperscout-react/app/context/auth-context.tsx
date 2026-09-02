@@ -14,6 +14,7 @@ export interface User {
   name: string;
   email: string;
   institution: string;
+  is_admin: boolean;
 }
 
 interface AuthContextType {

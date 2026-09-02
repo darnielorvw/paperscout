@@ -17,6 +17,7 @@ class UserPublic(BaseModel):
     email: EmailStr
     name: str
     institution: str
+    is_admin: bool
 
 
 # Schema for login
