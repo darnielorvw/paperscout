@@ -34,6 +34,11 @@ class Settings(BaseSettings):
         else "http://localhost:5173",
     )
 
+    # Comma-separated list of allowed CORS origins (in addition to FRONTEND_URL)
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+
+    # Regex for additional allowed origins (e.g. Cloudflare quick tunnels)
+    CORS_ORIGIN_REGEX: str = os.getenv("CORS_ORIGIN_REGEX", r"")
 
     # Base URL of the backend, for download links in emails (must be reachable from outside).
     # On Vercel, VERCEL_URL is set automatically to the current deployment's own
