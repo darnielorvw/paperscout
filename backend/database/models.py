@@ -14,6 +14,7 @@ class User(SQLModel, table=True):
     name: str
     hashed_password: str
     institution: str
+    is_admin: bool = Field(default=False)
 
     profiles: List["Profile"] = Relationship(back_populates="user")
 

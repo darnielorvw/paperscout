@@ -22,19 +22,35 @@ class Settings(BaseSettings):
     SMTP_FROM: str = os.getenv("SMTP_FROM", "PaperScout <noreply@paperscout.local>")
     SMTP_USE_TLS: bool = os.getenv("SMTP_USE_TLS", "true").lower() == "true"
 
-    # Base URL of the frontend, for links in emails
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Base URL of the frontend, for links in emails. Frontend and backend are
+    # deployed as one Vercel project (see vercel.json) and therefore share a
+    # domain - if FRONTEND_URL isn't explicitly overridden, fall back to the
+    # current deployment's own VERCEL_URL instead of localhost, so Previews
+    # don't need this env var set by hand for every deployment.
+    FRONTEND_URL: str = os.getenv(
+        "FRONTEND_URL",
+        f"https://{os.environ['VERCEL_URL']}"
+        if os.getenv("VERCEL_URL")
+        else "http://localhost:5173",
+    )
 
     # Comma-separated list of allowed CORS origins (in addition to FRONTEND_URL)
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 
     # Regex for additional allowed origins (e.g. Cloudflare quick tunnels)
-    CORS_ORIGIN_REGEX: str = os.getenv(
-        "CORS_ORIGIN_REGEX", r""
-    )
+    CORS_ORIGIN_REGEX: str = os.getenv("CORS_ORIGIN_REGEX", r"")
 
-    # Base URL of the backend, for download links in emails (must be reachable from outside)
-    BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
+    # Base URL of the backend, for download links in emails (must be reachable from outside).
+    # On Vercel, VERCEL_URL is set automatically to the current deployment's own
+    # URL (a new one for every Preview deployment) - if BACKEND_URL isn't
+    # explicitly overridden, fall back to that instead of localhost, so Previews
+    # don't need this env var set by hand for every deployment.
+    BACKEND_URL: str = os.getenv(
+        "BACKEND_URL",
+        f"https://{os.environ['VERCEL_URL']}"
+        if os.getenv("VERCEL_URL")
+        else "http://localhost:8000",
+    )
 
     # Cron expression for the monthly digest send (default: 1st of every month, 07:00)
     DIGEST_CRON: str = os.getenv("DIGEST_CRON", "0 7 1 * *")

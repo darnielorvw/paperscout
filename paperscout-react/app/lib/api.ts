@@ -1,8 +1,11 @@
 
-// Configurable via `VITE_API_BASE_URL` (e.g. the backend's Cloudflare tunnel URL).
-// Falls back to localhost for plain local development.
+// Frontend and backend are deployed as one Vercel project (see vercel.json),
+// so in production/preview the API lives on the same origin under `/api` -
+// an empty base URL means "relative to the current page", which is exactly
+// what we want there. Only plain local development (`npm run dev`, backend
+// and frontend as separate processes) needs the localhost fallback.
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? "http://localhost:8000" : "");
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {

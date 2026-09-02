@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from schemas import (ChangeEmailRequest, ChangePasswordRequest,
-                     DeleteAccountRequest, ProfileCreate,
+                     DeleteAccountRequest, JournalImportByName, ProfileCreate,
                      ProfileNotificationsUpdate, ProfileSettings, UserCreate,
                      UserPublic)
 from services import auth_service, user_service
@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
             )
             conn.commit()
 
+        existing_user_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")
+        }
+        if "is_admin" not in existing_user_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0"
+            )
+            conn.commit()
+
     print("🚀 Database has been checked and is ready!", flush=True)
 
     scheduler.add_job(
@@ -67,7 +76,7 @@ app = FastAPI(title="PaperScout API", lifespan=lifespan, version="1.0")
 # CORS mapping: allows your React frontend (Vite usually runs on port 5173) to access the API
 _cors_origins = sorted(
     {settings.FRONTEND_URL}
-    | {o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()}
+   
 )
 app.add_middleware(
     CORSMiddleware,
@@ -199,39 +208,46 @@ async def test():
     return "hallo"
 
 
-@app.post("/api/journals/import")
-async def import_journals(
-    session: Session = Depends(get_session),
-    _: models.User = Depends(auth_service.get_current_user),
-):
-    """Searches for journals on OpenAlex and stores them in the local database."""
-    external_results = await search_service.fetch_external_journals()
+def _journal_values(oa_item: dict) -> dict | None:
+    """Maps a raw OpenAlex 'source' item to our Journals columns, or None if unusable."""
+    oa_id = oa_item.get("id", "").split("/")[-1]
+    if not oa_id:
+        return None
+    return {
+        "id": oa_id,
+        "name": oa_item.get("display_name"),
+        "issn": oa_item.get("issn_l") or "",
+        "publisher": oa_item.get("host_organization_name") or "Unknown",
+        "homepage": oa_item.get("homepage_url") or "",
+    }
 
-    imported_journals = []
-    for item in external_results:
-        oa_id = item.get("id", "").split("/")[-1]
-        if not oa_id:
+
+@app.post("/api/journals/import-by-name")
+async def import_journals_by_name(
+    payload: JournalImportByName,
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Looks up a list of journal names on OpenAlex and stores the matches. Admin only."""
+    imported = []
+    not_found = []
+
+    for name in payload.names:
+        match = await search_service.fetch_journal_by_name(name)
+        values = _journal_values(match) if match else None
+        if values is None:
+            not_found.append(name)
             continue
 
-        stmt = (
-            sqlite_insert(models.Journals)
-            .values(
-                id=oa_id,
-                name=item.get("display_name"),
-                issn=item.get("issn_l") or "",
-                publisher=item.get("host_organization_name") or "Unknown",
-                homepage=item.get("homepage_url") or "",
-            )
-            .on_conflict_do_nothing()
-        )
-
+        stmt = sqlite_insert(models.Journals).values(**values).on_conflict_do_nothing()
         session.exec(stmt)
-        imported_journals.append(oa_id)
+        imported.append(values)
 
     session.commit()
     return {
-        "message": f"{len(imported_journals)} journals imported.",
-        "results": imported_journals,
+        "message": f"{len(imported)} of {len(payload.names)} journals imported.",
+        "results": imported,
+        "not_found": not_found,
     }
 
 

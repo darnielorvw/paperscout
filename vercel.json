@@ -1,0 +1,10 @@
+{
+  "services": {
+    "frontend": { "root": "paperscout-react/" },
+    "backend": { "root": "backend/", "entrypoint": "main:app" }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": { "service": "backend" } },
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

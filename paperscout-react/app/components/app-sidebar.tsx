@@ -55,11 +55,23 @@ const data = [
   },
 ];
 
+const adminGroup = {
+  title: "Admin",
+  items: [
+    {
+      title: "Import Journals",
+      url: "/admin",
+    },
+  ],
+};
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const { user } = useAuth();
   const { rowSelection, date, searchTerm, isInitialized } = useSearch();
   const [isMounted, setIsMounted] = React.useState(false);
+
+  const sidebarGroups = user?.is_admin ? [...data, adminGroup] : data;
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -75,7 +87,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar {...props}>
       <SidebarContent>
-        {data.map((item) => (
+        {sidebarGroups.map((item) => (
           <SidebarGroup key={item.title}>
             {item.title && <SidebarGroupLabel>{item.title}</SidebarGroupLabel>}
             <SidebarGroupContent>
