@@ -19,7 +19,8 @@ dependencies = [
     "pyjwt (>=2.13.0,<3.0.0)",
     "python-multipart (>=0.0.32,<0.0.33)",
     "aiosmtplib (>=5.1.2,<6.0.0)",
-    "apscheduler (>=3.11.3,<4.0.0)"
+    "apscheduler (>=3.11.3,<4.0.0)",
+    "sqlalchemy-libsql (>=0.2.0,<0.3.0)"
     
 ]
 

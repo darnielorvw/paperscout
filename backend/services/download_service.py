@@ -141,7 +141,6 @@ class DownloadService:
         self, papers: list[tuple[str, str | None]]
     ) -> bytes | None:
         """Downloads multiple PDFs in parallel via the OpenAlex Content API and returns them as a ZIP."""
-        os.makedirs("downloads", exist_ok=True)
 
         if not papers:
             return None
