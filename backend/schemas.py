@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
@@ -29,8 +28,6 @@ class UserLogin(BaseModel):
 # Schema for the settings within a search profile
 class ProfileSettings(BaseModel):
     rowSelection: Dict[str, bool] = Field(default_factory=dict)
-    startDate: datetime
-    endDate: datetime
     searchTerm: str = ""
     emailNotifications: bool = True
 

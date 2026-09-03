@@ -115,8 +115,8 @@ class SearchService:
         clean_ids = "|".join([jid.split("/")[-1] for jid in journal_ids])
 
         # OpenAlex filter: source(s), start date and end date
-        filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date},is_oa:true,has_fulltext:true"
-        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships,best_oa_location"
+        filter_str = f"primary_location.source.id:{clean_ids},from_publication_date:{from_date},to_publication_date:{to_date}"
+        select = "id,title,doi,publication_date,primary_location,abstract_inverted_index,primary_topic,authorships,best_oa_location,has_fulltext"
 
         params = {
             "search": keywords,
@@ -151,6 +151,7 @@ class SearchService:
                     "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
                     "topic": primary_topic.get("display_name"),
                     "author": format_authors_apa(work.get("authorships", [])),
+                    "has_fulltext": work.get("has_fulltext")
                     
                 }
             )

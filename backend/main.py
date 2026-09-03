@@ -21,8 +21,10 @@ from services.digest_service import DigestService
 from services.download_service import DownloadService
 from services.mail_service import MailService
 from services.search_service import SearchService
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, SQLModel, select
 
 scheduler = AsyncIOScheduler()
@@ -50,6 +52,71 @@ async def lifespan(app: FastAPI):
             conn.exec_driver_sql(
                 "ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0"
             )
+            conn.commit()
+
+        # Profiles no longer store a date range - drop the now-unused columns.
+        existing_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
+        }
+        for column in ("start_date", "end_date"):
+            if column in existing_columns:
+                conn.exec_driver_sql(f"ALTER TABLE profile DROP COLUMN {column}")
+                conn.commit()
+
+        # Journals used to be stored as a JSON `row_selection` map on the profile
+        # and de-duplicated via a globally unique `settings_hash`. They are now
+        # normalised into the `profilejournallink` join table, and profile names
+        # are unique per user instead of globally. Migrate legacy profile rows.
+        legacy_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
+        }
+        if "row_selection" in legacy_columns or "settings_hash" in legacy_columns:
+            if "row_selection" in legacy_columns:
+                valid_ids = {
+                    row[0]
+                    for row in conn.exec_driver_sql("SELECT id FROM journals")
+                }
+                for profile_id, raw in conn.exec_driver_sql(
+                    "SELECT id, row_selection FROM profile"
+                ).fetchall():
+                    try:
+                        selection = json.loads(raw) if raw else {}
+                    except (TypeError, ValueError):
+                        selection = {}
+                    for journal_id, selected in selection.items():
+                        if selected and journal_id in valid_ids:
+                            conn.exec_driver_sql(
+                                "INSERT OR IGNORE INTO profilejournallink "
+                                "(profile_id, journal_id) VALUES (?, ?)",
+                                (profile_id, journal_id),
+                            )
+
+            # Rebuild `profile` without the legacy columns and with a per-user
+            # unique name constraint. Row ids are preserved, so the freshly
+            # backfilled join rows stay valid.
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE profile_new (
+                    id INTEGER NOT NULL PRIMARY KEY,
+                    profile_name VARCHAR NOT NULL,
+                    user_id INTEGER NOT NULL REFERENCES user (id),
+                    "searchTerm" VARCHAR NOT NULL,
+                    email_notifications BOOLEAN DEFAULT 1,
+                    CONSTRAINT uq_profile_user_name UNIQUE (user_id, profile_name)
+                )
+                """
+            )
+            conn.exec_driver_sql(
+                """
+                INSERT INTO profile_new
+                    (id, profile_name, user_id, "searchTerm", email_notifications)
+                SELECT id, profile_name, user_id, "searchTerm",
+                       COALESCE(email_notifications, 1)
+                FROM profile
+                """
+            )
+            conn.exec_driver_sql("DROP TABLE profile")
+            conn.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
             conn.commit()
 
     print("🚀 Database has been checked and is ready!", flush=True)
@@ -251,6 +318,43 @@ async def import_journals_by_name(
     }
 
 
+@app.delete("/api/journals/{journal_id}")
+async def delete_journal(
+    journal_id: str,
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Removes a journal from the database. Admin only.
+
+    Refuses if the journal is still used by any search profile, so profiles can
+    never end up referencing a journal that no longer exists.
+    """
+    journal = session.get(models.Journals, journal_id)
+    if journal is None:
+        raise HTTPException(status_code=404, detail="Journal not found.")
+
+    using_profiles = session.exec(
+        select(models.Profile.profile_name, models.User.email)
+        .join(models.ProfileJournalLink)
+        .join(models.User, models.Profile.user_id == models.User.id)
+        .where(models.ProfileJournalLink.journal_id == journal_id)
+    ).all()
+    if using_profiles:
+        entries = [f"{name} ({email})" for name, email in using_profiles]
+        shown = ", ".join(entries[:5]) + (" …" if len(entries) > 5 else "")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Journal is used by {len(entries)} profile(s) and cannot "
+                f"be deleted: {shown}"
+            ),
+        )
+
+    session.delete(journal)
+    session.commit()
+    return {"message": "Journal deleted.", "id": journal_id}
+
+
 @app.get("/api/articles")
 async def search_articles(
     journal_ids: List[str] = Query([]),
@@ -276,6 +380,57 @@ async def search_articles(
     return data
 
 
+def _valid_journal_ids(
+    session: Session, row_selection: dict[str, bool]
+) -> list[str]:
+    """Filters the frontend's {journal_id: bool} map down to the ids that are
+    actually selected AND still exist in the database."""
+    selected_ids = [jid for jid, selected in (row_selection or {}).items() if selected]
+    if not selected_ids:
+        return []
+    return list(
+        session.exec(
+            select(models.Journals.id).where(models.Journals.id.in_(selected_ids))
+        ).all()
+    )
+
+
+def _set_profile_journals(
+    session: Session, profile_id: int, journal_ids: list[str]
+) -> None:
+    """Replaces a profile's journal links with `journal_ids` using two bulk
+    statements (one DELETE, one multi-row INSERT), so the number of round trips
+    to the database stays constant instead of growing with the selection size."""
+    session.execute(
+        sql_delete(models.ProfileJournalLink).where(
+            models.ProfileJournalLink.profile_id == profile_id
+        )
+    )
+    if journal_ids:
+        session.execute(
+            sqlite_insert(models.ProfileJournalLink).values(
+                [
+                    {"profile_id": profile_id, "journal_id": jid}
+                    for jid in journal_ids
+                ]
+            )
+        )
+
+
+def _profile_response(
+    profile: models.Profile, journal_ids: list[str] | None = None
+) -> dict:
+    if journal_ids is None:
+        journal_ids = [journal.id for journal in profile.journals]
+    return {
+        "id": profile.id,
+        "name": profile.profile_name,
+        "rowSelection": {jid: True for jid in journal_ids},
+        "searchTerm": profile.searchTerm,
+        "emailNotifications": profile.email_notifications,
+    }
+
+
 @app.post("/api/profiles", status_code=201)
 async def create_profile(
     profile_data: ProfileCreate,
@@ -284,44 +439,30 @@ async def create_profile(
 ):
     """Creates a new search profile for the current user."""
 
-    start = profile_data.settings.startDate
-    end = profile_data.settings.endDate
+    journal_ids = _valid_journal_ids(session, profile_data.settings.rowSelection)
 
-    # 2. Populate the new DB profile with the flat columns
     new_profile = models.Profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
-        row_selection=profile_data.settings.rowSelection,
         searchTerm=profile_data.settings.searchTerm,
-        start_date=start,
-        end_date=end,
         email_notifications=profile_data.settings.emailNotifications,
     )
 
-    new_profile.settings_hash = new_profile.generate_hash()
-
     try:
         session.add(new_profile)
+        session.flush()
+        _set_profile_journals(session, new_profile.id, journal_ids)
         session.commit()
-        session.refresh(new_profile)
 
     except IntegrityError:
         session.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A profile with the same name or settings already exists.",
+            detail="You already have a profile with this name.",
         )
 
-    # Combine the data for the response, as expected by the frontend
-    response_data = {
-        "name": new_profile.profile_name,
-        "id": new_profile.id,
-        "rowSelection": new_profile.row_selection,
-        "searchTerm": new_profile.searchTerm,
-        "date": {"from": new_profile.start_date, "to": new_profile.end_date},
-        "emailNotifications": new_profile.email_notifications,
-    }
-    return response_data
+    session.refresh(new_profile)
+    return _profile_response(new_profile, journal_ids)
 
 
 @app.get("/api/profiles")
@@ -331,22 +472,12 @@ async def get_profiles(
 ):
     """Returns all search profiles of the current user."""
     profiles = session.exec(
-        select(models.Profile).where(models.Profile.user_id == current_user.id)
+        select(models.Profile)
+        .where(models.Profile.user_id == current_user.id)
+        .options(selectinload(models.Profile.journals))
     ).all()
 
-    # Transform the data to match the frontend format
-    results = [
-        {
-            "id": p.id,
-            "name": p.profile_name,
-            "rowSelection": p.row_selection,
-            "searchTerm": p.searchTerm,
-            "date": {"from": p.start_date, "to": p.end_date},
-            "emailNotifications": p.email_notifications,
-        }
-        for p in profiles
-    ]
-    return {"results": results}
+    return {"results": [_profile_response(p) for p in profiles]}
 
 
 @app.put("/api/profiles/{profile_id}")
@@ -361,27 +492,16 @@ async def update_profile(
     if not profile or profile.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Profile not found.")
 
-    # Update the fields
-    profile.row_selection = settings.rowSelection
-    profile.searchTerm = settings.searchTerm
-    profile.start_date = settings.startDate
-    profile.end_date = settings.endDate
-    profile.email_notifications = settings.emailNotifications
-    profile.settings_hash = profile.generate_hash()
+    journal_ids = _valid_journal_ids(session, settings.rowSelection)
 
+    profile.searchTerm = settings.searchTerm
+    profile.email_notifications = settings.emailNotifications
     session.add(profile)
+    _set_profile_journals(session, profile.id, journal_ids)
     session.commit()
     session.refresh(profile)
 
-    response_data = {
-        "id": profile.id,
-        "name": profile.profile_name,
-        "rowSelection": profile.row_selection,
-        "searchTerm": profile.searchTerm,
-        "date": {"from": profile.start_date, "to": profile.end_date},
-        "emailNotifications": profile.email_notifications,
-    }
-    return response_data
+    return _profile_response(profile, journal_ids)
 
 
 @app.patch("/api/profiles/{profile_id}/notifications")
@@ -401,14 +521,7 @@ async def update_profile_notifications(
     session.commit()
     session.refresh(profile)
 
-    return {
-        "id": profile.id,
-        "name": profile.profile_name,
-        "rowSelection": profile.row_selection,
-        "searchTerm": profile.searchTerm,
-        "date": {"from": profile.start_date, "to": profile.end_date},
-        "emailNotifications": profile.email_notifications,
-    }
+    return _profile_response(profile)
 
 
 @app.delete("/api/profiles/{profile_id}", status_code=204)
@@ -421,6 +534,9 @@ async def delete_profile(
     profile = session.get(models.Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found.")
+    # Clear the journal links in one bulk statement so the ORM cascade on
+    # `session.delete` has nothing left to remove row by row.
+    _set_profile_journals(session, profile.id, [])
     session.delete(profile)
     session.commit()
 
@@ -502,11 +618,18 @@ async def delete_account(
     ):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
-    profiles = session.exec(
-        select(models.Profile).where(models.Profile.user_id == current_user.id)
+    profile_ids = session.exec(
+        select(models.Profile.id).where(models.Profile.user_id == current_user.id)
     ).all()
-    for profile in profiles:
-        session.delete(profile)
+    if profile_ids:
+        session.execute(
+            sql_delete(models.ProfileJournalLink).where(
+                models.ProfileJournalLink.profile_id.in_(profile_ids)
+            )
+        )
+        session.execute(
+            sql_delete(models.Profile).where(models.Profile.id.in_(profile_ids))
+        )
 
     session.delete(current_user)
     session.commit()

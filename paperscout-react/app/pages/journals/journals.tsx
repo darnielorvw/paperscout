@@ -4,13 +4,15 @@ import { DataTable } from "~/components/data-table";
 import { columns, type Journal } from "./columns";
 
 interface JournalsPageProps {
-  initialData: Promise<Journal[]>;
+  data: Journal[];
+  isLoading?: boolean;
   rowSelection: any;
   onRowSelectionChange: (selection: any) => void;
 }
 
 export default function JournalsPage({
-  initialData,
+  data,
+  isLoading,
   rowSelection,
   onRowSelectionChange,
 }: JournalsPageProps) {
@@ -18,7 +20,8 @@ export default function JournalsPage({
     <div className="flex h-full w-full flex-col md:p-1">
       <DataTable
         columns={columns}
-        initialData={initialData}
+        data={data}
+        isLoading={isLoading}
         rowSelection={rowSelection}
         onRowSelectionChange={onRowSelectionChange}
       />

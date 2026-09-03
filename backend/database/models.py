@@ -1,9 +1,6 @@
-from datetime import datetime
-import hashlib
-import json
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from sqlmodel import JSON, Column, Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
 
 JournalIDStr = str
 
@@ -19,29 +16,35 @@ class User(SQLModel, table=True):
     profiles: List["Profile"] = Relationship(back_populates="user")
 
 
-class Profile(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    profile_name: str = Field(unique=True)
-    user_id: int = Field(foreign_key="user.id")
-    row_selection: Dict[JournalIDStr, bool] = Field(
-        default_factory=dict, sa_column=Column(JSON)
-    )
-    start_date: datetime
-    end_date: datetime
-    searchTerm: str
-    settings_hash: str = Field(unique=True, index=True)
-    email_notifications: bool = Field(default=True)
-    user: User = Relationship(back_populates="profiles")
-
-    def generate_hash(self):
-        json_str = json.dumps(self.row_selection, sort_keys=True)
-        data_string = f"{self.start_date.isoformat()}-{self.end_date.isoformat()}-{self.searchTerm}-{json_str}"
-        return hashlib.md5(data_string.encode("utf-8")).hexdigest()
-
-
 class Journals(SQLModel, table=True):
     id: str = Field(default=None, primary_key=True)
     name: str
     issn: str
     publisher: str
     homepage: str
+
+
+class ProfileJournalLink(SQLModel, table=True):
+    """Join table connecting a search profile to its selected journals."""
+
+    profile_id: Optional[int] = Field(
+        default=None, foreign_key="profile.id", primary_key=True, ondelete="CASCADE"
+    )
+    journal_id: Optional[str] = Field(
+        default=None, foreign_key="journals.id", primary_key=True, ondelete="CASCADE"
+    )
+
+
+class Profile(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("user_id", "profile_name", name="uq_profile_user_name"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    profile_name: str
+    user_id: int = Field(foreign_key="user.id")
+    searchTerm: str
+    email_notifications: bool = Field(default=True)
+
+    user: User = Relationship(back_populates="profiles")
+    journals: List[Journals] = Relationship(link_model=ProfileJournalLink)

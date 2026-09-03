@@ -1,5 +1,5 @@
 import { PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -18,18 +18,18 @@ import { useProfiles } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
-import { formatDateForDisplay } from "~/lib/date-utils";
 import { areFiltersEqual } from "~/lib/search-utils";
 
 export function clientLoader() {
-  // protectPage bleibt hier wichtig
+  // The profile list itself lives in ProfileProvider (loaded once per session
+  // and kept in sync on every mutation), so this route only needs the auth gate.
   protectPage();
   return null;
 }
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-  const { rowSelection, date, searchTerm: currentSearchTerm } = useSearch();
+  const { rowSelection, searchTerm: currentSearchTerm } = useSearch();
   const {
     profiles,
     isLoading,
@@ -38,13 +38,11 @@ export default function Profiles() {
     applyProfile,
     updateProfile,
     toggleProfileNotifications,
-    reloadProfiles,
     activeProfileId,
   } = useProfiles();
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = {
     rowSelection,
-    date,
     searchTerm: currentSearchTerm,
   };
 
@@ -113,11 +111,6 @@ export default function Profiles() {
     }
   };
 
-  // When the page loads, make sure the profile list is up to date.
-  useEffect(() => {
-    reloadProfiles();
-  }, [reloadProfiles]);
-
   return (
     <div className="flex h-full w-full flex-col gap-8 p-4">
       <div>
@@ -131,8 +124,8 @@ export default function Profiles() {
         <CardHeader>
           <CardTitle>Create New Profile</CardTitle>
           <CardDescription>
-            Save your current selection of journals, the date range, and the
-            search term for later use.
+            Save your current selection of journals and search term for later
+            use.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -178,11 +171,8 @@ export default function Profiles() {
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
                       <CardDescription>
-                        {Object.keys(profile.rowSelection).length} Journals |{" "}
-                        {formatDateForDisplay(profile.date?.from)} -{" "}
-                        {formatDateForDisplay(profile.date?.to)}{" "}
-                        {profile.searchTerm && "| "}
-                        {profile.searchTerm}
+                        {Object.keys(profile.rowSelection).length} Journals
+                        {profile.searchTerm && ` | ${profile.searchTerm}`}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>

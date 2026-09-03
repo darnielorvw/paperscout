@@ -1,31 +1,25 @@
 // app/routes/_index.tsx
 import { useEffect, useMemo } from "react";
-import { useLoaderData, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { InputAccordion } from "~/components/input-accordion";
+import { useJournals } from "~/context/journals-context";
 import { useSearch } from "~/context/search-context";
-import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import { buildResultsUrl } from "~/lib/search-utils";
-import { type Journal } from "~/pages/journals/columns";
 import JournalsPage from "~/pages/journals/journals";
 import RangePage from "~/pages/range/range";
 import SearchPage from "~/pages/search/search";
 
-export function clientLoader(): { journals: Promise<Journal[]> } {
-  // Protect this page: if there's no token, execution stops here and redirects.
+export function clientLoader() {
+  // The journal list lives in JournalsProvider (loaded once per session), so
+  // this route only needs the auth gate.
   protectPage();
-
-  const journals = apiFetch("/api/journals")
-    .then((data) => {
-      return (data.results as Journal[]) || [];
-    });
-
-  return { journals };
+  return null;
 }
 
 export default function Home() {
   // Selection state for the journals
-  const { journals } = useLoaderData<typeof clientLoader>();
+  const { journals, isLoading: journalsLoading } = useJournals();
   const {
     rowSelection,
     setRowSelection,
@@ -45,7 +39,7 @@ export default function Home() {
       navigate("/#journals", { replace: true, preventScrollReset: true });
     }
   }, [location, navigate]);
-  
+
   const handleSearch = async () => {
     const resultsUrl = buildResultsUrl({ rowSelection, date, searchTerm });
     navigate(resultsUrl);
@@ -55,12 +49,13 @@ export default function Home() {
   const journalsContent = useMemo(
     () => (
       <JournalsPage
-        initialData={journals}
+        data={journals}
+        isLoading={journalsLoading}
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
       />
     ),
-    [journals, rowSelection, setRowSelection],
+    [journals, journalsLoading, rowSelection, setRowSelection],
   );
 
   const rangeContent = useMemo(
