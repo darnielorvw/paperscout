@@ -1,6 +1,5 @@
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
-import { useLoaderData, useRevalidator } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -13,27 +12,27 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import { useProfiles } from "~/context/profile-context";
-import type { SearchProfile } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import { areFiltersEqual } from "~/lib/search-utils";
 
-export async function clientLoader() {
-  // protectPage bleibt hier wichtig
+export function clientLoader() {
+  // The profile list itself lives in ProfileProvider (loaded once per session
+  // and kept in sync on every mutation), so this route only needs the auth gate.
   protectPage();
-  const data = await apiFetch("/api/profiles");
-  return { profiles: (data.results ?? []) as SearchProfile[] };
+  return null;
 }
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-  const { profiles } = useLoaderData<typeof clientLoader>();
-  const revalidator = useRevalidator();
   const { rowSelection, searchTerm: currentSearchTerm } = useSearch();
   const {
+    profiles,
+    isLoading,
     saveProfile,
     deleteProfile,
     applyProfile,
@@ -62,7 +61,6 @@ export default function Profiles() {
     try {
       await saveProfile(newProfileName);
       setNewProfileName("");
-      revalidator.revalidate();
     } catch (err: any) {
       setError(err.message || "Could not save profile.");
     }
@@ -77,7 +75,6 @@ export default function Profiles() {
   const handleDeleteProfile = async (profileId: number) => {
     try {
       await deleteProfile(profileId);
-      revalidator.revalidate();
     } catch (error: any) {
       setError(error.message || "Error deleting profile.");
     }
@@ -90,7 +87,6 @@ export default function Profiles() {
     }
     try {
       await updateProfile(profileId);
-      revalidator.revalidate();
     } catch (error: any) {
       setError(error.message || "Error updating profile.");
     }
@@ -110,7 +106,6 @@ export default function Profiles() {
   ) => {
     try {
       await toggleProfileNotifications(profileId, emailNotifications);
-      revalidator.revalidate();
     } catch (error: any) {
       setError(error.message || "Error updating notification setting.");
     }
@@ -158,7 +153,10 @@ export default function Profiles() {
       {/* Saved profiles */}
       <div>
         <h2 className="mb-4 text-xl font-semibold">Saved Profiles</h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {profiles.length > 0 ? (
               profiles.map((profile) => {
                 const isApplied = areFiltersEqual(profile, currentSearchState);
@@ -222,7 +220,8 @@ export default function Profiles() {
                 No profiles saved yet.
               </p>
             )}
-        </div>
+          </div>
+        )}
       </div>
       <div>
         <h2 className="mb-4 text-xl font-semibold">Email Test</h2>
