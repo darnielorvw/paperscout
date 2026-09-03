@@ -56,7 +56,7 @@ export function ArticleCard({
           <Badge variant="outline">
             {article.author}
             {formatMonth(article.publication_date) &&
-              ` · Paper ${formatMonth(article.publication_date)}`}
+              ` · ${formatMonth(article.publication_date)}`}
           </Badge>
           {(formatMonth(article.journal_publication_date) || article.issue) && (
             <Badge variant="outline">

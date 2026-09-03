@@ -21,11 +21,11 @@ load_dotenv()
 # We filter on the printed issue date. Note: online-only journals (PLOS, eLife,
 # Nature Communications, ...) have no `published-print` and therefore return
 # nothing here - switch to "from-pub-date"/"until-pub-date" to include them.
-DATE_FILTER_FROM = "from-pub-date"
-DATE_FILTER_UNTIL = "until-pub-date"
+DATE_FILTER_FROM = "from-print-pub-date"
+DATE_FILTER_UNTIL = "until-print-pub-date"
 
 # Crossref: we only need the DOI, the journal issue date and the issue label.
-_CROSSREF_SELECT = "DOI,title,container-title,published-print,published,issued,volume,issue"
+_CROSSREF_SELECT = "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
 
 # OpenAlex: the full metadata for a work.
 _OPENALEX_SELECT = (
@@ -34,13 +34,8 @@ _OPENALEX_SELECT = (
 )
 
 
-def format_authors_apa(authorships: list) -> str:
-    """Short APA-style author string from an OpenAlex `authorships` list."""
-    names = [
-        (a.get("author") or {}).get("display_name", "").split()[-1]
-        for a in (authorships or [])
-        if (a.get("author") or {}).get("display_name")
-    ]
+def _apa_from_last_names(names: List[str]) -> str:
+    names = [n for n in names if n]
     if not names:
         return ""
     if len(names) == 1:
@@ -48,6 +43,37 @@ def format_authors_apa(authorships: list) -> str:
     if len(names) == 2:
         return f"{names[0]} & {names[1]}"
     return f"{names[0]} et al."
+
+
+def format_authors_apa(authorships: list) -> str:
+    """Short APA-style author string from an OpenAlex `authorships` list."""
+    return _apa_from_last_names(
+        [
+            (a.get("author") or {}).get("display_name", "").split()[-1]
+            for a in (authorships or [])
+            if (a.get("author") or {}).get("display_name")
+        ]
+    )
+
+
+def format_authors_apa_crossref(authors: list) -> str:
+    """Short APA-style author string from a Crossref `author` list."""
+    return _apa_from_last_names(
+        [
+            (a.get("family") or a.get("name") or "").strip()
+            for a in (authors or [])
+        ]
+    )
+
+
+def _strip_jats(abstract: str | None) -> str | None:
+    """Crossref abstracts are JATS-XML snippets; strip the tags to plain text."""
+    if not abstract:
+        return None
+    text = re.sub(r"<[^>]+>", " ", abstract)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^(Abstract|ABSTRACT)\s*", "", text)
+    return text or None
 
 
 def _date_parts_to_iso(container: Dict[str, Any] | None) -> str | None:
@@ -241,12 +267,23 @@ class SearchService:
                 continue
             records.append(self._base_record(doi, work))
 
-        # Enrich with OpenAlex metadata, matched by DOI.
+        # Fill gaps with OpenAlex metadata, matched by DOI: an OpenAlex value is
+        # only used where the corresponding Crossref field came back empty.
         oa_by_doi = await self._openalex_by_dois([r["id"] for r in records])
         for record in records:
             oa_work = oa_by_doi.get(record["id"])
-            if oa_work:
-                record.update(self._openalex_fields(oa_work))
+            if not oa_work:
+                continue
+            for key, value in self._openalex_fields(oa_work).items():
+                if value in (None, "", []):
+                    continue
+                if not record.get(key):
+                    record[key] = value
+
+        # Guarantee the shapes the frontend expects.
+        for record in records:
+            record["abstract"] = record.get("abstract") or "No abstract available."
+            record["author"] = record.get("author") or ""
 
         data = {
             "meta": {
@@ -281,7 +318,7 @@ class SearchService:
         """The Crossref-derived part of a result: the journal issue date and issue
         label, plus a full fallback in case OpenAlex doesn't know the DOI."""
         journal_publication_date = _date_parts_to_iso(cr_work.get("published-print"))
-        paper_date_fallback = (
+        paper_date = (
             _date_parts_to_iso(cr_work.get("published"))
             or _date_parts_to_iso(cr_work.get("issued"))
             or journal_publication_date
@@ -291,27 +328,30 @@ class SearchService:
             "doi": f"https://doi.org/{doi}",
             "title": (cr_work.get("title") or [None])[0],
             "journal_name": (cr_work.get("container-title") or [None])[0],
-            "publication_date": paper_date_fallback,
+            "publication_date": paper_date,
             "journal_publication_date": journal_publication_date,
             "issue": _issue_label(cr_work.get("volume"), cr_work.get("issue")),
             "pdf_url": None,
             "pdf_landing_page": f"https://doi.org/{doi}",
-            "abstract": "No abstract available.",
+            "abstract": _strip_jats(cr_work.get("abstract")),
             "topic": None,
-            "author": "",
+            "author": format_authors_apa_crossref(cr_work.get("author")) or None,
             "has_fulltext": False,
         }
 
     def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:
-        """The OpenAlex-derived part of a result: everything except the journal
-        issue date and issue label."""
+        """Candidate values from OpenAlex for the fields Crossref may leave empty.
+
+        Excludes the journal issue date and issue label, which only Crossref knows.
+        """
         primary_loc = work.get("primary_location") or {}
         source = primary_loc.get("source") or {}
         best_oa = work.get("best_oa_location") or {}
         primary_topic = work.get("primary_topic") or {}
 
-        fields = {
+        return {
             "title": work.get("title"),
+            "journal_name": source.get("display_name"),
             "publication_date": work.get("publication_date"),
             "pdf_url": best_oa.get("pdf_url"),
             "pdf_landing_page": best_oa.get("landing_page_url"),
@@ -320,15 +360,13 @@ class SearchService:
             "author": format_authors_apa(work.get("authorships", [])),
             "has_fulltext": bool(work.get("has_fulltext")),
         }
-        if source.get("display_name"):
-            fields["journal_name"] = source.get("display_name")
-        # Don't overwrite good fallbacks with None.
-        return {k: v for k, v in fields.items() if v is not None or k == "pdf_url"}
 
-    def _extract_abstract(self, inverted_index: Dict[str, List[int]] | None) -> str:
+    def _extract_abstract(
+        self, inverted_index: Dict[str, List[int]] | None
+    ) -> str | None:
         """OpenAlex delivers abstracts 'inverted' for copyright reasons. This reconstructs them."""
         if not inverted_index:
-            return "No abstract available."
+            return None
 
         word_positions: Dict[int, str] = {}
         for word, positions in inverted_index.items():
@@ -336,4 +374,4 @@ class SearchService:
                 word_positions[pos] = word
 
         abstract = " ".join(word_positions[p] for p in sorted(word_positions))
-        return re.sub(r"^(Abstract|ABSTRACT)\s*", "", abstract)
+        return re.sub(r"^(Abstract|ABSTRACT)\s*", "", abstract) or None
