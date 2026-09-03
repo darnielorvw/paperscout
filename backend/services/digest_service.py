@@ -34,9 +34,11 @@ class DigestService:
         self.download_service = download_service
 
     def _date_range(self) -> tuple[str, str]:
+        """Returns the full previous calendar month as (from_date, to_date)."""
         today = datetime.now(timezone.utc).date()
-        one_month_ago = today - timedelta(days=30)
-        return one_month_ago.isoformat(), today.isoformat()
+        last_day_prev_month = today.replace(day=1) - timedelta(days=1)
+        first_day_prev_month = last_day_prev_month.replace(day=1)
+        return first_day_prev_month.isoformat(), last_day_prev_month.isoformat()
 
     def _build_download_link(self, profile_name: str, articles: List[dict]) -> str | None:
         """Creates a long-lived, signed link to download all papers of a profile as a ZIP.
@@ -56,12 +58,41 @@ class DigestService:
         query = urlencode({"token": token, "zip_name": profile_name})
         return f"{settings.BACKEND_URL}/api/digest/download?{query}"
 
-    def _render_profile_section(
-        self, profile_name: str, articles: List[dict], download_link: str | None
+    def _build_frontend_link(
+        self, journal_ids: List[str], keywords: str, from_date: str, to_date: str
     ) -> str:
+        """Builds a link to the results page in the frontend for the full profile.
+
+        The digest email only carries the first ARTICLES_PER_PROFILE papers; this link
+        lets the user browse the complete result set and pick papers themselves.
+        """
+        params: List[tuple[str, str]] = [("journal_ids", jid) for jid in journal_ids]
+        params.append(("keywords", keywords or ""))
+        params.append(("from_date", from_date))
+        params.append(("to_date", to_date))
+        return f"{settings.FRONTEND_URL}/results?{urlencode(params)}"
+
+    def _render_profile_section(
+        self,
+        profile_name: str,
+        articles: List[dict],
+        download_link: str | None,
+        frontend_link: str | None = None,
+    ) -> str:
+        browse_note = (
+            f"<p style='margin:8px 0 16px;'>"
+            f"<a href='{escape(frontend_link)}' style='display:inline-block;padding:8px 14px;"
+            f"border:1px solid #1a56db;color:#1a56db;border-radius:6px;text-decoration:none;font-size:14px;'>"
+            f"Browse all results &amp; select papers yourself</a>"
+            f"</p>"
+            if frontend_link
+            else ""
+        )
+
         if not articles:
             return (
-                f"<h2 style='margin-top:32px;'>{escape(profile_name)}</h2>"
+                f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+                f"{browse_note}"
                 f"<p style='color:#666;'>No new results in this period.</p>"
             )
 
@@ -91,7 +122,8 @@ class DigestService:
         )
 
         return (
-            f"<h2 style='margin-top:32px;'>{escape(profile_name)}</h2>"
+            f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+            f"{browse_note}"
             f"{download_note}"
             f"<ul style='list-style:none;padding:0;'>{''.join(items)}</ul>"
         )
@@ -112,12 +144,16 @@ class DigestService:
         sections: List[str] = []
 
         for profile in profiles:
-            journal_ids = [
-                jid for jid, selected in (profile.row_selection or {}).items() if selected
-            ]
+            journal_ids = [journal.id for journal in profile.journals]
             if not journal_ids:
-                sections.append(self._render_profile_section(profile.profile_name, [], None))
+                sections.append(
+                    self._render_profile_section(profile.profile_name, [], None)
+                )
                 continue
+
+            frontend_link = self._build_frontend_link(
+                journal_ids, profile.searchTerm or "", from_date, to_date
+            )
 
             data = await self.search_service.search(
                 journal_ids=journal_ids,
@@ -130,14 +166,18 @@ class DigestService:
             articles = data.get("results", [])
             download_link = self._build_download_link(profile.profile_name, articles)
             sections.append(
-                self._render_profile_section(profile.profile_name, articles, download_link)
+                self._render_profile_section(
+                    profile.profile_name, articles, download_link, frontend_link
+                )
             )
 
         body = "".join(sections)
         return (
             "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;'>"
             f"<h1 style='margin-bottom:4px;'>Your monthly PaperScout digest</h1>"
-            f"<p style='color:#666;'>New papers from {from_date} to {to_date}, sorted by your search profiles.</p>"
+            f"<p style='color:#666;'>New papers from {from_date} to {to_date}, sorted by your search profiles. "
+            f"Each profile shows up to {ARTICLES_PER_PROFILE} papers here – use the "
+            f"“Browse all results” link to see the full list and pick papers yourself.</p>"
             f"{body}"
             "</div>"
         )

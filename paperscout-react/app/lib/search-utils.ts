@@ -1,6 +1,6 @@
 import type { DateRange } from "react-day-picker";
 import isEqual from "fast-deep-equal";
-import { formatDateForApi, normalizeDateRange } from "./date-utils";
+import { formatDateForApi } from "./date-utils";
 
 
 interface SearchParams {
@@ -35,14 +35,17 @@ export function buildResultsUrl({
 
 /**
  * Compares the filter settings of two profiles or search states.
- * The function checks for deep equality of journal selection, date range, and search term.
+ * The function checks for deep equality of journal selection and search term.
+ * Profiles no longer store a date range, so the date is intentionally not compared.
  *
  * @param a The first profile or search state.
  * @param b The second profile or search state.
  * @returns `true` if the filters are identical, otherwise `false`.
  */
-export function areFiltersEqual(a: SearchParams, b: SearchParams): boolean {
+export function areFiltersEqual(
+  a: Pick<SearchParams, "rowSelection" | "searchTerm">,
+  b: Pick<SearchParams, "rowSelection" | "searchTerm">,
+): boolean {
   return a.searchTerm.trim() === b.searchTerm.trim() &&
-         isEqual(normalizeDateRange(a.date), normalizeDateRange(b.date)) &&
          isEqual(a.rowSelection, b.rowSelection);
 }

@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
-import { Suspense, useState, useTransition } from "react";
+import { Suspense, useEffect, useState, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
+import { useSearch } from "~/context/search-context";
 import { ArticleCard } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
@@ -85,6 +86,31 @@ export default function Results() {
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(
     new Set(),
   );
+  const { setRowSelection, setSearchTerm, setDate, isInitialized } = useSearch();
+
+  // Sync the search context (journal dropdown, search term, date range) with the
+  // URL params, so a shared or bookmarked results link shows the same selection
+  // in the app UI as it does in the fetched results.
+  useEffect(() => {
+    // Wait for the context to finish restoring from sessionStorage, otherwise
+    // that restore runs after this effect and overwrites the URL-derived state.
+    if (!isInitialized) return;
+
+    const params = new URLSearchParams(location.search);
+    const journalIds = params.getAll("journal_ids");
+    if (journalIds.length === 0) return;
+
+    setRowSelection(Object.fromEntries(journalIds.map((id) => [id, true])));
+    setSearchTerm(params.get("keywords") || "");
+
+    const from = params.get("from_date");
+    const to = params.get("to_date");
+    if (from && to) {
+      setDate({ from: new Date(from), to: new Date(to) });
+    }
+    // Only re-sync when the query string itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, isInitialized]);
 
   const handleOpenPdfInNewTab = async (article: Article) => {
     if (!article.pdf_url) return;

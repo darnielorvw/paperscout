@@ -29,6 +29,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
 
   // Wrapper around setDate to ensure the time is always set to 00:00:00 UTC.
   const setDate = (newDate: DateRange | undefined) => {
+    console.log(normalizeDateRange(newDate))
     setDateState(normalizeDateRange(newDate));
   };
 

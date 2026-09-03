@@ -7,10 +7,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { DateRange } from "react-day-picker";
 import { useNavigate } from "react-router";
 import { apiFetch } from "~/lib/api";
-import { formatDateForApi } from "~/lib/date-utils";
 import { areFiltersEqual, buildResultsUrl } from "~/lib/search-utils";
 import { useSearch } from "./search-context";
 
@@ -18,7 +16,6 @@ export interface SearchProfile {
   id: number;
   name: string;
   rowSelection: Record<string, boolean>;
-  date: DateRange;
   searchTerm: string;
   emailNotifications: boolean;
 }
@@ -79,42 +76,38 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   // Effect to sync the active profile with the current search state
   useEffect(() => {
-    const currentSearchState = { rowSelection, date, searchTerm };
+    const currentSearchState = { rowSelection, searchTerm };
     // Find a profile that matches the current search settings.
     const matchingProfile = profiles.find((profile) =>
       areFiltersEqual(profile, currentSearchState)
     );
 
     setActiveProfileId(matchingProfile ? matchingProfile.id : null);
-  }, [rowSelection, date, searchTerm, profiles]);
+  }, [rowSelection, searchTerm, profiles]);
 
   const applyProfile = useCallback(
     (profileId: number) => {
       const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
         const newRowSelection = profile.rowSelection;
-        const newDate = {
-          from: profile.date.from ? new Date(profile.date.from) : undefined,
-          to: profile.date.to ? new Date(profile.date.to) : undefined,
-        };
         const newSearchTerm = profile.searchTerm;
 
-        // Update the global state with the new values.
+        // Update the global state with the new values. Profiles no longer store
+        // a date range, so the currently selected date is left untouched.
         setRowSelection(newRowSelection);
-        setDate(newDate);
         setSearchTerm(newSearchTerm);
         setActiveProfileId(profile.id);
 
         // Build the URL with the new values, not the old ones from the hook state.
         const resultsURL = buildResultsUrl({
           rowSelection: newRowSelection,
-          date: newDate,
+          date,
           searchTerm: newSearchTerm,
         });
         navigate(resultsURL, { replace: true });
       }
     },
-    [profiles, setRowSelection, setDate, setSearchTerm, navigate],
+    [profiles, date, setRowSelection, setSearchTerm, navigate],
   );
 
   const clearActiveProfile = useCallback(() => {
@@ -134,8 +127,6 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           rowSelection,
-          startDate: formatDateForApi(date?.from),
-          endDate: formatDateForApi(date?.to),
           searchTerm,
         }),
       });
@@ -144,7 +135,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         prevProfiles.map((p) => (p.id === profileId ? updatedProfile : p)),
       );
     },
-    [rowSelection, date, searchTerm],
+    [rowSelection, searchTerm],
   );
 
   const saveProfile = useCallback(
@@ -156,8 +147,6 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           name,
           settings: {
             rowSelection,
-            startDate: formatDateForApi(date?.from),
-            endDate: formatDateForApi(date?.to),
             searchTerm,
           },
         }),
@@ -166,7 +155,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setProfiles((prevProfiles) => [...prevProfiles, newProfile]);
     },
 
-    [rowSelection, date, searchTerm],
+    [rowSelection, searchTerm],
   );
 
   const toggleProfileNotifications = useCallback(

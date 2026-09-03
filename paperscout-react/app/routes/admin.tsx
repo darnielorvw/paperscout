@@ -1,4 +1,6 @@
+import { Trash2Icon } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { useLoaderData, useRevalidator } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -10,17 +12,34 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { Label } from "~/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
 import { Textarea } from "~/components/ui/textarea";
 import { useAuth } from "~/context/auth-context";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 
-export function clientLoader() {
+interface Journal {
+  id: string;
+  name: string;
+  issn: string;
+  publisher: string;
+  homepage_url: string;
+}
+
+export async function clientLoader() {
   // Only checks that the user is logged in at all - whether they're an
   // admin can only be known once the user object has loaded (see below),
   // and the API enforces admin-only access regardless of the UI.
   protectPage();
-  return null;
+  const data = await apiFetch("/api/journals");
+  return { journals: (data.results ?? []) as Journal[] };
 }
 
 interface ImportResult {
@@ -31,10 +50,25 @@ interface ImportResult {
 
 export default function AdminPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
+  const { journals } = useLoaderData<typeof clientLoader>();
+  const revalidator = useRevalidator();
   const [namesInput, setNamesInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteJournal = async (journalId: string) => {
+    setDeletingId(journalId);
+    try {
+      await apiFetch(`/api/journals/${journalId}`, { method: "DELETE" });
+      revalidator.revalidate();
+    } catch (err: any) {
+      setError(err.message || "Could not delete journal.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const names = namesInput
     .split("\n")
@@ -63,6 +97,7 @@ export default function AdminPage() {
       );
       setResult(response);
       setNamesInput("");
+      revalidator.revalidate();
     } catch (err: any) {
       setError(err.message || "Could not import journals.");
     } finally {
@@ -129,7 +164,7 @@ export default function AdminPage() {
         </Card>
         <AlertDialogBasic
           open={!!error}
-          title="Import Failed"
+          title="Error"
           description={error || ""}
           onClose={() => setError(null)}
         />
@@ -171,6 +206,58 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-xl font-bold">Manage Journals</h2>
+          <p className="text-muted-foreground">
+            {journals.length} journal{journals.length === 1 ? "" : "s"} in the
+            database.
+          </p>
+        </div>
+        <Card>
+          <CardContent>
+            {journals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No journals in the database yet.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Publisher</TableHead>
+                    <TableHead className="w-0 text-right">Delete</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {journals.map((journal) => (
+                    <TableRow key={journal.id}>
+                      <TableCell className="font-medium">
+                        {journal.name}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {journal.publisher}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={deletingId === journal.id}
+                          onClick={() => handleDeleteJournal(journal.id)}
+                          aria-label={`Delete ${journal.name}`}
+                        >
+                          <Trash2Icon className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
