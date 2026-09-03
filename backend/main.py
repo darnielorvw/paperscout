@@ -21,8 +21,10 @@ from services.digest_service import DigestService
 from services.download_service import DownloadService
 from services.mail_service import MailService
 from services.search_service import SearchService
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, SQLModel, select
 
 scheduler = AsyncIOScheduler()
@@ -378,32 +380,52 @@ async def search_articles(
     return data
 
 
-def _row_selection(profile: models.Profile) -> dict[str, bool]:
-    """Serialises a profile's linked journals into the {journal_id: True} map the
-    frontend expects."""
-    return {journal.id: True for journal in profile.journals}
-
-
-def _resolve_journals(
+def _valid_journal_ids(
     session: Session, row_selection: dict[str, bool]
-) -> list[models.Journals]:
-    """Turns the frontend's {journal_id: bool} map into real Journal rows,
-    silently dropping ids that are not (or no longer) in the database."""
+) -> list[str]:
+    """Filters the frontend's {journal_id: bool} map down to the ids that are
+    actually selected AND still exist in the database."""
     selected_ids = [jid for jid, selected in (row_selection or {}).items() if selected]
     if not selected_ids:
         return []
     return list(
         session.exec(
-            select(models.Journals).where(models.Journals.id.in_(selected_ids))
+            select(models.Journals.id).where(models.Journals.id.in_(selected_ids))
         ).all()
     )
 
 
-def _profile_response(profile: models.Profile) -> dict:
+def _set_profile_journals(
+    session: Session, profile_id: int, journal_ids: list[str]
+) -> None:
+    """Replaces a profile's journal links with `journal_ids` using two bulk
+    statements (one DELETE, one multi-row INSERT), so the number of round trips
+    to the database stays constant instead of growing with the selection size."""
+    session.execute(
+        sql_delete(models.ProfileJournalLink).where(
+            models.ProfileJournalLink.profile_id == profile_id
+        )
+    )
+    if journal_ids:
+        session.execute(
+            sqlite_insert(models.ProfileJournalLink).values(
+                [
+                    {"profile_id": profile_id, "journal_id": jid}
+                    for jid in journal_ids
+                ]
+            )
+        )
+
+
+def _profile_response(
+    profile: models.Profile, journal_ids: list[str] | None = None
+) -> dict:
+    if journal_ids is None:
+        journal_ids = [journal.id for journal in profile.journals]
     return {
         "id": profile.id,
         "name": profile.profile_name,
-        "rowSelection": _row_selection(profile),
+        "rowSelection": {jid: True for jid in journal_ids},
         "searchTerm": profile.searchTerm,
         "emailNotifications": profile.email_notifications,
     }
@@ -417,18 +439,20 @@ async def create_profile(
 ):
     """Creates a new search profile for the current user."""
 
+    journal_ids = _valid_journal_ids(session, profile_data.settings.rowSelection)
+
     new_profile = models.Profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
         searchTerm=profile_data.settings.searchTerm,
         email_notifications=profile_data.settings.emailNotifications,
-        journals=_resolve_journals(session, profile_data.settings.rowSelection),
     )
 
     try:
         session.add(new_profile)
+        session.flush()
+        _set_profile_journals(session, new_profile.id, journal_ids)
         session.commit()
-        session.refresh(new_profile)
 
     except IntegrityError:
         session.rollback()
@@ -437,7 +461,8 @@ async def create_profile(
             detail="You already have a profile with this name.",
         )
 
-    return _profile_response(new_profile)
+    session.refresh(new_profile)
+    return _profile_response(new_profile, journal_ids)
 
 
 @app.get("/api/profiles")
@@ -447,7 +472,9 @@ async def get_profiles(
 ):
     """Returns all search profiles of the current user."""
     profiles = session.exec(
-        select(models.Profile).where(models.Profile.user_id == current_user.id)
+        select(models.Profile)
+        .where(models.Profile.user_id == current_user.id)
+        .options(selectinload(models.Profile.journals))
     ).all()
 
     return {"results": [_profile_response(p) for p in profiles]}
@@ -465,15 +492,16 @@ async def update_profile(
     if not profile or profile.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Profile not found.")
 
+    journal_ids = _valid_journal_ids(session, settings.rowSelection)
+
     profile.searchTerm = settings.searchTerm
     profile.email_notifications = settings.emailNotifications
-    profile.journals = _resolve_journals(session, settings.rowSelection)
-
     session.add(profile)
+    _set_profile_journals(session, profile.id, journal_ids)
     session.commit()
     session.refresh(profile)
 
-    return _profile_response(profile)
+    return _profile_response(profile, journal_ids)
 
 
 @app.patch("/api/profiles/{profile_id}/notifications")

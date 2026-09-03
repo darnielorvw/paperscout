@@ -10,6 +10,7 @@ from database.database import engine
 from services.download_service import DownloadService
 from services.mail_service import MailService
 from services.search_service import SearchService
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 logging.basicConfig(
@@ -131,10 +132,12 @@ class DigestService:
     async def _build_user_digest(self, session: Session, user: models.User) -> str | None:
         """Builds the HTML digest email for a user. Returns None if they have no profiles."""
         profiles = session.exec(
-            select(models.Profile).where(
+            select(models.Profile)
+            .where(
                 models.Profile.user_id == user.id,
                 models.Profile.email_notifications == True,  # noqa: E712
             )
+            .options(selectinload(models.Profile.journals))
         ).all()
 
         if not profiles:
