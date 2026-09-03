@@ -1,6 +1,5 @@
 import { Trash2Icon } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { useLoaderData, useRevalidator } from "react-router";
 import { AlertDialogBasic } from "~/components/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
@@ -22,24 +21,17 @@ import {
 } from "~/components/ui/table";
 import { Textarea } from "~/components/ui/textarea";
 import { useAuth } from "~/context/auth-context";
+import { useJournals } from "~/context/journals-context";
 import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 
-interface Journal {
-  id: string;
-  name: string;
-  issn: string;
-  publisher: string;
-  homepage_url: string;
-}
-
-export async function clientLoader() {
+export function clientLoader() {
   // Only checks that the user is logged in at all - whether they're an
   // admin can only be known once the user object has loaded (see below),
   // and the API enforces admin-only access regardless of the UI.
+  // The journal list itself comes from JournalsProvider.
   protectPage();
-  const data = await apiFetch("/api/journals");
-  return { journals: (data.results ?? []) as Journal[] };
+  return null;
 }
 
 interface ImportResult {
@@ -50,8 +42,7 @@ interface ImportResult {
 
 export default function AdminPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
-  const { journals } = useLoaderData<typeof clientLoader>();
-  const revalidator = useRevalidator();
+  const { journals, reloadJournals } = useJournals();
   const [namesInput, setNamesInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +53,7 @@ export default function AdminPage() {
     setDeletingId(journalId);
     try {
       await apiFetch(`/api/journals/${journalId}`, { method: "DELETE" });
-      revalidator.revalidate();
+      await reloadJournals();
     } catch (err: any) {
       setError(err.message || "Could not delete journal.");
     } finally {
@@ -97,7 +88,7 @@ export default function AdminPage() {
       );
       setResult(response);
       setNamesInput("");
-      revalidator.revalidate();
+      await reloadJournals();
     } catch (err: any) {
       setError(err.message || "Could not import journals.");
     } finally {

@@ -36,6 +36,7 @@ export function ArticleCard({
             <Checkbox
               id={`select-${article.id}`}
               checked={isSelected}
+              disabled={!article.has_fulltext}
               onCheckedChange={(checked) =>
                 onToggleSelect(article.id, checked === true)
               }

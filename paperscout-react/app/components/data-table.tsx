@@ -12,21 +12,21 @@ import {
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { Suspense } from "react";
-import { Await, useAsyncValue } from "react-router";
 import { SkeletonTable } from "./skeletons";
 import { Field } from "./ui/field";
 import { Input } from "./ui/input";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
-  initialData: Promise<TData[]>;
+  data: TData[];
+  isLoading?: boolean;
   rowSelection?: any;
   onRowSelectionChange?: any;
 }
 
 interface DataTableInnerProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
+  data: TData[];
   rowSelection?: any;
   onRowSelectionChange?: any;
   columnFilters: ColumnFiltersState;
@@ -35,12 +35,12 @@ interface DataTableInnerProps<TData, TValue> {
 
 function DataTableInner<TData, TValue>({
   columns,
+  data,
   rowSelection,
   onRowSelectionChange,
   columnFilters,
   onColumnFiltersChange,
 }: DataTableInnerProps<TData, TValue>) {
-  const data = useAsyncValue() as TData[];
   const [sorting, setSorting] = React.useState<SortingState>([]);
 
   const table = useReactTable({
@@ -111,7 +111,8 @@ function DataTableInner<TData, TValue>({
 
 export function DataTable<TData, TValue>({
   columns,
-  initialData,
+  data,
+  isLoading = false,
   rowSelection,
   onRowSelectionChange,
 }: DataTableProps<TData, TValue>) {
@@ -134,17 +135,18 @@ export function DataTable<TData, TValue>({
         />
       </Field>
 
-      <Suspense fallback={<SkeletonTable />}>
-        <Await resolve={initialData}>
-          <DataTableInner
-            columns={columns}
-            rowSelection={rowSelection}
-            onRowSelectionChange={onRowSelectionChange}
-            columnFilters={columnFilters}
-            onColumnFiltersChange={setColumnFilters}
-          />
-        </Await>
-      </Suspense>
+      {isLoading ? (
+        <SkeletonTable />
+      ) : (
+        <DataTableInner
+          columns={columns}
+          data={data}
+          rowSelection={rowSelection}
+          onRowSelectionChange={onRowSelectionChange}
+          columnFilters={columnFilters}
+          onColumnFiltersChange={setColumnFilters}
+        />
+      )}
     </div>
   );
 }
