@@ -44,11 +44,11 @@ class DigestService:
     def _build_download_link(self, profile_name: str, articles: List[dict]) -> str | None:
         """Creates a long-lived, signed link to download all papers of a profile as a ZIP.
 
-        Deliberately encodes only the short OpenAlex IDs (not the full URLs or titles) in the
+        Deliberately encodes only the bare DOIs (not the full URLs or titles) in the
         token, so the link stays short enough not to be truncated by mail clients.
         """
         clean_ids = [
-            a["id"].split("/")[-1] for a in articles if a.get("id")
+            a["id"] for a in articles if a.get("id")
         ][:MAX_DOWNLOAD_PAPERS_PER_PROFILE]
         if not clean_ids:
             return None
@@ -148,18 +148,20 @@ class DigestService:
 
         for profile in profiles:
             journal_ids = [journal.id for journal in profile.journals]
+            issns = [journal.issn for journal in profile.journals if journal.issn]
             if not journal_ids:
                 sections.append(
                     self._render_profile_section(profile.profile_name, [], None)
                 )
                 continue
 
+            # The frontend link keeps the OpenAlex ids the journal picker knows.
             frontend_link = self._build_frontend_link(
                 journal_ids, profile.searchTerm or "", from_date, to_date
             )
 
             data = await self.search_service.search(
-                journal_ids=journal_ids,
+                issns=issns,
                 keywords=profile.searchTerm or "",
                 from_date=from_date,
                 to_date=to_date,

@@ -11,6 +11,13 @@ import type { Article } from "~/routes/results";
 import { Checkbox } from "./ui/checkbox";
 import { Field, FieldLabel } from "./ui/field";
 
+/** Formats an ISO date as "YYYY-MM", or returns null for missing/invalid dates. */
+function formatMonth(date: string | null | undefined): string | null {
+  if (!date) return null;
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? null : format(parsed, "yyyy-MM");
+}
+
 type ArticleCardProps = {
   article: Article;
   openingPdf: boolean;
@@ -47,9 +54,22 @@ export function ArticleCard({
           </Field>
           <Badge variant="outline">{article.journal_name}</Badge>
           <Badge variant="outline">
-            {article.author} ({format(article.publication_date, "yyyy-MM")})
+            {article.author}
+            {formatMonth(article.publication_date) &&
+              ` · Paper ${formatMonth(article.publication_date)}`}
           </Badge>
-          <Badge variant="outline">{article.topic}</Badge>
+          {(formatMonth(article.journal_publication_date) || article.issue) && (
+            <Badge variant="outline">
+              {[
+                formatMonth(article.journal_publication_date) &&
+                  `Journal ${formatMonth(article.journal_publication_date)}`,
+                article.issue,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Badge>
+          )}
+          {article.topic && <Badge variant="outline">{article.topic}</Badge>}
         </div>
         <div>
           <Tooltip>

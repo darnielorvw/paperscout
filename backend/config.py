@@ -65,7 +65,10 @@ class Settings(BaseSettings):
         os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24")
     )
 
-    # OpenAlex API configuration
+    # OpenAlex API configuration (still used by the PDF download service)
     OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
+
+    # Contact address sent to Crossref for the "polite pool" (falls back to SMTP_FROM).
+    CROSSREF_MAILTO: str = os.getenv("CROSSREF_MAILTO", "")
 
 settings = Settings()

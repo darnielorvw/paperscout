@@ -19,6 +19,8 @@ export type Article = {
   title: string;
   doi: string | null;
   publication_date: string;
+  journal_publication_date: string | null;
+  issue: string | null;
   pdf_landing_page: string;
   pdf_url: string;
   journal_name: string;

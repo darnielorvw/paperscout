@@ -276,14 +276,19 @@ async def test():
 
 
 def _journal_values(oa_item: dict) -> dict | None:
-    """Maps a raw OpenAlex 'source' item to our Journals columns, or None if unusable."""
+    """Maps a raw OpenAlex 'source' item to our Journals columns, or None if unusable.
+
+    The OpenAlex source id stays the primary key; the ISSN is what we later hand
+    to Crossref for the article search, so a source without one is unusable.
+    """
     oa_id = oa_item.get("id", "").split("/")[-1]
-    if not oa_id:
+    issn = oa_item.get("issn_l") or ""
+    if not oa_id or not issn:
         return None
     return {
         "id": oa_id,
         "name": oa_item.get("display_name"),
-        "issn": oa_item.get("issn_l") or "",
+        "issn": issn,
         "publisher": oa_item.get("host_organization_name") or "Unknown",
         "homepage": oa_item.get("homepage_url") or "",
     }
@@ -366,11 +371,12 @@ async def search_articles(
     _: models.User = Depends(auth_service.get_current_user),
 ):
     """Searches for scientific articles in the selected journals."""
-    statement = select(models.Journals.id).where(models.Journals.id.in_(journal_ids))
-    oa_ids = session.exec(statement).all()
+    # journal_ids are OpenAlex source ids; Crossref needs the ISSNs.
+    statement = select(models.Journals.issn).where(models.Journals.id.in_(journal_ids))
+    issns = session.exec(statement).all()
 
     data = await search_service.search(
-        journal_ids=[id for id in oa_ids if id],
+        issns=[issn for issn in issns if issn],
         keywords=keywords,
         from_date=from_date,
         to_date=to_date,
@@ -401,13 +407,13 @@ def _set_profile_journals(
     """Replaces a profile's journal links with `journal_ids` using two bulk
     statements (one DELETE, one multi-row INSERT), so the number of round trips
     to the database stays constant instead of growing with the selection size."""
-    session.execute(
+    session.exec(
         sql_delete(models.ProfileJournalLink).where(
             models.ProfileJournalLink.profile_id == profile_id
         )
     )
     if journal_ids:
-        session.execute(
+        session.exec(
             sqlite_insert(models.ProfileJournalLink).values(
                 [
                     {"profile_id": profile_id, "journal_id": jid}
@@ -622,12 +628,12 @@ async def delete_account(
         select(models.Profile.id).where(models.Profile.user_id == current_user.id)
     ).all()
     if profile_ids:
-        session.execute(
+        session.exec(
             sql_delete(models.ProfileJournalLink).where(
                 models.ProfileJournalLink.profile_id.in_(profile_ids)
             )
         )
-        session.execute(
+        session.exec(
             sql_delete(models.Profile).where(models.Profile.id.in_(profile_ids))
         )
 
