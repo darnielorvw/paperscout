@@ -534,6 +534,9 @@ async def delete_profile(
     profile = session.get(models.Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found.")
+    # Clear the journal links in one bulk statement so the ORM cascade on
+    # `session.delete` has nothing left to remove row by row.
+    _set_profile_journals(session, profile.id, [])
     session.delete(profile)
     session.commit()
 
@@ -615,11 +618,18 @@ async def delete_account(
     ):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
-    profiles = session.exec(
-        select(models.Profile).where(models.Profile.user_id == current_user.id)
+    profile_ids = session.exec(
+        select(models.Profile.id).where(models.Profile.user_id == current_user.id)
     ).all()
-    for profile in profiles:
-        session.delete(profile)
+    if profile_ids:
+        session.execute(
+            sql_delete(models.ProfileJournalLink).where(
+                models.ProfileJournalLink.profile_id.in_(profile_ids)
+            )
+        )
+        session.execute(
+            sql_delete(models.Profile).where(models.Profile.id.in_(profile_ids))
+        )
 
     session.delete(current_user)
     session.commit()
