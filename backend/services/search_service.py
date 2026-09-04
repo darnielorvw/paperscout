@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 import httpx
 from dotenv import load_dotenv
+
 from lib.cache import LRUCache
 
 load_dotenv()
@@ -25,7 +26,9 @@ DATE_FILTER_FROM = "from-print-pub-date"
 DATE_FILTER_UNTIL = "until-print-pub-date"
 
 # Crossref: we only need the DOI, the journal issue date and the issue label.
-_CROSSREF_SELECT = "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+_CROSSREF_SELECT = (
+    "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+)
 
 # OpenAlex: the full metadata for a work.
 _OPENALEX_SELECT = (
@@ -59,10 +62,7 @@ def format_authors_apa(authorships: list) -> str:
 def format_authors_apa_crossref(authors: list) -> str:
     """Short APA-style author string from a Crossref `author` list."""
     return _apa_from_last_names(
-        [
-            (a.get("family") or a.get("name") or "").strip()
-            for a in (authors or [])
-        ]
+        [(a.get("family") or a.get("name") or "").strip() for a in (authors or [])]
     )
 
 
@@ -110,7 +110,7 @@ def _clean_doi(value: str) -> str:
     doi = (value or "").strip().lower()
     for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
         if doi.startswith(prefix):
-            doi = doi[len(prefix):]
+            doi = doi[len(prefix) :]
             break
     return doi
 
@@ -123,17 +123,11 @@ class SearchService:
         self.openalex_base = "https://api.openalex.org"
 
         # Crossref's "polite pool" wants a contact address on every request.
-        self.mailto = (
-            os.environ.get("CROSSREF_MAILTO")
-            or os.environ.get("SMTP_FROM")
-            or ""
-        )
+        self.mailto = os.environ.get("CROSSREF_MAILTO") or os.environ.get("SMTP_FROM") or ""
 
         self.cache = LRUCache(max_size=100, ttl=3600)
 
-    async def _fetch_crossref(
-        self, endpoint: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _fetch_crossref(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
         headers = {"User-Agent": f"PaperScout/1.0 (mailto:{self.mailto})"}
         async with httpx.AsyncClient(
             base_url=self.crossref_base, timeout=15.0, headers=headers
@@ -148,12 +142,8 @@ class SearchService:
                 print(f"Error during Crossref request ({endpoint}): {e}")
                 return {}
 
-    async def _fetch_openalex(
-        self, endpoint: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        async with httpx.AsyncClient(
-            base_url=self.openalex_base, timeout=10.0
-        ) as client:
+    async def _fetch_openalex(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        async with httpx.AsyncClient(base_url=self.openalex_base, timeout=10.0) as client:
             try:
                 api_key = os.environ.get("API_KEY")
                 params = {"api_key": api_key, **params}
@@ -361,9 +351,7 @@ class SearchService:
             "has_fulltext": bool(work.get("has_fulltext")),
         }
 
-    def _extract_abstract(
-        self, inverted_index: Dict[str, List[int]] | None
-    ) -> str | None:
+    def _extract_abstract(self, inverted_index: Dict[str, List[int]] | None) -> str | None:
         """OpenAlex delivers abstracts 'inverted' for copyright reasons. This reconstructs them."""
         if not inverted_index:
             return None

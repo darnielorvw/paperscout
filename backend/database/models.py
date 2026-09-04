@@ -36,9 +36,7 @@ class ProfileJournalLink(SQLModel, table=True):
 
 
 class Profile(SQLModel, table=True):
-    __table_args__ = (
-        UniqueConstraint("user_id", "profile_name", name="uq_profile_user_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "profile_name", name="uq_profile_user_name"),)
 
     id: Optional[int] = Field(default=None, primary_key=True)
     profile_name: str

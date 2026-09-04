@@ -4,18 +4,17 @@ from html import escape
 from typing import List
 from urllib.parse import urlencode
 
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
+
 from config import settings
 from database import models
 from database.database import engine
 from services.download_service import DownloadService
 from services.mail_service import MailService
 from services.search_service import SearchService
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 ARTICLES_PER_PROFILE = 25
 MAX_DOWNLOAD_PAPERS_PER_PROFILE = 25
@@ -47,9 +46,7 @@ class DigestService:
         Deliberately encodes only the bare DOIs (not the full URLs or titles) in the
         token, so the link stays short enough not to be truncated by mail clients.
         """
-        clean_ids = [
-            a["id"] for a in articles if a.get("id")
-        ][:MAX_DOWNLOAD_PAPERS_PER_PROFILE]
+        clean_ids = [a["id"] for a in articles if a.get("id")][:MAX_DOWNLOAD_PAPERS_PER_PROFILE]
         if not clean_ids:
             return None
 
@@ -103,7 +100,12 @@ class DigestService:
             author = escape(article.get("author") or "")
             journal = escape(article.get("journal_name") or "")
             date = escape(article.get("publication_date") or "")
-            link = article.get("pdf_url") or article.get("pdf_landing_page") or article.get("doi") or "#"
+            link = (
+                article.get("pdf_url")
+                or article.get("pdf_landing_page")
+                or article.get("doi")
+                or "#"
+            )
             items.append(
                 "<li style='margin-bottom:14px;'>"
                 f"<a href='{escape(link)}' style='font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
@@ -150,9 +152,7 @@ class DigestService:
             journal_ids = [journal.id for journal in profile.journals]
             issns = [journal.issn for journal in profile.journals if journal.issn]
             if not journal_ids:
-                sections.append(
-                    self._render_profile_section(profile.profile_name, [], None)
-                )
+                sections.append(self._render_profile_section(profile.profile_name, [], None))
                 continue
 
             # The frontend link keeps the OpenAlex ids the journal picker knows.

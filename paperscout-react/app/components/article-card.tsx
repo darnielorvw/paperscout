@@ -53,22 +53,25 @@ export function ArticleCard({
             </FieldLabel>
           </Field>
           <Badge variant="outline">{article.journal_name}</Badge>
-          <Badge variant="outline">
-            {article.author}
-            {formatMonth(article.publication_date) &&
-              ` · ${formatMonth(article.publication_date)}`}
-          </Badge>
           {(formatMonth(article.journal_publication_date) || article.issue) && (
             <Badge variant="outline">
               {[
-                formatMonth(article.journal_publication_date) &&
-                  `Journal ${formatMonth(article.journal_publication_date)}`,
                 article.issue,
+                formatMonth(article.journal_publication_date) &&
+                  formatMonth(article.journal_publication_date),
               ]
                 .filter(Boolean)
                 .join(" · ")}
             </Badge>
           )}
+          {article.author && (
+            <Badge variant="outline">
+              {article.author}
+              {formatMonth(article.publication_date) &&
+                ` · ${formatMonth(article.publication_date)}`}
+            </Badge>
+          )}
+
           {article.topic && <Badge variant="outline">{article.topic}</Badge>}
         </div>
         <div>

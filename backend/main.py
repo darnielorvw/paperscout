@@ -5,59 +5,58 @@ from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from config import settings
-from database import models
-from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from schemas import (ChangeEmailRequest, ChangePasswordRequest,
-                     DeleteAccountRequest, JournalImportByName, ProfileCreate,
-                     ProfileNotificationsUpdate, ProfileSettings, UserCreate,
-                     UserPublic)
-from services import auth_service, user_service
-from services.digest_service import DigestService
-from services.download_service import DownloadService
-from services.mail_service import MailService
-from services.search_service import SearchService
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, SQLModel, select
 
+from config import settings
+from database import models
+from database.database import engine, get_session
+from schemas import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    JournalImportByName,
+    ProfileCreate,
+    ProfileNotificationsUpdate,
+    ProfileSettings,
+    UserCreate,
+    UserPublic,
+)
+from services import auth_service, user_service
+from services.digest_service import DigestService
+from services.download_service import DownloadService
+from services.mail_service import MailService
+from services.search_service import SearchService
+
 scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
     SQLModel.metadata.create_all(engine)
 
     with engine.connect() as conn:
-        existing_columns = {
-            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
-        }
+        existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         if "email_notifications" not in existing_columns:
             conn.exec_driver_sql(
                 "ALTER TABLE profile ADD COLUMN email_notifications BOOLEAN DEFAULT 1"
             )
             conn.commit()
 
-        existing_user_columns = {
-            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")
-        }
+        existing_user_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(user)")}
         if "is_admin" not in existing_user_columns:
-            conn.exec_driver_sql(
-                "ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0"
-            )
+            conn.exec_driver_sql("ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0")
             conn.commit()
 
         # Profiles no longer store a date range - drop the now-unused columns.
-        existing_columns = {
-            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
-        }
+        existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         for column in ("start_date", "end_date"):
             if column in existing_columns:
                 conn.exec_driver_sql(f"ALTER TABLE profile DROP COLUMN {column}")
@@ -67,15 +66,10 @@ async def lifespan(app: FastAPI):
         # and de-duplicated via a globally unique `settings_hash`. They are now
         # normalised into the `profilejournallink` join table, and profile names
         # are unique per user instead of globally. Migrate legacy profile rows.
-        legacy_columns = {
-            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")
-        }
+        legacy_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         if "row_selection" in legacy_columns or "settings_hash" in legacy_columns:
             if "row_selection" in legacy_columns:
-                valid_ids = {
-                    row[0]
-                    for row in conn.exec_driver_sql("SELECT id FROM journals")
-                }
+                valid_ids = {row[0] for row in conn.exec_driver_sql("SELECT id FROM journals")}
                 for profile_id, raw in conn.exec_driver_sql(
                     "SELECT id, row_selection FROM profile"
                 ).fetchall():
@@ -141,10 +135,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="PaperScout API", lifespan=lifespan, version="1.0")
 
 # CORS mapping: allows your React frontend (Vite usually runs on port 5173) to access the API
-_cors_origins = sorted(
-    {settings.FRONTEND_URL}
-   
-)
+_cors_origins = sorted({settings.FRONTEND_URL})
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -226,12 +217,8 @@ async def login_for_access_token(
     session: Session = Depends(get_session),
 ):
     """Authenticates a user and returns a JWT token."""
-    user = auth_service.get_user_by_email(
-        session, form_data.username
-    )  # username is the email
-    if not user or not user_service.verify_password(
-        form_data.password, user.hashed_password
-    ):
+    user = auth_service.get_user_by_email(session, form_data.username)  # username is the email
+    if not user or not user_service.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=401,
             detail="Incorrect email or password.",
@@ -349,10 +336,7 @@ async def delete_journal(
         shown = ", ".join(entries[:5]) + (" …" if len(entries) > 5 else "")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Journal is used by {len(entries)} profile(s) and cannot "
-                f"be deleted: {shown}"
-            ),
+            detail=(f"Journal is used by {len(entries)} profile(s) and cannot be deleted: {shown}"),
         )
 
     session.delete(journal)
@@ -386,24 +370,18 @@ async def search_articles(
     return data
 
 
-def _valid_journal_ids(
-    session: Session, row_selection: dict[str, bool]
-) -> list[str]:
+def _valid_journal_ids(session: Session, row_selection: dict[str, bool]) -> list[str]:
     """Filters the frontend's {journal_id: bool} map down to the ids that are
     actually selected AND still exist in the database."""
     selected_ids = [jid for jid, selected in (row_selection or {}).items() if selected]
     if not selected_ids:
         return []
     return list(
-        session.exec(
-            select(models.Journals.id).where(models.Journals.id.in_(selected_ids))
-        ).all()
+        session.exec(select(models.Journals.id).where(models.Journals.id.in_(selected_ids))).all()
     )
 
 
-def _set_profile_journals(
-    session: Session, profile_id: int, journal_ids: list[str]
-) -> None:
+def _set_profile_journals(session: Session, profile_id: int, journal_ids: list[str]) -> None:
     """Replaces a profile's journal links with `journal_ids` using two bulk
     statements (one DELETE, one multi-row INSERT), so the number of round trips
     to the database stays constant instead of growing with the selection size."""
@@ -415,23 +393,18 @@ def _set_profile_journals(
     if journal_ids:
         session.exec(
             sqlite_insert(models.ProfileJournalLink).values(
-                [
-                    {"profile_id": profile_id, "journal_id": jid}
-                    for jid in journal_ids
-                ]
+                [{"profile_id": profile_id, "journal_id": jid} for jid in journal_ids]
             )
         )
 
 
-def _profile_response(
-    profile: models.Profile, journal_ids: list[str] | None = None
-) -> dict:
+def _profile_response(profile: models.Profile, journal_ids: list[str] | None = None) -> dict:
     if journal_ids is None:
         journal_ids = [journal.id for journal in profile.journals]
     return {
         "id": profile.id,
         "name": profile.profile_name,
-        "rowSelection": {jid: True for jid in journal_ids},
+        "rowSelection": dict.fromkeys(journal_ids, True),
         "searchTerm": profile.searchTerm,
         "emailNotifications": profile.email_notifications,
     }
@@ -465,7 +438,7 @@ async def create_profile(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You already have a profile with this name.",
-        )
+        ) from None
 
     session.refresh(new_profile)
     return _profile_response(new_profile, journal_ids)
@@ -563,17 +536,13 @@ async def update_email(
 ):
     """Changes the email address of the current user and issues a new token,
     since the old token was issued for the previous email address."""
-    if not user_service.verify_password(
-        payload.currentPassword, current_user.hashed_password
-    ):
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if payload.newEmail != current_user.email and auth_service.get_user_by_email(
         session, payload.newEmail
     ):
-        raise HTTPException(
-            status_code=400, detail="This email address is already in use."
-        )
+        raise HTTPException(status_code=400, detail="This email address is already in use.")
 
     current_user.email = payload.newEmail
     session.add(current_user)
@@ -594,9 +563,7 @@ async def update_password(
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Changes the password of the current user."""
-    if not user_service.verify_password(
-        payload.currentPassword, current_user.hashed_password
-    ):
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     if len(payload.newPassword) < 8:
@@ -619,9 +586,7 @@ async def delete_account(
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Irrevocably deletes the current user's account, including all search profiles."""
-    if not user_service.verify_password(
-        payload.currentPassword, current_user.hashed_password
-    ):
+    if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
 
     profile_ids = session.exec(
@@ -633,9 +598,7 @@ async def delete_account(
                 models.ProfileJournalLink.profile_id.in_(profile_ids)
             )
         )
-        session.exec(
-            sql_delete(models.Profile).where(models.Profile.id.in_(profile_ids))
-        )
+        session.exec(sql_delete(models.Profile).where(models.Profile.id.in_(profile_ids)))
 
     session.delete(current_user)
     session.commit()

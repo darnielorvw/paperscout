@@ -1,7 +1,6 @@
 import asyncio
 import io
 import logging
-import os
 import re
 import unicodedata
 import zipfile
@@ -9,12 +8,11 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 import jwt
-from config import settings
 from fastapi import HTTPException
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+from config import settings
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class DownloadService:
@@ -33,25 +31,21 @@ class DownloadService:
             "exp": datetime.now(timezone.utc)
             + timedelta(minutes=self.DOWNLOAD_TOKEN_EXPIRE_MINUTES),
         }
-        return jwt.encode(
-            to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-        )
+        return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
     def decode_download_token(self, token: str) -> dict:
         """Decodes and validates a download token."""
         try:
-            payload = jwt.decode(
-                token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
             filepath: str = payload.get("filepath")
             filename: str = payload.get("filename")
             if not filepath or not filename:
                 raise HTTPException(status_code=400, detail="Invalid token format.")
             return payload
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Download link expired.")
+            raise HTTPException(status_code=401, detail="Download link expired.") from None
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid download link.")
+            raise HTTPException(status_code=401, detail="Invalid download link.") from None
 
     def create_bulk_download_token(self, work_ids: list[str], expire_days: int) -> str:
         """Creates a long-lived, signed token for a bulk ZIP download (e.g. for digest emails).
@@ -63,30 +57,24 @@ class DownloadService:
             "work_ids": work_ids,
             "exp": datetime.now(timezone.utc) + timedelta(days=expire_days),
         }
-        return jwt.encode(
-            to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-        )
+        return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
     def decode_bulk_download_token(self, token: str) -> dict:
         """Decodes and validates a bulk download token."""
         try:
-            payload = jwt.decode(
-                token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-            )
+            payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
             if not payload.get("work_ids"):
                 raise HTTPException(status_code=400, detail="Invalid token format.")
             return payload
         except jwt.ExpiredSignatureError:
-            raise HTTPException(status_code=401, detail="Download link expired.")
+            raise HTTPException(status_code=401, detail="Download link expired.") from None
         except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid download link.")
+            raise HTTPException(status_code=401, detail="Invalid download link.") from None
 
     def sanitize_filename(self, title: str, fallback: str) -> str:
         """Creates a safe filename from a title and a fallback."""
         normalized = unicodedata.normalize("NFKD", title or fallback)
-        ascii_text = "".join(
-            char for char in normalized if not unicodedata.combining(char)
-        )
+        ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
         cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", ascii_text).strip("._-")
         return cleaned or fallback
 
@@ -94,8 +82,7 @@ class DownloadService:
         """Downloads a single PDF file from OpenAlex."""
         clean_id = openalex_id.split("/")[-1]
         download_url = (
-            f"https://content.openalex.org/works/{clean_id}.pdf"
-            f"?api_key={settings.OPENALEX_API_KEY}"
+            f"https://content.openalex.org/works/{clean_id}.pdf?api_key={settings.OPENALEX_API_KEY}"
         )
 
         headers = {
@@ -115,10 +102,7 @@ class DownloadService:
                 return None
 
             content_type = response.headers.get("Content-Type", "")
-            if (
-                "application/pdf" not in content_type
-                and "octet-stream" not in content_type
-            ):
+            if "application/pdf" not in content_type and "octet-stream" not in content_type:
                 logging.warning(
                     f"Download failed for {download_url}: Expected PDF, got '{content_type}'."
                 )
@@ -127,14 +111,10 @@ class DownloadService:
             return response.content
 
         except httpx.RequestError as e:
-            logging.error(
-                f"Network error downloading from OpenAlex ({download_url}): {e}"
-            )
+            logging.error(f"Network error downloading from OpenAlex ({download_url}): {e}")
             return None
         except Exception as e:
-            logging.error(
-                f"Unexpected error downloading from OpenAlex ({download_url}): {e}"
-            )
+            logging.error(f"Unexpected error downloading from OpenAlex ({download_url}): {e}")
             return None
 
     async def download_pdf_from_openalex(
