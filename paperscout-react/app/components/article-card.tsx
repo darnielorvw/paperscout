@@ -60,7 +60,6 @@ export function ArticleCard({
                 formatMonth(article.journal_publication_date) &&
                   formatMonth(article.journal_publication_date),
               ]
-    
                 .filter(Boolean)
                 .join(" · ")}
             </Badge>
