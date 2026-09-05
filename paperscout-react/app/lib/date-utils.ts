@@ -37,7 +37,8 @@ export function formatDateForApi(date: Date | undefined | null): string | undefi
 }
 
 /**
- * Formats a date for display in the user interface.
+ * Formats a date for display in the user interface. This is the single
+ * source of truth for human-readable dates across the app.
  * @param date The date to format.
  * @returns A string in the format "MMM yyyy" or an empty string.
  */

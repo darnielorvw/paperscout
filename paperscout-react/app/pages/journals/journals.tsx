@@ -1,13 +1,14 @@
 "use client";
 
+import type { OnChangeFn, RowSelectionState } from "@tanstack/react-table";
 import { DataTable } from "~/components/data-table";
 import { columns, type Journal } from "./columns";
 
 interface JournalsPageProps {
   data: Journal[];
   isLoading?: boolean;
-  rowSelection: any;
-  onRowSelectionChange: (selection: any) => void;
+  rowSelection: RowSelectionState;
+  onRowSelectionChange: OnChangeFn<RowSelectionState>;
 }
 
 export default function JournalsPage({

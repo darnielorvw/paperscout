@@ -37,7 +37,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const token = localStorage.getItem("auth_token");
     if (token) {
       try {
-        const userData = await apiFetch("/api/users/me", { method: "GET" }, false);
+        const userData = await apiFetch<User>(
+          "/api/users/me",
+          { method: "GET" },
+          false,
+        );
         setUser(userData);
       } catch (error) {
         if (error instanceof UnauthorizedError) {
@@ -55,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (token: string) => {
     localStorage.setItem("auth_token", token);
-    const userData = await apiFetch("/api/users/me", { method: "GET" });
+    const userData = await apiFetch<User>("/api/users/me", { method: "GET" });
     setUser(userData);
     navigate("/");
   }, [navigate]);
@@ -64,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // changed, which invalidates the old token (whose "sub" is the old email).
   const refreshSession = useCallback(async (token: string) => {
     localStorage.setItem("auth_token", token);
-    const userData = await apiFetch("/api/users/me", { method: "GET" });
+    const userData = await apiFetch<User>("/api/users/me", { method: "GET" });
     setUser(userData);
   }, []);
 

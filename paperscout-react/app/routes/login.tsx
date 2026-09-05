@@ -20,7 +20,10 @@ export default function LoginPage() {
     loginFormData.append("username", email);
     loginFormData.append("password", password);
 
-    const loginResponse = await apiFetch(
+    const loginResponse = await apiFetch<{
+      access_token?: string;
+      detail?: string;
+    }>(
       "/api/login",
       {
         method: "POST",

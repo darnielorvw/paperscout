@@ -54,8 +54,8 @@ export default function AdminPage() {
     try {
       await apiFetch(`/api/journals/${journalId}`, { method: "DELETE" });
       await reloadJournals();
-    } catch (err: any) {
-      setError(err.message || "Could not delete journal.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete journal.");
     } finally {
       setDeletingId(null);
     }
@@ -89,8 +89,8 @@ export default function AdminPage() {
       setResult(response);
       setNamesInput("");
       await reloadJournals();
-    } catch (err: any) {
-      setError(err.message || "Could not import journals.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import journals.");
     } finally {
       setIsImporting(false);
     }

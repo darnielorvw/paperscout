@@ -2,7 +2,6 @@
 
 import {
   endOfMonth,
-  format,
   isSameMonth,
   startOfMonth,
   subMonths,
@@ -13,6 +12,7 @@ import * as React from "react";
 import { type DateRange } from "react-day-picker";
 
 import { Button } from "~/components/ui/button";
+import { formatDateForDisplay } from "~/lib/date-utils";
 
 interface DatePickerProps {
   date: DateRange | undefined;
@@ -123,16 +123,16 @@ export function DatePicker({ date, onDateChange }: DatePickerProps) {
         <CalendarIcon className="h-5 w-5" />
         {date?.from && date?.to ? (
           isSameMonth(date.from, date.to) ? (
-            format(date.from, "LLL y")
+            formatDateForDisplay(date.from)
           ) : (
             <>
-              {format(date.from, "LLL y")} - {format(date.to, "LLL y")}
+              {formatDateForDisplay(date.from)} - {formatDateForDisplay(date.to)}
             </>
           )
         ) : date?.from ? (
-          format(date.from, "LLL y")
+          formatDateForDisplay(date.from)
         ) : date?.to ? (
-          format(date.to, "LLL y")
+          formatDateForDisplay(date.to)
         ) : (
           <span>Pick a date</span>
         )}

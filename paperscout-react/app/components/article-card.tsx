@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { Download, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -7,16 +6,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { formatDateForDisplay } from "~/lib/date-utils";
 import type { Article } from "~/routes/results";
 import { Checkbox } from "./ui/checkbox";
 import { Field, FieldLabel } from "./ui/field";
-
-/** Formats an ISO date as "YYYY-MM", or returns null for missing/invalid dates. */
-function formatMonth(date: string | null | undefined): string | null {
-  if (!date) return null;
-  const parsed = new Date(date);
-  return Number.isNaN(parsed.getTime()) ? null : format(parsed, "yyyy-MM");
-}
 
 type ArticleCardProps = {
   article: Article;
@@ -53,12 +46,12 @@ export function ArticleCard({
             </FieldLabel>
           </Field>
           <Badge variant="outline">{article.journal_name}</Badge>
-          {(formatMonth(article.journal_publication_date) || article.issue) && (
+          {(formatDateForDisplay(article.journal_publication_date) || article.issue) && (
             <Badge variant="outline">
               {[
                 article.issue,
-                formatMonth(article.journal_publication_date) &&
-                  formatMonth(article.journal_publication_date),
+                formatDateForDisplay(article.journal_publication_date) &&
+                  formatDateForDisplay(article.journal_publication_date),
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -67,8 +60,8 @@ export function ArticleCard({
           {article.author && (
             <Badge variant="outline">
               {article.author}
-              {formatMonth(article.publication_date) &&
-                ` · ${formatMonth(article.publication_date)}`}
+              {formatDateForDisplay(article.publication_date) &&
+                ` · ${formatDateForDisplay(article.publication_date)}`}
             </Badge>
           )}
 

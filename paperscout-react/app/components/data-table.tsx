@@ -9,6 +9,7 @@ import {
   getCoreRowModel,
   getFilteredRowModel,
   getSortedRowModel,
+  type RowSelectionState,
   type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
@@ -16,24 +17,24 @@ import { SkeletonTable } from "./skeletons";
 import { Field } from "./ui/field";
 import { Input } from "./ui/input";
 
-interface DataTableProps<TData, TValue> {
+interface DataTableProps<TData extends { id: string }, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
-  rowSelection?: any;
-  onRowSelectionChange?: any;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
 }
 
-interface DataTableInnerProps<TData, TValue> {
+interface DataTableInnerProps<TData extends { id: string }, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  rowSelection?: any;
-  onRowSelectionChange?: any;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: OnChangeFn<RowSelectionState>;
   columnFilters: ColumnFiltersState;
   onColumnFiltersChange: OnChangeFn<ColumnFiltersState>;
 }
 
-function DataTableInner<TData, TValue>({
+function DataTableInner<TData extends { id: string }, TValue>({
   columns,
   data,
   rowSelection,
@@ -46,7 +47,7 @@ function DataTableInner<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
-    getRowId: (row: any) => row.id,
+    getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
@@ -109,7 +110,7 @@ function DataTableInner<TData, TValue>({
   );
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends { id: string }, TValue>({
   columns,
   data,
   isLoading = false,
