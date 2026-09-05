@@ -28,7 +28,7 @@ interface ApiFetchOptions extends RequestInit {
  * @param handleUnauthorized Whether to automatically redirect on a 401 error.
  * @returns A promise that resolves with the JSON data of the API response.
  */
-export async function apiFetch<T = any>(
+export async function apiFetch<T = unknown>(
   route: string,
   options: ApiFetchOptions = {},
   handleUnauthorized = true,

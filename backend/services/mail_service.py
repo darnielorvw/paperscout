@@ -2,11 +2,10 @@ import logging
 from email.message import EmailMessage
 
 import aiosmtplib
+
 from config import settings
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 class MailService:

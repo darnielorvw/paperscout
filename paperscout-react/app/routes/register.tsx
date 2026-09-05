@@ -20,7 +20,7 @@ export default function RegisterPage() {
       throw new Error("Invalid input data.");
     }
 
-    const response = await apiFetch(
+    const response = await apiFetch<{ message?: string; detail?: string }>(
       "/api/register",
       {
       method: "POST",

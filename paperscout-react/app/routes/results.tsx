@@ -19,6 +19,8 @@ export type Article = {
   title: string;
   doi: string | null;
   publication_date: string;
+  journal_publication_date: string | null;
+  issue: string | null;
   pdf_landing_page: string;
   pdf_url: string;
   journal_name: string;
@@ -61,10 +63,13 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
     };
   }
 
-  const articlePromise = apiFetch(`/api/articles?${paramsString}`).then(
+  const articlePromise = apiFetch<{
+    meta?: { count?: number; per_page?: number; page?: number };
+    results?: Article[];
+  }>(`/api/articles?${paramsString}`).then(
     (data) => {
       const meta = data.meta || {};
-      const results = (data.results as Article[]) || [];
+      const results = data.results || [];
       return {
         articles: results,
         totalCount: meta.count || 0,

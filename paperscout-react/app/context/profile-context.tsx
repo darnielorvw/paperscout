@@ -61,10 +61,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const fetchProfiles = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await apiFetch("/api/profiles");
+      const data = await apiFetch<{ results: SearchProfile[] }>(
+        "/api/profiles",
+      );
       setProfiles(data.results || []);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch profiles.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch profiles.");
     } finally {
       setIsLoading(false);
     }
@@ -122,14 +124,17 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = useCallback(
     async (profileId: number) => {
-      const updatedProfile = await apiFetch(`/api/profiles/${profileId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rowSelection,
-          searchTerm,
-        }),
-      });
+      const updatedProfile = await apiFetch<SearchProfile>(
+        `/api/profiles/${profileId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            rowSelection,
+            searchTerm,
+          }),
+        },
+      );
       // Replace only the one, updated profile in the state.
       setProfiles((prevProfiles) =>
         prevProfiles.map((p) => (p.id === profileId ? updatedProfile : p)),
@@ -140,7 +145,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const saveProfile = useCallback(
     async (name: string) => {
-      const newProfile = await apiFetch("/api/profiles", {
+      const newProfile = await apiFetch<SearchProfile>("/api/profiles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -160,7 +165,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const toggleProfileNotifications = useCallback(
     async (profileId: number, emailNotifications: boolean) => {
-      const updatedProfile = await apiFetch(
+      const updatedProfile = await apiFetch<SearchProfile>(
         `/api/profiles/${profileId}/notifications`,
         {
           method: "PATCH",

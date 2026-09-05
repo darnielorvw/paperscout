@@ -62,21 +62,26 @@ export default function AccountPage() {
 
     setIsSavingEmail(true);
     try {
-      const response = await apiFetch("/api/users/me/email", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword: emailPassword,
-          newEmail,
-        }),
-      });
+      const response = await apiFetch<{ access_token: string }>(
+        "/api/users/me/email",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentPassword: emailPassword,
+            newEmail,
+          }),
+        },
+      );
       // The token was issued for the old email and is now replaced.
       await refreshSession(response.access_token);
       setEmailSuccess("Email address updated.");
       setNewEmail("");
       setEmailPassword("");
-    } catch (err: any) {
-      setEmailError(err.message || "Could not update email address.");
+    } catch (err) {
+      setEmailError(
+        err instanceof Error ? err.message : "Could not update email address.",
+      );
     } finally {
       setIsSavingEmail(false);
     }
@@ -110,8 +115,10 @@ export default function AccountPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (err: any) {
-      setPasswordError(err.message || "Could not update password.");
+    } catch (err) {
+      setPasswordError(
+        err instanceof Error ? err.message : "Could not update password.",
+      );
     } finally {
       setIsSavingPassword(false);
     }
@@ -132,8 +139,10 @@ export default function AccountPage() {
         body: JSON.stringify({ currentPassword: deletePassword }),
       });
       logout();
-    } catch (err: any) {
-      setDeleteError(err.message || "Could not delete account.");
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Could not delete account.",
+      );
       setIsDeleting(false);
     }
   };

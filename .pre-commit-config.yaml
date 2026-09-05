@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: backend-ruff-check
+        name: ruff check (backend)
+        entry: bash -c 'cd backend && poetry run ruff check --fix .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: backend-ruff-format
+        name: ruff format (backend)
+        entry: bash -c 'cd backend && poetry run ruff format .'
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+      - id: frontend-eslint
+        name: eslint (paperscout-react)
+        entry: bash -c 'cd paperscout-react && npx eslint .'
+        language: system
+        files: ^paperscout-react/app/.*\.(ts|tsx)$
+        pass_filenames: false

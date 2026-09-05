@@ -34,11 +34,11 @@ export function JournalsProvider({ children }: { children: React.ReactNode }) {
   const fetchJournals = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await apiFetch("/api/journals");
-      setJournals((data.results as Journal[]) || []);
+      const data = await apiFetch<{ results: Journal[] }>("/api/journals");
+      setJournals(data.results || []);
       setError(null);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch journals.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch journals.");
     } finally {
       setIsLoading(false);
     }

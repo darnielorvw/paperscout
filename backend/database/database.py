@@ -1,5 +1,6 @@
-from database.config import DATABASE_URL, TURSO_AUTH_TOKEN, USE_TURSO
 from sqlmodel import Session, create_engine
+
+from database.config import DATABASE_URL, TURSO_AUTH_TOKEN, USE_TURSO
 
 if USE_TURSO:
     # The libsql dialect talks to Turso over HTTP(S), so no sqlite3-specific

@@ -1,4 +1,3 @@
-import { format } from "date-fns";
 import { Download, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -7,6 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { formatDateForDisplay } from "~/lib/date-utils";
 import type { Article } from "~/routes/results";
 import { Checkbox } from "./ui/checkbox";
 import { Field, FieldLabel } from "./ui/field";
@@ -46,10 +46,26 @@ export function ArticleCard({
             </FieldLabel>
           </Field>
           <Badge variant="outline">{article.journal_name}</Badge>
-          <Badge variant="outline">
-            {article.author} ({format(article.publication_date, "yyyy-MM")})
-          </Badge>
-          <Badge variant="outline">{article.topic}</Badge>
+          {(formatDateForDisplay(article.journal_publication_date) || article.issue) && (
+            <Badge variant="outline">
+              {[
+                article.issue,
+                formatDateForDisplay(article.journal_publication_date) &&
+                  formatDateForDisplay(article.journal_publication_date),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </Badge>
+          )}
+          {article.author && (
+            <Badge variant="outline">
+              {article.author}
+              {formatDateForDisplay(article.publication_date) &&
+                ` · ${formatDateForDisplay(article.publication_date)}`}
+            </Badge>
+          )}
+
+          {article.topic && <Badge variant="outline">{article.topic}</Badge>}
         </div>
         <div>
           <Tooltip>

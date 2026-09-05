@@ -61,8 +61,8 @@ export default function Profiles() {
     try {
       await saveProfile(newProfileName);
       setNewProfileName("");
-    } catch (err: any) {
-      setError(err.message || "Could not save profile.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save profile.");
     }
   };
 
@@ -75,8 +75,10 @@ export default function Profiles() {
   const handleDeleteProfile = async (profileId: number) => {
     try {
       await deleteProfile(profileId);
-    } catch (error: any) {
-      setError(error.message || "Error deleting profile.");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Error deleting profile.",
+      );
     }
   };
 
@@ -87,16 +89,18 @@ export default function Profiles() {
     }
     try {
       await updateProfile(profileId);
-    } catch (error: any) {
-      setError(error.message || "Error updating profile.");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Error updating profile.",
+      );
     }
   };
 
   const sendTestMail = async () => {
     try {
       await apiFetch("/api/digest/send-test", { method: "POST" });
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Error sending mail.");
     }
   };
 
@@ -106,8 +110,12 @@ export default function Profiles() {
   ) => {
     try {
       await toggleProfileNotifications(profileId, emailNotifications);
-    } catch (error: any) {
-      setError(error.message || "Error updating notification setting.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Error updating notification setting.",
+      );
     }
   };
 

@@ -49,8 +49,10 @@ export function AuthCard({
 
     try {
       await onSubmit(formData);
-    } catch (err: any) {
-      setError(err.message || "An unknown error occurred.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred.",
+      );
     } finally {
       setIsSubmitting(false);
     }

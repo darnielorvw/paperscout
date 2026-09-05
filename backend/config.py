@@ -56,16 +56,16 @@ class Settings(BaseSettings):
     DIGEST_CRON: str = os.getenv("DIGEST_CRON", "0 7 1 * *")
 
     # Validity period of the PDF download links in digest emails (in days)
-    DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS: int = int(
-        os.getenv("DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS", "90")
-    )
+    DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS: int = int(os.getenv("DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS", "90"))
 
     # Validity period of the email confirmation link during registration (in hours)
-    EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(
-        os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24")
-    )
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24"))
 
-    # OpenAlex API configuration
+    # OpenAlex API configuration (still used by the PDF download service)
     OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
+
+    # Contact address sent to Crossref for the "polite pool" (falls back to SMTP_FROM).
+    CROSSREF_MAILTO: str = os.getenv("CROSSREF_MAILTO", "")
+
 
 settings = Settings()

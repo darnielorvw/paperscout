@@ -2,13 +2,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
+from fastapi import Depends, HTTPException, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlmodel import Session, select
+
 from config import settings
 from database import models
 from database.database import get_session
-from fastapi import Depends, HTTPException, Security
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from services import user_service
-from sqlmodel import Session, select
 
 security = HTTPBearer(auto_error=False)
 
@@ -20,9 +20,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
 
@@ -48,9 +46,7 @@ def create_email_verification_token(
 def decode_email_verification_token(token: str) -> dict:
     """Decodes and validates an email confirmation token."""
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         if payload.get("purpose") != "email_verification" or not payload.get("email"):
             raise HTTPException(status_code=400, detail="Invalid confirmation link.")
         return payload
@@ -58,9 +54,9 @@ def decode_email_verification_token(token: str) -> dict:
         raise HTTPException(
             status_code=401,
             detail="The confirmation link has expired. Please register again.",
-        )
+        ) from None
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid confirmation link.")
+        raise HTTPException(status_code=401, detail="Invalid confirmation link.") from None
 
 
 def get_user_by_email(session: Session, email: str) -> Optional[models.User]:
@@ -90,9 +86,7 @@ async def get_current_user(
 
     token = credentials.credentials
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid token (no 'sub').")
@@ -101,9 +95,9 @@ async def get_current_user(
             raise HTTPException(status_code=401, detail="User not found.")
         return user
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="The login token has expired.")
+        raise HTTPException(status_code=401, detail="The login token has expired.") from None
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid authentication token.")
+        raise HTTPException(status_code=401, detail="Invalid authentication token.") from None
 
 
 async def require_admin(
