@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+
+# A fresh push to the same branch cancels the previous, still-running CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
