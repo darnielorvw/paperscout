@@ -6,8 +6,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 html,
@@ -21,7 +22,7 @@ body {
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Inter Variable', sans-serif;
+  --font-sans: "Inter Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,6 +44,7 @@ body {
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
+  --color-content-muted: var(--content-muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
@@ -66,6 +68,7 @@ body {
   --foreground: oklch(0.153 0.006 107.1);
   --card: oklch(0.966 0.005 106.5);
   --card-foreground: oklch(0.153 0.006 107.1);
+  --content-muted: oklch(0.58 0.031 107.3);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.153 0.006 107.1);
   --primary: oklch(0.508 0.118 165.612);
@@ -101,6 +104,7 @@ body {
   --foreground: oklch(0.988 0.003 106.5);
   --card: oklch(0.228 0.013 107.4);
   --card-foreground: oklch(0.988 0.003 106.5);
+  --content-muted: oklch(91.349% 0.02654 106.982);
   --popover: oklch(0.228 0.013 107.4);
   --popover-foreground: oklch(0.988 0.003 106.5);
   --primary: oklch(0.432 0.095 166.913);
@@ -147,20 +151,20 @@ body {
 
   /* 2. Für Chrome, Safari, Edge (Webkit) */
   *::-webkit-scrollbar {
-    width: 10px;  /* data-vertical:w-2.5 */
+    width: 10px; /* data-vertical:w-2.5 */
     height: 10px; /* data-horizontal:h-2.5 */
   }
 
   /* Der Hintergrund der Scrollbar (ScrollAreaScrollbar) */
   *::-webkit-scrollbar-track {
-    background: transparent; 
+    background: transparent;
   }
 
   /* Der bewegliche Balken (ScrollAreaThumb) */
   *::-webkit-scrollbar-thumb {
     background-color: var(--border); /* bg-border */
-    border-radius: 9999px;           /* rounded-full */
-    
+    border-radius: 9999px; /* rounded-full */
+
     /* Dieser Trick sorgt für das "p-px" (Padding) aus deinem Code, 
        damit der Balken nicht komplett am Rand klebt */
     border: 2px solid transparent;
