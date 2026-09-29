@@ -24,7 +24,23 @@ export default tseslint.config(
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": [
         "warn",
-        { allowConstantExport: true },
+        {
+          allowConstantExport: true,
+          // React Router route module exports
+          allowExportNames: [
+            "meta",
+            "links",
+            "headers",
+            "loader",
+            "clientLoader",
+            "action",
+            "clientAction",
+            "handle",
+            "shouldRevalidate",
+            "ErrorBoundary",
+            "HydrateFallback",
+          ],
+        },
       ],
       "@typescript-eslint/no-unused-vars": [
         "warn",

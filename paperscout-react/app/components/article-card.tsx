@@ -17,6 +17,8 @@ type ArticleCardProps = {
 
 // Fallback when the meta column is not beside the abstract (stacked layout).
 const DEFAULT_CLAMP_LINES = 6;
+// "Show more" button: mt-3 (12px) + text-sm line height (20px).
+const TOGGLE_BUTTON_HEIGHT = 32;
 
 const actionLinkClass =
   "inline-flex items-center gap-1.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50";
@@ -110,9 +112,16 @@ export function ArticleCard({
     const measure = () => {
       const sideBySide = window.matchMedia("(min-width: 1024px)").matches;
       const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight);
+      // Space from the abstract's top (below the title, whose height varies)
+      // to the meta column's bottom, minus room for the toggle button.
+      const available = meta
+        ? meta.getBoundingClientRect().bottom -
+          el.getBoundingClientRect().top -
+          TOGGLE_BUTTON_HEIGHT
+        : 0;
       const lines =
         meta && sideBySide && lineHeight
-          ? Math.max(1, Math.floor(meta.offsetHeight / lineHeight))
+          ? Math.max(1, Math.floor(available / lineHeight))
           : DEFAULT_CLAMP_LINES;
       el.style.setProperty("-webkit-line-clamp", String(lines));
       setIsOverflowing(el.scrollHeight > el.clientHeight);
