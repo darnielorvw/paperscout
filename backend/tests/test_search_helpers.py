@@ -12,6 +12,7 @@ from services.search_service import (
     _clean_doi,
     _date_parts_to_iso,
     _issue_label,
+    _clean_title,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
@@ -56,6 +57,24 @@ class TestDatePartsToIso:
 
     def test_non_numeric_returns_none(self):
         assert _date_parts_to_iso({"date-parts": [["nope"]]}) is None
+
+
+class TestCleanTitle:
+    def test_removes_inline_tags(self):
+        assert (
+            _clean_title("Pretreatment of <scp>ADSC</scp> ‐Exos via <scp>YAP</scp>")
+            == "Pretreatment of ADSC ‐Exos via YAP"
+        )
+
+    def test_does_not_split_words_at_tags(self):
+        assert _clean_title("CO<sub>2</sub> and <i>E. coli</i>") == "CO2 and E. coli"
+
+    def test_unescapes_entities(self):
+        assert _clean_title("Cats &amp; Dogs &lt;3") == "Cats & Dogs <3"
+
+    @pytest.mark.parametrize("value", [None, "", "  ", "<i></i>"])
+    def test_empty_returns_none(self, value):
+        assert _clean_title(value) is None
 
 
 class TestStripJats:

@@ -1,3 +1,4 @@
+import html
 import os
 import re
 from typing import Any, Dict, List
@@ -73,6 +74,17 @@ def _strip_jats(abstract: str | None) -> str | None:
     text = re.sub(r"<[^>]+>", " ", abstract)
     text = re.sub(r"\s+", " ", text).strip()
     text = re.sub(r"^(Abstract|ABSTRACT)\s*", "", text)
+    return text or None
+
+
+def _clean_title(title: str | None) -> str | None:
+    """Titles may contain inline markup (<scp>, <i>, <sub>, ...) and HTML entities;
+    reduce them to plain text. Tags are removed without a space so 'CO<sub>2</sub>'
+    stays 'CO2'."""
+    if not title:
+        return None
+    text = html.unescape(re.sub(r"<[^>]+>", "", title))
+    text = re.sub(r"\s+", " ", text).strip()
     return text or None
 
 
@@ -188,9 +200,9 @@ class SearchService:
         }
         data = await self._fetch_openalex("/works", params)
         return {
-            _clean_doi(work.get("doi") or ""): work.get("title")
+            _clean_doi(work.get("doi") or ""): _clean_title(work.get("title"))
             for work in data.get("results", [])
-            if work.get("doi") and work.get("title")
+            if work.get("doi") and _clean_title(work.get("title"))
         }
 
     async def search(
@@ -316,7 +328,7 @@ class SearchService:
         return {
             "id": doi,
             "doi": f"https://doi.org/{doi}",
-            "title": (cr_work.get("title") or [None])[0],
+            "title": _clean_title((cr_work.get("title") or [None])[0]),
             "journal_name": (cr_work.get("container-title") or [None])[0],
             "publication_date": paper_date,
             "journal_publication_date": journal_publication_date,
@@ -340,7 +352,7 @@ class SearchService:
         primary_topic = work.get("primary_topic") or {}
 
         return {
-            "title": work.get("title"),
+            "title": _clean_title(work.get("title")),
             "journal_name": source.get("display_name"),
             "publication_date": work.get("publication_date"),
             "pdf_url": best_oa.get("pdf_url"),
