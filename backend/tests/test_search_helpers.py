@@ -5,18 +5,12 @@ OpenAlex return - so they can be tested directly with plain dicts.
 """
 
 import pytest
-
-from services.search_service import (
-    SearchService,
-    _apa_from_last_names,
-    _clean_doi,
-    _clean_title,
-    _date_parts_to_iso,
-    _issue_label,
-    _strip_jats,
-    format_authors_apa,
-    format_authors_apa_crossref,
-)
+from services.search_service import (SearchService, _apa_from_last_names,
+                                     _clean_doi, _clean_title,
+                                     _date_parts_to_iso, _is_paper,
+                                     _issue_label, _strip_jats,
+                                     format_authors_apa,
+                                     format_authors_apa_crossref)
 
 
 class TestCleanDoi:
@@ -167,3 +161,17 @@ class TestExtractAbstract:
     @pytest.mark.parametrize("value", [None, {}])
     def test_empty_returns_none(self, value):
         assert self.svc._extract_abstract(value) is None
+
+
+class TestIsPaper:
+    @pytest.mark.parametrize("work_type", ["article", "review"])
+    def test_keeps_papers(self, work_type):
+        assert _is_paper({"type": work_type})
+
+    @pytest.mark.parametrize("work_type", ["editorial", "erratum", "letter", "paratext", None])
+    def test_drops_non_papers(self, work_type):
+        assert not _is_paper({"type": work_type})
+
+    def test_keeps_dois_unknown_to_openalex(self):
+        assert _is_paper(None)
+

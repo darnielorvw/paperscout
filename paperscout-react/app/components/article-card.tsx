@@ -141,7 +141,7 @@ export function ArticleCard({
       <div className="flex flex-col gap-6 lg:flex-row">
         <dl className="shrink-0 space-y-3 border-b pb-4 text-sm lg:w-64 lg:border-0 lg:pb-0">
           <MetaItem label="Select">
-            <Field orientation="horizontal" className="w-auto">
+            <Field orientation="horizontal" className="mt-1 w-auto">
               <Checkbox
                 id={`select-${article.id}`}
                 checked={isSelected}

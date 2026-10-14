@@ -151,6 +151,11 @@ class DigestService:
         for profile in profiles:
             journal_ids = [journal.id for journal in profile.journals]
             issns = [journal.issn for journal in profile.journals if journal.issn]
+            external_apis = {
+                journal.issn: journal.external_api
+                for journal in profile.journals
+                if journal.issn and journal.external_api
+            }
             if not journal_ids:
                 sections.append(self._render_profile_section(profile.profile_name, [], None))
                 continue
@@ -162,6 +167,7 @@ class DigestService:
 
             data = await self.search_service.search(
                 issns=issns,
+                external_apis=external_apis,
                 keywords=profile.searchTerm or "",
                 from_date=from_date,
                 to_date=to_date,

@@ -5,8 +5,8 @@ from typing import Any, Dict, List
 
 import httpx
 from dotenv import load_dotenv
-
 from lib.cache import LRUCache
+from services.external_api_service import apply_external_apis
 
 load_dotenv()
 
@@ -27,15 +27,28 @@ DATE_FILTER_FROM = "from-print-pub-date"
 DATE_FILTER_UNTIL = "until-print-pub-date"
 
 # Crossref: we only need the DOI, the journal issue date and the issue label.
+# ISSN tells which journal a work belongs to, for the journal-specific external APIs.
 _CROSSREF_SELECT = (
-    "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+    "DOI,ISSN,title,container-title,published-print,published,issued,volume,issue,abstract,author"
 )
 
 # OpenAlex: the full metadata for a work.
 _OPENALEX_SELECT = (
-    "id,title,doi,publication_date,primary_location,abstract_inverted_index,"
+    "id,title,doi,type,publication_date,primary_location,abstract_inverted_index,"
     "primary_topic,authorships,best_oa_location,has_fulltext"
 )
+
+# Crossref files editorials, errata, book reviews etc. as plain "journal-article",
+# so only OpenAlex's own `type` can tell them apart from actual papers.
+_PAPER_TYPES = {"article", "review"}
+
+
+def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
+    """False for OpenAlex works that aren't papers (editorial, erratum, letter, ...).
+
+    DOIs OpenAlex doesn't know are kept, since there's nothing to judge them by.
+    """
+    return oa_work is None or oa_work.get("type") in _PAPER_TYPES
 
 
 def _apa_from_last_names(names: List[str]) -> str:
@@ -213,11 +226,18 @@ class SearchService:
         to_date: str,
         limit: int,
         page: int,
+        external_apis: Dict[str, str] | None = None,
     ) -> Dict[str, Any]:
         """Finds articles in the given journals (by ISSN) whose journal issue falls
-        in the date range (Crossref), then enriches them with OpenAlex metadata."""
+        in the date range (Crossref), then enriches them with OpenAlex metadata.
+
+        `external_apis` maps an ISSN to an external API whose handler gets that
+        journal's records for individual processing (see external_api_service).
+        """
+        external_apis = external_apis or {}
         key_parts = (
             tuple(sorted(issns)),
+            tuple(sorted(external_apis.items())),
             keywords,
             from_date,
             to_date,
@@ -239,6 +259,7 @@ class SearchService:
         filter_str = ",".join(
             issn_filters
             + [
+                "type:journal-article",
                 f"{DATE_FILTER_FROM}:{from_date}",
                 f"{DATE_FILTER_UNTIL}:{to_date}",
             ]
@@ -263,15 +284,23 @@ class SearchService:
         # Base record per DOI from Crossref (issue date + issue label + fallbacks),
         # keeping Crossref's sort order.
         records: List[Dict[str, Any]] = []
+        api_by_doi: Dict[str, str] = {}
         for work in items:
             doi = _clean_doi(work.get("DOI") or "")
             if not doi:
                 continue
             records.append(self._base_record(doi, work))
+            # Crossref lists print and electronic ISSN; ours is the ISSN-L, one of them.
+            for issn in work.get("ISSN") or []:
+                if issn in external_apis:
+                    api_by_doi[doi] = external_apis[issn]
+                    break
 
         # Fill gaps with OpenAlex metadata, matched by DOI: an OpenAlex value is
         # only used where the corresponding Crossref field came back empty.
         oa_by_doi = await self._openalex_by_dois([r["id"] for r in records])
+        # Dropping non-papers means a page can come back with fewer than `limit` results.
+        records = [r for r in records if _is_paper(oa_by_doi.get(r["id"]))]
         for record in records:
             oa_work = oa_by_doi.get(record["id"])
             if not oa_work:
@@ -281,6 +310,8 @@ class SearchService:
                     continue
                 if not record.get(key):
                     record[key] = value
+
+        await apply_external_apis(records, api_by_doi)
 
         # Guarantee the shapes the frontend expects.
         for record in records:
