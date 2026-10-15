@@ -11,25 +11,15 @@ from services.external_api_service import apply_external_apis
 load_dotenv()
 
 # --- Best of both worlds -----------------------------------------------------
-# Crossref is only used for one thing: finding which papers appeared in a set of
-# journals within a date range, filtered by the *journal issue* date. Every other
-# field (title, authors, abstract, topic, OA PDF, has_fulltext, the paper's own
-# publication date) comes from OpenAlex, looked up by DOI.
-#
-# Crossref date filters:
-#   - "from-pub-date"       -> `published`       (in this journal, print OR online)
-#   - "from-print-pub-date" -> `published-print` (the printed issue date only)
-#   - "from-online-pub-date"-> `published-online`
-# We filter on the printed issue date. Note: online-only journals (PLOS, eLife,
-# Nature Communications, ...) have no `published-print` and therefore return
-# nothing here - switch to "from-pub-date"/"until-pub-date" to include them.
-DATE_FILTER_FROM = "from-issued-date"
-DATE_FILTER_UNTIL = "until-issued-date"
+# OpenAlex does the search: it finds the papers in a set of journals within a
+# date range (filtered by the paper's `publication_date`, i.e. its earliest
+# publication, usually online-first) and supplies the metadata. Crossref is then
+# asked for the same DOIs to add what only it knows - the printed journal issue
+# date and the volume/issue label - and to fill fields OpenAlex left empty.
 
-# Crossref: we only need the DOI, the journal issue date and the issue label.
-# ISSN tells which journal a work belongs to, for the journal-specific external APIs.
+# Crossref: the issue date and label, plus fallbacks for empty OpenAlex fields.
 _CROSSREF_SELECT = (
-    "DOI,ISSN,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+    "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
 )
 
 # OpenAlex: the full metadata for a work.
@@ -38,17 +28,11 @@ _OPENALEX_SELECT = (
     "primary_topic,authorships,best_oa_location,has_fulltext"
 )
 
-# Crossref files editorials, errata, book reviews etc. as plain "journal-article",
-# so only OpenAlex's own `type` can tell them apart from actual papers.
-_PAPER_TYPES = {"article", "review"}
+# Editorials, errata, book reviews etc. are filtered out by OpenAlex's own `type`.
+_PAPER_TYPES = ("article", "review")
 
-
-def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
-    """False for OpenAlex works that aren't papers (editorial, erratum, letter, ...).
-
-    DOIs OpenAlex doesn't know are kept, since there's nothing to judge them by.
-    """
-    return oa_work is None or oa_work.get("type") in _PAPER_TYPES
+# Fields only Crossref knows; they always take the Crossref value.
+_CROSSREF_ONLY_FIELDS = {"journal_publication_date", "issue"}
 
 
 def _apa_from_last_names(names: List[str]) -> str:
@@ -141,7 +125,7 @@ def _clean_doi(value: str) -> str:
 
 
 class SearchService:
-    """Crossref finds journal-issue-dated papers; OpenAlex supplies the metadata."""
+    """OpenAlex finds the papers and supplies the metadata; Crossref adds the issue data."""
 
     def __init__(self):
         self.crossref_base = "https://api.crossref.org"
@@ -228,8 +212,8 @@ class SearchService:
         page: int,
         external_apis: Dict[str, str] | None = None,
     ) -> Dict[str, Any]:
-        """Finds articles in the given journals (by ISSN) whose journal issue falls
-        in the date range (Crossref), then enriches them with OpenAlex metadata.
+        """Finds papers in the given journals (by ISSN) published in the date range
+        (OpenAlex), then adds the journal issue data from Crossref by DOI.
 
         `external_apis` maps an ISSN to an external API whose handler gets that
         journal's records for individual processing (see external_api_service).
@@ -249,67 +233,59 @@ class SearchService:
         if cached_data:
             return cached_data
 
-        # Repeated same-name filters are ORed by Crossref, so this matches any of
-        # the given journals.
-        issn_filters = [f"issn:{issn.strip()}" for issn in issns if issn and issn.strip()]
-        if not issn_filters:
-            # No journal filter would return the entire Crossref corpus.
+        issns = [issn.strip() for issn in issns if issn and issn.strip()]
+        if not issns:
+            # No journal filter would return the entire OpenAlex corpus.
             return {"meta": {"count": 0, "page": page, "per_page": limit}, "results": []}
 
         filter_str = ",".join(
-            issn_filters
-            + [
-                "type:journal-article",
-                f"{DATE_FILTER_FROM}:{from_date}",
-                f"{DATE_FILTER_UNTIL}:{to_date}",
+            [
+                f"primary_location.source.issn:{'|'.join(issns)}",
+                f"type:{'|'.join(_PAPER_TYPES)}",
+                f"from_publication_date:{from_date}",
+                f"to_publication_date:{to_date}",
             ]
         )
-
-        # Crossref paginates by offset, not page number.
         params: Dict[str, Any] = {
             "filter": filter_str,
-            "rows": limit,
-            "offset": max(page - 1, 0) * limit,
-            "select": _CROSSREF_SELECT,
-            "sort": "issued",
-            "order": "desc",
+            "per_page": limit,
+            "page": page,
+            "select": _OPENALEX_SELECT,
+            "sort": "publication_date:desc",
         }
         if keywords:
-            params["query.bibliographic"] = keywords
+            params["search"] = keywords
 
-        crossref_data = await self._fetch_crossref("/works", params)
-        message = crossref_data.get("message") or {}
-        items = message.get("items", [])
+        openalex_data = await self._fetch_openalex("/works", params)
+        works = openalex_data.get("results", [])
 
-        # Base record per DOI from Crossref (issue date + issue label + fallbacks),
-        # keeping Crossref's sort order.
+        # Base record per work from OpenAlex, keeping OpenAlex's sort order.
+        # Works without a DOI can't be matched on Crossref and are kept as they are.
         records: List[Dict[str, Any]] = []
         api_by_doi: Dict[str, str] = {}
-        for work in items:
-            doi = _clean_doi(work.get("DOI") or "")
+        for work in works:
+            doi = _clean_doi(work.get("doi") or "")
+            records.append(self._base_record(doi, work))
             if not doi:
                 continue
-            
-            records.append(self._base_record(doi, work))
-            # Crossref lists print and electronic ISSN; ours is the ISSN-L, one of them.
-            for issn in work.get("ISSN") or []:
+            source = (work.get("primary_location") or {}).get("source") or {}
+            # OpenAlex lists the ISSN-L and all ISSNs; ours is the ISSN-L, one of them.
+            for issn in [source.get("issn_l"), *(source.get("issn") or [])]:
                 if issn in external_apis:
                     api_by_doi[doi] = external_apis[issn]
                     break
 
-        # Fill gaps with OpenAlex metadata, matched by DOI: an OpenAlex value is
-        # only used where the corresponding Crossref field came back empty.
-        oa_by_doi = await self._openalex_by_dois([r["id"] for r in records])
-        # Dropping non-papers means a page can come back with fewer than `limit` results.
-        records = [r for r in records if _is_paper(oa_by_doi.get(r["id"]))]
+        # Add the Crossref data, matched by DOI: the issue date and label always
+        # come from Crossref, every other value only fills an empty OpenAlex field.
+        cr_by_doi = await self._crossref_by_dois([r["id"] for r in records if r["doi"]])
         for record in records:
-            oa_work = oa_by_doi.get(record["id"])
-            if not oa_work:
+            cr_work = cr_by_doi.get(record["id"])
+            if not cr_work:
                 continue
-            for key, value in self._openalex_fields(oa_work).items():
+            for key, value in self._crossref_fields(cr_work).items():
                 if value in (None, "", []):
                     continue
-                if not record.get(key):
+                if key in _CROSSREF_ONLY_FIELDS or not record.get(key):
                     record[key] = value
 
         await apply_external_apis(records, api_by_doi)
@@ -321,7 +297,7 @@ class SearchService:
 
         data = {
             "meta": {
-                "count": message.get("total-results", 0),
+                "count": (openalex_data.get("meta") or {}).get("count", 0),
                 "page": page,
                 "per_page": limit,
             },
@@ -331,68 +307,65 @@ class SearchService:
             self.cache.set(cache_key, data)
         return data
 
-    async def _openalex_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
-        """Batch-looks up OpenAlex works for a list of bare DOIs, keyed by bare DOI."""
+    async def _crossref_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Batch-looks up Crossref works for a list of bare DOIs, keyed by bare DOI."""
         dois = [d for d in dois if d]
         if not dois:
             return {}
+        # Repeated same-name filters are ORed by Crossref.
         params = {
-            "filter": f"doi:{'|'.join(dois)}",
-            "per_page": len(dois),
-            "select": _OPENALEX_SELECT,
+            "filter": ",".join(f"doi:{doi}" for doi in dois),
+            "rows": len(dois),
+            "select": _CROSSREF_SELECT,
         }
-        data = await self._fetch_openalex("/works", params)
+        data = await self._fetch_crossref("/works", params)
         return {
-            _clean_doi(work.get("doi") or ""): work
-            for work in data.get("results", [])
-            if work.get("doi")
+            _clean_doi(work.get("DOI") or ""): work
+            for work in (data.get("message") or {}).get("items", [])
+            if work.get("DOI")
         }
 
-    def _base_record(self, doi: str, cr_work: Dict[str, Any]) -> Dict[str, Any]:
-        """The Crossref-derived part of a result: the journal issue date and issue
-        label, plus a full fallback in case OpenAlex doesn't know the DOI."""
-        journal_publication_date = _date_parts_to_iso(cr_work.get("published-print"))
-        paper_date = (
-            _date_parts_to_iso(cr_work.get("published"))
-            or _date_parts_to_iso(cr_work.get("issued"))
-            or journal_publication_date
-        )
-        return {
-            "id": doi,
-            "doi": f"https://doi.org/{doi}",
-            "title": _clean_title((cr_work.get("title") or [None])[0]),
-            "journal_name": (cr_work.get("container-title") or [None])[0],
-            "publication_date": paper_date,
-            "journal_publication_date": journal_publication_date,
-            "issue": _issue_label(cr_work.get("volume"), cr_work.get("issue")),
-            "pdf_url": None,
-            "pdf_landing_page": f"https://doi.org/{doi}",
-            "abstract": _strip_jats(cr_work.get("abstract")),
-            "topic": None,
-            "author": format_authors_apa_crossref(cr_work.get("author")) or None,
-            "has_fulltext": False,
-        }
-
-    def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:
-        """Candidate values from OpenAlex for the fields Crossref may leave empty.
-
-        Excludes the journal issue date and issue label, which only Crossref knows.
-        """
+    def _base_record(self, doi: str, work: Dict[str, Any]) -> Dict[str, Any]:
+        """The OpenAlex-derived part of a result. The journal issue date and issue
+        label stay empty until Crossref fills them in."""
         primary_loc = work.get("primary_location") or {}
         source = primary_loc.get("source") or {}
         best_oa = work.get("best_oa_location") or {}
         primary_topic = work.get("primary_topic") or {}
+        doi_url = f"https://doi.org/{doi}" if doi else None
 
         return {
+            "id": doi or work.get("id"),
+            "doi": doi_url,
             "title": _clean_title(work.get("title")),
             "journal_name": source.get("display_name"),
             "publication_date": work.get("publication_date"),
+            "journal_publication_date": None,
+            "issue": None,
             "pdf_url": best_oa.get("pdf_url"),
-            "pdf_landing_page": best_oa.get("landing_page_url"),
+            "pdf_landing_page": best_oa.get("landing_page_url") or doi_url,
             "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
             "topic": primary_topic.get("display_name"),
             "author": format_authors_apa(work.get("authorships", [])),
             "has_fulltext": bool(work.get("has_fulltext")),
+        }
+
+    def _crossref_fields(self, cr_work: Dict[str, Any]) -> Dict[str, Any]:
+        """Values from Crossref: the journal issue date and issue label, which only
+        Crossref knows, plus fallbacks for fields OpenAlex may leave empty."""
+        journal_publication_date = _date_parts_to_iso(cr_work.get("published-print"))
+        return {
+            "title": _clean_title((cr_work.get("title") or [None])[0]),
+            "journal_name": (cr_work.get("container-title") or [None])[0],
+            "publication_date": (
+                _date_parts_to_iso(cr_work.get("published"))
+                or _date_parts_to_iso(cr_work.get("issued"))
+                or journal_publication_date
+            ),
+            "journal_publication_date": journal_publication_date,
+            "issue": _issue_label(cr_work.get("volume"), cr_work.get("issue")),
+            "abstract": _strip_jats(cr_work.get("abstract")),
+            "author": format_authors_apa_crossref(cr_work.get("author")) or None,
         }
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]] | None) -> str | None:
