@@ -23,8 +23,8 @@ load_dotenv()
 # We filter on the printed issue date. Note: online-only journals (PLOS, eLife,
 # Nature Communications, ...) have no `published-print` and therefore return
 # nothing here - switch to "from-pub-date"/"until-pub-date" to include them.
-DATE_FILTER_FROM = "from-print-pub-date"
-DATE_FILTER_UNTIL = "until-print-pub-date"
+DATE_FILTER_FROM = "from-issued-date"
+DATE_FILTER_UNTIL = "until-issued-date"
 
 # Crossref: we only need the DOI, the journal issue date and the issue label.
 # ISSN tells which journal a work belongs to, for the journal-specific external APIs.
@@ -271,7 +271,7 @@ class SearchService:
             "rows": limit,
             "offset": max(page - 1, 0) * limit,
             "select": _CROSSREF_SELECT,
-            "sort": "published-print",
+            "sort": "issued",
             "order": "desc",
         }
         if keywords:
@@ -289,6 +289,7 @@ class SearchService:
             doi = _clean_doi(work.get("DOI") or "")
             if not doi:
                 continue
+            
             records.append(self._base_record(doi, work))
             # Crossref lists print and electronic ISSN; ours is the ISSN-L, one of them.
             for issn in work.get("ISSN") or []:

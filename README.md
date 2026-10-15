@@ -1,5 +1,9 @@
+https://openalex.org/works/W7215133366 --> vermutlich nicht in crossref
+
 BUGS:
 bei page wechsel wird an alter stelle geblieben (kann zu weit unten sein)
+wenn alle paper rausgefiltert werden ist page leer (kein article)
+online/print release näher angucken, für welche journals was wählen? wie wird journal veröffentlicht
 
 TODO:
 scopus institutional token
@@ -20,9 +24,8 @@ sind alle journals noch beim alten verlag?
 
 
 fehlende abstracts:
-Academy of Management Annals
 Academy of Management Learning and Education
-Journal of Behavioral and Experimental Economics
+
 Journal of Experimental Psychology Human Perception & Performance => KEINE DATEN
 The International Journal of Management Education => kein abstract
 Journal of Occupational Health Psychology => KEINE DATEN
