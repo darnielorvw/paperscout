@@ -34,7 +34,8 @@ DATE_FILTER_UNTIL = "until-issued-date"
 # Crossref: the issue date and label, plus the other metadata it has.
 # ISSN tells which journal a work belongs to, for the journal-specific external APIs.
 _CROSSREF_SELECT = (
-    "DOI,ISSN,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+    "DOI,ISSN,title,container-title,published-print,published-online,published,issued,"
+    "volume,issue,abstract,author"
 )
 
 # OpenAlex: the full metadata for a work.
@@ -481,7 +482,10 @@ class SearchService:
     def _crossref_fields(self, cr_work: Dict[str, Any]) -> Dict[str, Any]:
         """Values from Crossref, including the journal issue date and issue label,
         which only Crossref knows."""
-        journal_publication_date = _date_parts_to_iso(cr_work.get("published-print"))
+        # Online-only journals have no printed issue; their online date stands in.
+        journal_publication_date = _date_parts_to_iso(
+            cr_work.get("published-print")
+        ) or _date_parts_to_iso(cr_work.get("published-online"))
         return {
             "title": _clean_title((cr_work.get("title") or [None])[0]),
             "journal_name": (cr_work.get("container-title") or [None])[0],
