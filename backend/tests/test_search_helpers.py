@@ -7,7 +7,7 @@ OpenAlex return - so they can be tested directly with plain dicts.
 import pytest
 from services.search_service import (SearchService, _apa_from_last_names,
                                      _clean_doi, _clean_title,
-                                     _date_parts_to_iso,
+                                     _date_parts_to_iso, _is_paper, _merge,
                                      _issue_label, _strip_jats,
                                      format_authors_apa,
                                      format_authors_apa_crossref)
@@ -161,3 +161,34 @@ class TestExtractAbstract:
     @pytest.mark.parametrize("value", [None, {}])
     def test_empty_returns_none(self, value):
         assert self.svc._extract_abstract(value) is None
+
+
+class TestIsPaper:
+    @pytest.mark.parametrize("work_type", ["article", "review"])
+    def test_keeps_papers(self, work_type):
+        assert _is_paper({"type": work_type})
+
+    @pytest.mark.parametrize("work_type", ["editorial", "erratum", "letter", "paratext", None])
+    def test_drops_non_papers(self, work_type):
+        assert not _is_paper({"type": work_type})
+
+    def test_keeps_dois_unknown_to_openalex(self):
+        assert _is_paper(None)
+
+
+class TestMerge:
+    def test_fills_only_empty_fields(self):
+        record = {"title": "Kept", "abstract": None}
+        _merge(record, {"title": "Other", "abstract": "Filled"})
+        assert record == {"title": "Kept", "abstract": "Filled"}
+
+    def test_override_replaces_set_fields(self):
+        record = {"issue": "Vol. 1", "title": "Kept"}
+        _merge(record, {"issue": "Vol. 2", "title": "Other"}, override={"issue"})
+        assert record == {"issue": "Vol. 2", "title": "Kept"}
+
+    @pytest.mark.parametrize("empty", [None, "", []])
+    def test_empty_values_never_overwrite(self, empty):
+        record = {"issue": "Vol. 1"}
+        _merge(record, {"issue": empty}, override={"issue"})
+        assert record == {"issue": "Vol. 1"}

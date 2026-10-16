@@ -1,7 +1,7 @@
 import html
 import os
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import httpx
 from dotenv import load_dotenv
@@ -11,15 +11,30 @@ from services.external_api_service import apply_external_apis
 load_dotenv()
 
 # --- Best of both worlds -----------------------------------------------------
-# OpenAlex does the search: it finds the papers in a set of journals within a
-# date range (filtered by the paper's `publication_date`, i.e. its earliest
-# publication, usually online-first) and supplies the metadata. Crossref is then
-# asked for the same DOIs to add what only it knows - the printed journal issue
-# date and the volume/issue label - and to fill fields OpenAlex left empty.
+# Which API does the search depends on whether keywords are given:
+#
+#   - Without keywords, Crossref finds the papers that appeared in a set of
+#     journals within a date range, filtered by the *journal issue* date.
+#     OpenAlex, looked up by DOI, fills the fields Crossref left empty and tells
+#     papers apart from editorials, errata etc.
+#   - With keywords, OpenAlex does the search (its full-text search is far better
+#     than Crossref's), filtered by the paper's `publication_date`, i.e. its
+#     earliest publication, usually online-first. Crossref, looked up by DOI,
+#     adds what only it knows - the printed journal issue date and the
+#     volume/issue label - and fills the fields OpenAlex left empty.
+#
+# Crossref date filters:
+#   - "from-pub-date"       -> `published`       (in this journal, print OR online)
+#   - "from-print-pub-date" -> `published-print` (the printed issue date only)
+#   - "from-online-pub-date"-> `published-online`
+#   - "from-issued-date"    -> `issued`          (earliest of print and online)
+DATE_FILTER_FROM = "from-issued-date"
+DATE_FILTER_UNTIL = "until-issued-date"
 
-# Crossref: the issue date and label, plus fallbacks for empty OpenAlex fields.
+# Crossref: the issue date and label, plus the other metadata it has.
+# ISSN tells which journal a work belongs to, for the journal-specific external APIs.
 _CROSSREF_SELECT = (
-    "DOI,title,container-title,published-print,published,issued,volume,issue,abstract,author"
+    "DOI,ISSN,title,container-title,published-print,published,issued,volume,issue,abstract,author"
 )
 
 # OpenAlex: the full metadata for a work.
@@ -28,11 +43,49 @@ _OPENALEX_SELECT = (
     "primary_topic,authorships,best_oa_location,has_fulltext"
 )
 
-# Editorials, errata, book reviews etc. are filtered out by OpenAlex's own `type`.
+# Crossref files editorials, errata, book reviews etc. as plain "journal-article",
+# so only OpenAlex's own `type` can tell them apart from actual papers.
 _PAPER_TYPES = ("article", "review")
 
 # Fields only Crossref knows; they always take the Crossref value.
 _CROSSREF_ONLY_FIELDS = {"journal_publication_date", "issue"}
+
+
+def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
+    """False for OpenAlex works that aren't papers (editorial, erratum, letter, ...).
+
+    DOIs OpenAlex doesn't know are kept, since there's nothing to judge them by.
+    """
+    return oa_work is None or oa_work.get("type") in _PAPER_TYPES
+
+
+def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
+    """A result with every field the frontend knows, before any API has filled it."""
+    return {
+        "id": record_id,
+        "doi": f"https://doi.org/{doi}" if doi else None,
+        "title": None,
+        "journal_name": None,
+        "publication_date": None,
+        "journal_publication_date": None,
+        "issue": None,
+        "pdf_url": None,
+        "pdf_landing_page": None,
+        "abstract": None,
+        "topic": None,
+        "author": None,
+        "has_fulltext": False,
+    }
+
+
+def _merge(record: Dict[str, Any], fields: Dict[str, Any], override=frozenset()) -> None:
+    """Fills the record's empty fields from `fields`; keys in `override` are
+    replaced even if already set. Empty values never overwrite anything."""
+    for key, value in fields.items():
+        if value in (None, "", []):
+            continue
+        if key in override or not record.get(key):
+            record[key] = value
 
 
 def _apa_from_last_names(names: List[str]) -> str:
@@ -125,7 +178,8 @@ def _clean_doi(value: str) -> str:
 
 
 class SearchService:
-    """OpenAlex finds the papers and supplies the metadata; Crossref adds the issue data."""
+    """Searches papers on Crossref (by issue date) or OpenAlex (by keywords) and
+    completes them with the other API's data."""
 
     def __init__(self):
         self.crossref_base = "https://api.crossref.org"
@@ -212,8 +266,11 @@ class SearchService:
         page: int,
         external_apis: Dict[str, str] | None = None,
     ) -> Dict[str, Any]:
-        """Finds papers in the given journals (by ISSN) published in the date range
-        (OpenAlex), then adds the journal issue data from Crossref by DOI.
+        """Finds papers in the given journals (by ISSN) within the date range.
+
+        Without keywords Crossref searches by journal issue date, with keywords
+        OpenAlex searches by publication date (see top of module); the other API
+        adds its data by DOI.
 
         `external_apis` maps an ISSN to an external API whose handler gets that
         journal's records for individual processing (see external_api_service).
@@ -235,9 +292,111 @@ class SearchService:
 
         issns = [issn.strip() for issn in issns if issn and issn.strip()]
         if not issns:
-            # No journal filter would return the entire OpenAlex corpus.
+            # No journal filter would return the entire corpus.
             return {"meta": {"count": 0, "page": page, "per_page": limit}, "results": []}
 
+        if keywords:
+            records, count, api_by_doi = await self._search_openalex(
+                issns, keywords, from_date, to_date, limit, page, external_apis
+            )
+        else:
+            records, count, api_by_doi = await self._search_crossref(
+                issns, from_date, to_date, limit, page, external_apis
+            )
+
+        await apply_external_apis(records, api_by_doi)
+
+        # Guarantee the shapes the frontend expects.
+        for record in records:
+            record["abstract"] = record.get("abstract") or "No abstract available."
+            record["author"] = record.get("author") or ""
+            record["pdf_landing_page"] = record.get("pdf_landing_page") or record["doi"]
+
+        data = {
+            "meta": {"count": count, "page": page, "per_page": limit},
+            "results": records,
+        }
+        if records:
+            self.cache.set(cache_key, data)
+        return data
+
+    async def _search_crossref(
+        self,
+        issns: List[str],
+        from_date: str,
+        to_date: str,
+        limit: int,
+        page: int,
+        external_apis: Dict[str, str],
+    ) -> Tuple[List[Dict[str, Any]], int, Dict[str, str]]:
+        """Crossref finds the papers by journal issue date; OpenAlex fills the gaps.
+
+        Returns the records, the total hit count and the external API per DOI.
+        """
+        # Repeated same-name filters are ORed by Crossref, so this matches any of
+        # the given journals.
+        filter_str = ",".join(
+            [f"issn:{issn}" for issn in issns]
+            + [
+                "type:journal-article",
+                f"{DATE_FILTER_FROM}:{from_date}",
+                f"{DATE_FILTER_UNTIL}:{to_date}",
+            ]
+        )
+        # Crossref paginates by offset, not page number.
+        params: Dict[str, Any] = {
+            "filter": filter_str,
+            "rows": limit,
+            "offset": max(page - 1, 0) * limit,
+            "select": _CROSSREF_SELECT,
+            "sort": "issued",
+            "order": "desc",
+        }
+        crossref_data = await self._fetch_crossref("/works", params)
+        message = crossref_data.get("message") or {}
+
+        # Base record per DOI from Crossref, keeping Crossref's sort order.
+        records: List[Dict[str, Any]] = []
+        api_by_doi: Dict[str, str] = {}
+        for work in message.get("items", []):
+            doi = _clean_doi(work.get("DOI") or "")
+            if not doi:
+                continue
+            record = _empty_record(doi, doi)
+            _merge(record, self._crossref_fields(work))
+            records.append(record)
+            # Crossref lists print and electronic ISSN; ours is the ISSN-L, one of them.
+            for issn in work.get("ISSN") or []:
+                if issn in external_apis:
+                    api_by_doi[doi] = external_apis[issn]
+                    break
+
+        # Fill gaps with OpenAlex metadata, matched by DOI.
+        oa_by_doi = await self._openalex_by_dois([r["id"] for r in records])
+        # Dropping non-papers means a page can come back with fewer than `limit` results.
+        records = [r for r in records if _is_paper(oa_by_doi.get(r["id"]))]
+        for record in records:
+            oa_work = oa_by_doi.get(record["id"])
+            if oa_work:
+                _merge(record, self._openalex_fields(oa_work))
+
+        return records, message.get("total-results", 0), api_by_doi
+
+    async def _search_openalex(
+        self,
+        issns: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
+        limit: int,
+        page: int,
+        external_apis: Dict[str, str],
+    ) -> Tuple[List[Dict[str, Any]], int, Dict[str, str]]:
+        """OpenAlex finds the papers by keywords and publication date; Crossref adds
+        the journal issue data and fills the gaps.
+
+        Returns the records, the total hit count and the external API per DOI.
+        """
         filter_str = ",".join(
             [
                 f"primary_location.source.issn:{'|'.join(issns)}",
@@ -248,24 +407,23 @@ class SearchService:
         )
         params: Dict[str, Any] = {
             "filter": filter_str,
+            "search": keywords,
             "per_page": limit,
             "page": page,
             "select": _OPENALEX_SELECT,
             "sort": "publication_date:desc",
         }
-        if keywords:
-            params["search"] = keywords
-
         openalex_data = await self._fetch_openalex("/works", params)
-        works = openalex_data.get("results", [])
 
         # Base record per work from OpenAlex, keeping OpenAlex's sort order.
         # Works without a DOI can't be matched on Crossref and are kept as they are.
         records: List[Dict[str, Any]] = []
         api_by_doi: Dict[str, str] = {}
-        for work in works:
+        for work in openalex_data.get("results", []):
             doi = _clean_doi(work.get("doi") or "")
-            records.append(self._base_record(doi, work))
+            record = _empty_record(doi or work.get("id"), doi)
+            _merge(record, self._openalex_fields(work))
+            records.append(record)
             if not doi:
                 continue
             source = (work.get("primary_location") or {}).get("source") or {}
@@ -280,32 +438,27 @@ class SearchService:
         cr_by_doi = await self._crossref_by_dois([r["id"] for r in records if r["doi"]])
         for record in records:
             cr_work = cr_by_doi.get(record["id"])
-            if not cr_work:
-                continue
-            for key, value in self._crossref_fields(cr_work).items():
-                if value in (None, "", []):
-                    continue
-                if key in _CROSSREF_ONLY_FIELDS or not record.get(key):
-                    record[key] = value
+            if cr_work:
+                _merge(record, self._crossref_fields(cr_work), override=_CROSSREF_ONLY_FIELDS)
 
-        await apply_external_apis(records, api_by_doi)
+        return records, (openalex_data.get("meta") or {}).get("count", 0), api_by_doi
 
-        # Guarantee the shapes the frontend expects.
-        for record in records:
-            record["abstract"] = record.get("abstract") or "No abstract available."
-            record["author"] = record.get("author") or ""
-
-        data = {
-            "meta": {
-                "count": (openalex_data.get("meta") or {}).get("count", 0),
-                "page": page,
-                "per_page": limit,
-            },
-            "results": records,
+    async def _openalex_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Batch-looks up OpenAlex works for a list of bare DOIs, keyed by bare DOI."""
+        dois = [d for d in dois if d]
+        if not dois:
+            return {}
+        params = {
+            "filter": f"doi:{'|'.join(dois)}",
+            "per_page": len(dois),
+            "select": _OPENALEX_SELECT,
         }
-        if records:
-            self.cache.set(cache_key, data)
-        return data
+        data = await self._fetch_openalex("/works", params)
+        return {
+            _clean_doi(work.get("doi") or ""): work
+            for work in data.get("results", [])
+            if work.get("doi")
+        }
 
     async def _crossref_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
         """Batch-looks up Crossref works for a list of bare DOIs, keyed by bare DOI."""
@@ -325,34 +478,9 @@ class SearchService:
             if work.get("DOI")
         }
 
-    def _base_record(self, doi: str, work: Dict[str, Any]) -> Dict[str, Any]:
-        """The OpenAlex-derived part of a result. The journal issue date and issue
-        label stay empty until Crossref fills them in."""
-        primary_loc = work.get("primary_location") or {}
-        source = primary_loc.get("source") or {}
-        best_oa = work.get("best_oa_location") or {}
-        primary_topic = work.get("primary_topic") or {}
-        doi_url = f"https://doi.org/{doi}" if doi else None
-
-        return {
-            "id": doi or work.get("id"),
-            "doi": doi_url,
-            "title": _clean_title(work.get("title")),
-            "journal_name": source.get("display_name"),
-            "publication_date": work.get("publication_date"),
-            "journal_publication_date": None,
-            "issue": None,
-            "pdf_url": best_oa.get("pdf_url"),
-            "pdf_landing_page": best_oa.get("landing_page_url") or doi_url,
-            "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
-            "topic": primary_topic.get("display_name"),
-            "author": format_authors_apa(work.get("authorships", [])),
-            "has_fulltext": bool(work.get("has_fulltext")),
-        }
-
     def _crossref_fields(self, cr_work: Dict[str, Any]) -> Dict[str, Any]:
-        """Values from Crossref: the journal issue date and issue label, which only
-        Crossref knows, plus fallbacks for fields OpenAlex may leave empty."""
+        """Values from Crossref, including the journal issue date and issue label,
+        which only Crossref knows."""
         journal_publication_date = _date_parts_to_iso(cr_work.get("published-print"))
         return {
             "title": _clean_title((cr_work.get("title") or [None])[0]),
@@ -366,6 +494,26 @@ class SearchService:
             "issue": _issue_label(cr_work.get("volume"), cr_work.get("issue")),
             "abstract": _strip_jats(cr_work.get("abstract")),
             "author": format_authors_apa_crossref(cr_work.get("author")) or None,
+        }
+
+    def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:
+        """Values from OpenAlex. Excludes the journal issue date and issue label,
+        which only Crossref knows."""
+        primary_loc = work.get("primary_location") or {}
+        source = primary_loc.get("source") or {}
+        best_oa = work.get("best_oa_location") or {}
+        primary_topic = work.get("primary_topic") or {}
+
+        return {
+            "title": _clean_title(work.get("title")),
+            "journal_name": source.get("display_name"),
+            "publication_date": work.get("publication_date"),
+            "pdf_url": best_oa.get("pdf_url"),
+            "pdf_landing_page": best_oa.get("landing_page_url"),
+            "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
+            "topic": primary_topic.get("display_name"),
+            "author": format_authors_apa(work.get("authorships", [])),
+            "has_fulltext": bool(work.get("has_fulltext")),
         }
 
     def _extract_abstract(self, inverted_index: Dict[str, List[int]] | None) -> str | None:
