@@ -1,12 +1,10 @@
-TODO:
-die ersten seiten schnell liefern
 
 BUGS:
-bei page wechsel wird an alter stelle geblieben (kann zu weit unten sein)
 wenn alle paper rausgefiltert werden ist page leer (kein article)
-online/print release näher angucken, für welche journals was wählen? wie wird journal veröffentlicht
 
 TODO:
+die ersten seiten schnell liefern (keyword search)
+
 scopus institutional token
 arten von works herausfinden
 jedes journal durchtesten ob datum filterung funktioniert

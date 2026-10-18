@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { Suspense, useEffect, useState, useTransition } from "react";
+import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
 import { ArticleCard } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
@@ -93,6 +93,23 @@ export default function Results() {
   );
   const { setRowSelection, setSearchTerm, setDate, isInitialized } =
     useSearch();
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // The list scrolls in its own container, which <ScrollRestoration> (window
+  // only) doesn't reset; so a new page or search would open where the last one
+  // was scrolled to. Jump back to the top once its articles have arrived.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(articlePromise).then(
+      () => {
+        if (!cancelled) scrollAreaRef.current?.scrollTo({ top: 0 });
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [articlePromise]);
 
   // Sync the search context (journal dropdown, search term, date range) with the
   // URL params, so a shared or bookmarked results link shows the same selection
@@ -248,6 +265,7 @@ export default function Results() {
             <div className="flex h-full w-full flex-col overflow-hidden">
               {/* Scrollable area for the articles */}
               <div
+                ref={scrollAreaRef}
                 className="flex-1 overflow-y-auto"
                 style={{
                   opacity: isPending ? 0.3 : 1,
