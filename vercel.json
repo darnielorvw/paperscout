@@ -1,6 +1,6 @@
 {
   "services": {
-    "frontend": { "root": "paperscout-react/" },
+    "frontend": { "root": "paperscout-react/", "framework": "react-router" },
     "backend": { "root": "backend/", "entrypoint": "main:app" }
   },
   "rewrites": [
