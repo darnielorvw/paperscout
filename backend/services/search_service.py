@@ -1,5 +1,4 @@
 import asyncio
-import calendar
 import html
 import logging
 import os
@@ -63,6 +62,10 @@ _CROSSREF_DOI_BATCH = 100  # keeps the URL well below Crossref's length limit
 _CROSSREF_CONCURRENCY = 3
 # OpenAlex's page numbers reach only this many results; past that only its cursor does.
 _OPENALEX_PAGED_MAX = 10_000
+
+# One OpenAlex page checked on Crossref: the Crossref works in the date range and
+# the page's OpenAlex works by DOI, or None if a request failed.
+_PageHits = Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]] | None
 
 # How far back the keyword search on OpenAlex reaches, counted from the current month.
 _KEYWORD_WINDOW_YEARS = 2
@@ -496,14 +499,13 @@ class SearchService:
         }
         openalex_slots = asyncio.Semaphore(_OPENALEX_CONCURRENCY)
         crossref_slots = asyncio.Semaphore(_CROSSREF_CONCURRENCY)
-        PageHits = Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]] | None
 
         async def fetch_page(page_params: Dict[str, Any]) -> Dict[str, Any] | None:
             async with openalex_slots:
                 data = await self._fetch_openalex("/works", {**params, **page_params})
             return data if "results" in data else None
 
-        async def check(data: Dict[str, Any]) -> PageHits:
+        async def check(data: Dict[str, Any]) -> _PageHits:
             """The Crossref works of one OpenAlex page that are in the date range,
             and that page's OpenAlex works."""
             oa_by_doi: Dict[str, Dict[str, Any]] = {}
@@ -516,7 +518,7 @@ class SearchService:
             )
             return None if cr_works is None else (cr_works, oa_by_doi)
 
-        async def fetch_and_check(page: int) -> PageHits:
+        async def fetch_and_check(page: int) -> _PageHits:
             data = await fetch_page({"page": page})
             return None if data is None else await check(data)
 
