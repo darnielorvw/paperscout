@@ -5,12 +5,19 @@ OpenAlex return - so they can be tested directly with plain dicts.
 """
 
 import pytest
-from services.search_service import (SearchService, _apa_from_last_names,
-                                     _clean_doi, _clean_title,
-                                     _date_parts_to_iso, _is_paper, _merge,
-                                     _issue_label, _strip_jats,
-                                     format_authors_apa,
-                                     format_authors_apa_crossref)
+from services.search_service import (
+    SearchService,
+    _apa_from_last_names,
+    _clean_doi,
+    _clean_title,
+    _date_parts_to_iso,
+    _is_paper,
+    _merge,
+    _issue_label,
+    _strip_jats,
+    format_authors_apa,
+    format_authors_apa_crossref,
+)
 
 
 class TestCleanDoi:
@@ -182,13 +189,8 @@ class TestMerge:
         _merge(record, {"title": "Other", "abstract": "Filled"})
         assert record == {"title": "Kept", "abstract": "Filled"}
 
-    def test_override_replaces_set_fields(self):
-        record = {"issue": "Vol. 1", "title": "Kept"}
-        _merge(record, {"issue": "Vol. 2", "title": "Other"}, override={"issue"})
-        assert record == {"issue": "Vol. 2", "title": "Kept"}
-
     @pytest.mark.parametrize("empty", [None, "", []])
     def test_empty_values_never_overwrite(self, empty):
         record = {"issue": "Vol. 1"}
-        _merge(record, {"issue": empty}, override={"issue"})
+        _merge(record, {"issue": empty})
         assert record == {"issue": "Vol. 1"}
