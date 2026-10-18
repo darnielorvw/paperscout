@@ -3,7 +3,7 @@ BUGS:
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
 TODO:
-die ersten seiten schnell liefern (keyword search)
+auf redis bzw plattform die nicht serverless ist umstellen
 
 scopus institutional token
 arten von works herausfinden
@@ -23,19 +23,13 @@ sind alle journals noch beim alten verlag?
 
 
 fehlende abstracts:
-Academy of Management Learning and Education
 
-Journal of Experimental Psychology Human Perception & Performance => KEINE DATEN
-The International Journal of Management Education => kein abstract
-Journal of Occupational Health Psychology => KEINE DATEN
-Journal of Research in Personality => kein abstract
-Current Opinion in Behavioral Sciences
-European Journal of Psychology of Education
-Games and Economic Behavior
-IEEE Transactions on Robotics
-Journal of Economic Behavior &amp; Organization
-Journal of Experimental Social Psychology
+Journal of Experimental Psychology Human Perception & Performance => ? nicht testbar für mich
+Journal of Occupational Health Psychology => ?
 
+IEEE Transactions on Robotics => edge case, gibt eigene api aber in meisten fällen reicht auch so
+
+science kurze abstracts und falsch
 
 
 

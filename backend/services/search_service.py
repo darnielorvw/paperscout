@@ -48,7 +48,7 @@ _CROSSREF_SELECT = (
 )
 
 # OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
-_OPENALEX_SELECT = "doi,primary_topic,best_oa_location,has_fulltext"
+_OPENALEX_SELECT = "doi,primary_topic,best_oa_location,has_fulltext,abstract_inverted_index"
 
 # Crossref files editorials, errata, book reviews etc. as plain "journal-article",
 # so only OpenAlex's own `type` can tell them apart from actual papers.
@@ -693,6 +693,7 @@ class SearchService:
             "pdf_url": best_oa.get("pdf_url"),
             "topic": primary_topic.get("display_name"),
             "has_fulltext": bool(work.get("has_fulltext")),
+            "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
         }
 
     def _extract_abstract(
