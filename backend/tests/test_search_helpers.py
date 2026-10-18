@@ -7,6 +7,7 @@ OpenAlex return - so they can be tested directly with plain dicts.
 import pytest
 from services.search_service import (
     SearchService,
+    _KeywordJob,
     _apa_from_last_names,
     _clean_doi,
     _clean_title,
@@ -194,3 +195,37 @@ class TestMerge:
         record = {"issue": "Vol. 1"}
         _merge(record, {"issue": empty})
         assert record == {"issue": "Vol. 1"}
+
+
+def _page(*dois):
+    """An OpenAlex page checked on Crossref where every DOI survived."""
+    return [{"DOI": d} for d in dois], {d: {"doi": d} for d in dois}
+
+
+class TestKeywordJob:
+    def test_hits_wait_for_earlier_pages(self):
+        job = _KeywordJob(oa_total=4)
+        job.add_page(1, _page("c", "d"), 2)
+        assert job.hits == []  # page 0 still missing, so nothing is final
+        job.add_page(0, _page("a", "b"), 2)
+        assert [w["DOI"] for w in job.hits] == ["a", "b", "c", "d"]
+
+    def test_failed_page_is_skipped_and_marks_incomplete(self):
+        job = _KeywordJob(oa_total=4)
+        job.add_page(0, None, 2)
+        job.add_page(1, _page("c"), 2)
+        assert [w["DOI"] for w in job.hits] == ["c"]
+        assert not job.complete
+
+    def test_drops_dois_repeated_on_a_later_page(self):
+        job = _KeywordJob(oa_total=4)
+        job.add_page(0, _page("a"), 2)
+        job.add_page(1, _page("a", "b"), 2)
+        assert [w["DOI"] for w in job.hits] == ["a", "b"]
+
+    def test_count_is_extrapolated_while_loading(self):
+        job = _KeywordJob(oa_total=1000)
+        job.add_page(0, _page("a", "b"), 200)  # 1% survived Crossref so far
+        assert job.count() == 10
+        job.finish()
+        assert job.count() == 2

@@ -5,7 +5,7 @@ import os
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Tuple
 
@@ -66,6 +66,67 @@ _OPENALEX_PAGED_MAX = 10_000
 # One OpenAlex page checked on Crossref: the Crossref works in the date range and
 # the page's OpenAlex works by DOI, or None if a request failed.
 _PageHits = Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]] | None
+
+
+@dataclass
+class _KeywordJob:
+    """The hit list of a keyword search while it is being built in the background.
+
+    OpenAlex pages finish in any order, but a hit's position is only final once
+    every page before it is in, so `hits` only ever holds the finished prefix.
+    Requests wait until it covers their page, not until the whole list is done.
+    """
+
+    hits: List[Dict[str, Any]] = field(default_factory=list)
+    oa_by_doi: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    oa_total: int = 0  # OpenAlex results in all
+    oa_seen: int = 0  # OpenAlex results in the finished prefix
+    finished: bool = False
+    complete: bool = True  # False once any request failed
+    task: asyncio.Task | None = None
+    _pending: Dict[int, Tuple[_PageHits, int]] = field(default_factory=dict)
+    _next_page: int = 0
+    _changed: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def add_page(self, index: int, page_hits: _PageHits, oa_count: int) -> None:
+        """Takes in the 0-based OpenAlex page `index` with its `oa_count` results."""
+        self._pending[index] = (page_hits, oa_count)
+        while self._next_page in self._pending:
+            page_hits, oa_count = self._pending.pop(self._next_page)
+            self._next_page += 1
+            self.oa_seen += oa_count
+            if page_hits is None:
+                self.complete = False
+                continue
+            cr_works, page_oa = page_hits
+            for work in cr_works:
+                doi = _clean_doi(work.get("DOI") or "")
+                # Only the OpenAlex works Crossref kept are ever shown.
+                if doi in page_oa and doi not in self.oa_by_doi:
+                    self.hits.append(work)
+                    self.oa_by_doi[doi] = page_oa[doi]
+        self._notify()
+
+    def finish(self) -> None:
+        self.finished = True
+        self._notify()
+
+    def _notify(self) -> None:
+        self._changed.set()
+        self._changed = asyncio.Event()
+
+    async def wait_for(self, count: int) -> None:
+        """Waits until `count` hits are final or the list is finished."""
+        while not self.finished and len(self.hits) < count:
+            await self._changed.wait()
+
+    def count(self) -> int:
+        """The number of hits; while loading, extrapolated from the share of
+        OpenAlex results that survived Crossref so far."""
+        if self.finished or not self.oa_seen:
+            return len(self.hits)
+        estimate = round(len(self.hits) * self.oa_total / self.oa_seen)
+        return max(estimate, len(self.hits))
 
 # How far back the keyword search on OpenAlex reaches, counted from the current month.
 _KEYWORD_WINDOW_YEARS = 2
@@ -276,6 +337,8 @@ class SearchService:
         # apart so the many small pages can't push them out, and for a day, since
         # rebuilding one costs OpenAlex requests.
         self.keyword_cache = LRUCache(max_size=20, ttl=86400)
+        # Keyword hit lists still being built, so later pages join the running job.
+        self._keyword_jobs: Dict[str, _KeywordJob] = {}
 
     async def _fetch_crossref(
         self, endpoint: str, params: Dict[str, Any]
@@ -385,7 +448,7 @@ class SearchService:
             label += f", keywords {keywords!r}"
         with _track_openalex_cost(label):
             if keywords:
-                items, count, oa_by_doi = await self._search_keywords(
+                items, count, oa_by_doi, final = await self._search_keywords(
                     issns, keywords, from_date, to_date, limit, page
                 )
                 records, api_by_doi = self._crossref_records(items, external_apis)
@@ -395,6 +458,7 @@ class SearchService:
                 items, count = await self._search_crossref(
                     issns, from_date, to_date, limit, page
                 )
+                final = True
                 records, api_by_doi = self._crossref_records(items, external_apis)
                 records = await self._add_openalex(records)
 
@@ -409,10 +473,19 @@ class SearchService:
                 )
 
             data = {
-                "meta": {"count": count, "page": page, "per_page": limit},
+                "meta": {
+                    "count": count,
+                    "page": page,
+                    "per_page": limit,
+                    # True while the keyword hit list is still loading in the
+                    # background and `count` only an estimate.
+                    "count_is_estimate": not final,
+                },
                 "results": records,
             }
-            if records:
+            # A page with an estimated count is not cached; the next request
+            # gets the real one.
+            if records and final:
                 self.cache.set(cache_key, data)
             return data
 
@@ -450,32 +523,71 @@ class SearchService:
         to_date: str,
         limit: int,
         page: int,
-    ) -> Tuple[List[Dict[str, Any]], int, Dict[str, Dict[str, Any]]]:
+    ) -> Tuple[List[Dict[str, Any]], int, Dict[str, Dict[str, Any]], bool]:
         """One page of the papers OpenAlex finds for the keywords whose journal
-        issue (Crossref) falls in the date range, in OpenAlex's relevance order, the
-        total count, and the OpenAlex works keyed by bare DOI."""
+        issue (Crossref) falls in the date range, in OpenAlex's relevance order; the
+        total count; the OpenAlex works keyed by bare DOI; and whether the count is
+        final.
+
+        The full hit list is built in the background. A request returns as soon as
+        its page is complete, and the count is estimated until the list is done.
+        """
+        offset = max(page - 1, 0) * limit
         cache_key = str(("keyword_hits", tuple(issns), keywords, from_date, to_date))
         cached = self.keyword_cache.get(cache_key)
-        if cached is None:
-            hits, oa_by_doi, complete = await self._keyword_hits(
-                issns, keywords, from_date, to_date
-            )
-            cached = (hits, oa_by_doi)
-            if complete:
-                self.keyword_cache.set(cache_key, cached)
-        hits, oa_by_doi = cached
+        if cached is not None:
+            hits, oa_by_doi = cached
+            return hits[offset : offset + limit], len(hits), oa_by_doi, True
 
-        offset = max(page - 1, 0) * limit
-        return hits[offset : offset + limit], len(hits), oa_by_doi
+        job = self._keyword_jobs.get(cache_key)
+        if job is None:
+            job = _KeywordJob()
+            self._keyword_jobs[cache_key] = job
+            # Keep a reference, or the task could be garbage-collected mid-run.
+            job.task = asyncio.create_task(
+                self._run_keyword_job(cache_key, job, issns, keywords, from_date, to_date)
+            )
+
+        await job.wait_for(offset + limit)
+        items = job.hits[offset : offset + limit]
+        return items, job.count(), job.oa_by_doi, job.finished
+
+    async def _run_keyword_job(
+        self,
+        cache_key: str,
+        job: _KeywordJob,
+        issns: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
+    ) -> None:
+        """Builds the full hit list into `job` and caches it once every request
+        succeeded."""
+        # Its own cost tracker: the request that started the job may be long done.
+        label = f"keyword hit list for {keywords!r} in {len(issns)} journal(s)"
+        try:
+            with _track_openalex_cost(label):
+                await self._keyword_hits(job, issns, keywords, from_date, to_date)
+        except Exception as e:
+            logger.exception("Keyword hit list for %r failed: %s", keywords, e)
+            job.complete = False
+        finally:
+            job.finish()
+            if job.complete:
+                self.keyword_cache.set(cache_key, (job.hits, job.oa_by_doi))
+            self._keyword_jobs.pop(cache_key, None)
 
     async def _keyword_hits(
-        self, issns: List[str], keywords: str, from_date: str, to_date: str
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], bool]:
-        """Every paper in the journals that OpenAlex matches with the keywords
-        (published from two years before `from_date` up to `to_date`) and whose
-        journal issue (Crossref) falls in the date range, in relevance order; the
-        OpenAlex works of those papers, keyed by bare DOI; and whether every request
-        succeeded.
+        self,
+        job: _KeywordJob,
+        issns: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
+    ) -> None:
+        """Adds to `job` every paper in the journals that OpenAlex matches with the
+        keywords (published from two years before `from_date` up to `to_date`) and
+        whose journal issue (Crossref) falls in the date range.
 
         The OpenAlex pages are fetched in parallel, and each is checked on Crossref
         as soon as it arrives, so both APIs work at the same time.
@@ -505,9 +617,8 @@ class SearchService:
                 data = await self._fetch_openalex("/works", {**params, **page_params})
             return data if "results" in data else None
 
-        async def check(data: Dict[str, Any]) -> _PageHits:
-            """The Crossref works of one OpenAlex page that are in the date range,
-            and that page's OpenAlex works."""
+        async def check(index: int, data: Dict[str, Any]) -> None:
+            """Checks one OpenAlex page on Crossref and adds it to the job."""
             oa_by_doi: Dict[str, Dict[str, Any]] = {}
             for work in data["results"]:
                 doi = _clean_doi(work.get("doi") or "")
@@ -516,51 +627,45 @@ class SearchService:
             cr_works = await self._crossref_issued_in_range(
                 list(oa_by_doi), from_date, to_date, crossref_slots
             )
-            return None if cr_works is None else (cr_works, oa_by_doi)
+            page_hits = None if cr_works is None else (cr_works, oa_by_doi)
+            job.add_page(index, page_hits, len(data["results"]))
 
-        async def fetch_and_check(page: int) -> _PageHits:
+        async def fetch_and_check(page: int) -> None:
             data = await fetch_page({"page": page})
-            return None if data is None else await check(data)
+            if data is None:
+                # Counted as a full page, so the count estimate stays sound.
+                job.add_page(page - 1, None, _OPENALEX_PAGE_SIZE)
+            else:
+                await check(page - 1, data)
 
         first = await fetch_page({"page": 1})
         if first is None:
-            return [], {}, False
+            job.complete = False
+            return
         count = (first.get("meta") or {}).get("count") or 0
+        job.oa_total = count
 
         tasks: List[asyncio.Task] = []
-        complete = True
         if count <= _OPENALEX_PAGED_MAX:
-            tasks.append(asyncio.create_task(check(first)))
+            tasks.append(asyncio.create_task(check(0, first)))
             pages = -(-count // _OPENALEX_PAGE_SIZE)
             tasks += [asyncio.create_task(fetch_and_check(n)) for n in range(2, pages + 1)]
         else:
             # Page numbers only reach the first 10,000 results; beyond that only the
             # cursor does, one page after the other.
             cursor = "*"
+            index = 0
             while cursor:
                 data = await fetch_page({"cursor": cursor})
                 if data is None:
-                    complete = False  # request failed; keep what we have
+                    job.complete = False  # request failed; keep what we have
                     break
-                tasks.append(asyncio.create_task(check(data)))
+                tasks.append(asyncio.create_task(check(index, data)))
+                index += 1
                 results = data["results"]
                 cursor = (data.get("meta") or {}).get("next_cursor") if results else None
 
-        hits: List[Dict[str, Any]] = []
-        oa_by_doi: Dict[str, Dict[str, Any]] = {}
-        # Pages come back in order, so the relevance ranking is kept.
-        for page_hits in await asyncio.gather(*tasks):
-            if page_hits is None:
-                complete = False
-                continue
-            cr_works, page_oa = page_hits
-            for work in cr_works:
-                doi = _clean_doi(work.get("DOI") or "")
-                # Only the OpenAlex works Crossref kept are ever shown.
-                if doi in page_oa and doi not in oa_by_doi:
-                    hits.append(work)
-                    oa_by_doi[doi] = page_oa[doi]
-        return hits, oa_by_doi, complete
+        await asyncio.gather(*tasks)
 
     async def _crossref_issued_in_range(
         self,
