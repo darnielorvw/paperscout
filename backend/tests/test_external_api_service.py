@@ -129,7 +129,9 @@ class TestApplyExternalApis:
             {"id": "b", "abstract": None},
             {"id": "c", "abstract": "From OpenAlex"},
         ]
-        asyncio.run(apply_external_apis(records, {"a": "springer", "b": "springer", "c": "springer"}))
+        asyncio.run(
+            apply_external_apis(records, {"a": "springer", "b": "springer", "c": "springer"})
+        )
 
         assert requested == ["a", "b", "c"]
         assert [r["abstract"] for r in records] == [

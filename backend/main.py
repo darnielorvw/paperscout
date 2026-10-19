@@ -5,27 +5,35 @@ from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from config import settings
-from database import models
-from database.database import engine, get_session
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from schemas import (ChangeEmailRequest, ChangePasswordRequest,
-                     DeleteAccountRequest, JournalImportByName, ProfileCreate,
-                     ProfileNotificationsUpdate, ProfileSettings, UserCreate,
-                     UserPublic)
-from services import auth_service, user_service
-from services.digest_service import DigestService
-from services.download_service import DownloadService
-from services.mail_service import MailService
-from services.search_service import SearchService
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, SQLModel, select
+
+from config import settings
+from database import models
+from database.database import engine, get_session
+from schemas import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    JournalImportByName,
+    ProfileCreate,
+    ProfileNotificationsUpdate,
+    ProfileSettings,
+    UserCreate,
+    UserPublic,
+)
+from services import auth_service, user_service
+from services.digest_service import DigestService
+from services.download_service import DownloadService
+from services.mail_service import MailService
+from services.search_service import SearchService
 
 scheduler = AsyncIOScheduler()
 

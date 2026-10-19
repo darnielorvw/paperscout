@@ -5,6 +5,7 @@ OpenAlex return - so they can be tested directly with plain dicts.
 """
 
 import pytest
+
 from services.search_service import (
     SearchService,
     _apa_from_last_names,
@@ -12,8 +13,8 @@ from services.search_service import (
     _clean_title,
     _date_parts_to_iso,
     _is_paper,
-    _merge,
     _issue_label,
+    _merge,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
@@ -193,10 +194,11 @@ class TestFillOpenalex:
             {"id": "b", "abstract": "From Crossref", "topic": None},
         ]
         oa_by_doi = {
-            "a": {"abstract_inverted_index": {"From": [0], "OpenAlex": [1]},
-                  "primary_topic": {"display_name": "Other"}},
-            "b": {"abstract_inverted_index": None,
-                  "primary_topic": {"display_name": "Filled"}},
+            "a": {
+                "abstract_inverted_index": {"From": [0], "OpenAlex": [1]},
+                "primary_topic": {"display_name": "Other"},
+            },
+            "b": {"abstract_inverted_index": None, "primary_topic": {"display_name": "Filled"}},
         }
         self.svc._fill_openalex(records, oa_by_doi)
         assert [(r["abstract"], r["topic"]) for r in records] == [

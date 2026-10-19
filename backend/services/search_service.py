@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Tuple
 
 import httpx
 from dotenv import load_dotenv
+
 from lib.cache import LRUCache
 from services.external_api_service import apply_external_apis
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 # errata etc.
 #
 # With keywords, OpenAlex searches the journals for papers published from the
-# selected from_month two years ago (there can be a large gap between online and 
+# selected from_month two years ago (there can be a large gap between online and
 # print publication) to the end of the to_month (its keyword search
 # is far better than Crossref's). Crossref then looks those DOIs up and keeps only
 # the ones whose journal issue (`issued`) falls in the selected date range. The
@@ -89,9 +90,7 @@ class _OpenAlexCost:
 
 # The cost tracker of the running search; tasks started by asyncio.gather copy the
 # context, so they all add to the same object.
-_openalex_cost: ContextVar[_OpenAlexCost | None] = ContextVar(
-    "openalex_cost", default=None
-)
+_openalex_cost: ContextVar[_OpenAlexCost | None] = ContextVar("openalex_cost", default=None)
 
 
 @contextmanager
@@ -270,9 +269,7 @@ class SearchService:
         self.openalex_base = "https://api.openalex.org"
 
         # Crossref's "polite pool" wants a contact address on every request.
-        self.mailto = (
-            os.environ.get("CROSSREF_MAILTO") or os.environ.get("SMTP_FROM") or ""
-        )
+        self.mailto = os.environ.get("CROSSREF_MAILTO") or os.environ.get("SMTP_FROM") or ""
 
         # Finished result pages.
         self.cache = LRUCache(max_size=100, ttl=3600)
@@ -281,9 +278,7 @@ class SearchService:
         # rebuilding one costs OpenAlex requests.
         self.keyword_cache = LRUCache(max_size=20, ttl=86400)
 
-    async def _fetch_crossref(
-        self, endpoint: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _fetch_crossref(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
         headers = {"User-Agent": f"PaperScout/1.0 (mailto:{self.mailto})"}
         if self.mailto:
             params = {"mailto": self.mailto, **params}
@@ -295,9 +290,7 @@ class SearchService:
                     response = await client.get(endpoint, params=params)
                     if response.status_code == 429 or response.status_code >= 500:
                         if attempt < _CROSSREF_RETRIES - 1:
-                            wait = float(
-                                response.headers.get("Retry-After") or 2**attempt
-                            )
+                            wait = float(response.headers.get("Retry-After") or 2**attempt)
                             await asyncio.sleep(wait)
                             continue
                     response.raise_for_status()
@@ -307,12 +300,8 @@ class SearchService:
                     return {}
         return {}
 
-    async def _fetch_openalex(
-        self, endpoint: str, params: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        async with httpx.AsyncClient(
-            base_url=self.openalex_base, timeout=10.0
-        ) as client:
+    async def _fetch_openalex(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        async with httpx.AsyncClient(base_url=self.openalex_base, timeout=10.0) as client:
             try:
                 api_key = os.environ.get("API_KEY")
                 params = {"api_key": api_key, **params}
@@ -338,9 +327,7 @@ class SearchService:
             return None
 
         for result in results:
-            if (
-                result.get("display_name") or ""
-            ).strip().lower() == name.strip().lower():
+            if (result.get("display_name") or "").strip().lower() == name.strip().lower():
                 return result
         return results[0]
 
@@ -396,9 +383,7 @@ class SearchService:
                 # The keyword search already returned the OpenAlex values.
                 self._fill_openalex(records, oa_by_doi)
             else:
-                items, count = await self._search_crossref(
-                    issns, from_date, to_date, limit, page
-                )
+                items, count = await self._search_crossref(issns, from_date, to_date, limit, page)
                 records, api_by_doi = self._crossref_records(items, external_apis)
                 records = await self._add_openalex(records)
 
@@ -408,9 +393,7 @@ class SearchService:
             for record in records:
                 record["abstract"] = record.get("abstract") or "No abstract available."
                 record["author"] = record.get("author") or ""
-                record["pdf_landing_page"] = (
-                    record.get("pdf_landing_page") or record["doi"]
-                )
+                record["pdf_landing_page"] = record.get("pdf_landing_page") or record["doi"]
 
             data = {
                 "meta": {"count": count, "page": page, "per_page": limit},
@@ -595,13 +578,11 @@ class SearchService:
             return None if message is None else message.get("items", [])
 
         batches = [
-            dois[i : i + _CROSSREF_DOI_BATCH]
-            for i in range(0, len(dois), _CROSSREF_DOI_BATCH)
+            dois[i : i + _CROSSREF_DOI_BATCH] for i in range(0, len(dois), _CROSSREF_DOI_BATCH)
         ]
         results = await asyncio.gather(*(lookup(b) for b in batches))
         if any(r is None for r in results):
             return None
-
         by_doi: Dict[str, Dict[str, Any]] = {}
         for work in (w for batch in results for w in batch):
             doi = _clean_doi(work.get("DOI") or "")
@@ -631,9 +612,7 @@ class SearchService:
                     break
         return records, api_by_doi
 
-    async def _add_openalex(
-        self, records: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    async def _add_openalex(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Drops non-papers and fills gaps with OpenAlex metadata, matched by DOI."""
         oa_by_doi = await self._openalex_by_dois([r["id"] for r in records])
         # Dropping non-papers means a page can come back with fewer than `limit` results.
@@ -706,9 +685,7 @@ class SearchService:
             "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
         }
 
-    def _extract_abstract(
-        self, inverted_index: Dict[str, List[int]] | None
-    ) -> str | None:
+    def _extract_abstract(self, inverted_index: Dict[str, List[int]] | None) -> str | None:
         """OpenAlex delivers abstracts 'inverted' for copyright reasons. This reconstructs them."""
         if not inverted_index:
             return None
