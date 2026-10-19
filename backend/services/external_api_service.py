@@ -64,6 +64,10 @@ async def _fetch_springer_abstracts(dois: List[str]) -> Dict[str, str]:
                 response = await client.get(_SPRINGER_BASE, params=params)
                 response.raise_for_status()
                 records = response.json().get("records", [])
+            except httpx.HTTPStatusError as e:
+                # Its message would contain the request URL, API key included.
+                print(f"Error during Springer request: HTTP {e.response.status_code}")
+                continue
             except Exception as e:
                 print(f"Error during Springer request: {e}")
                 continue

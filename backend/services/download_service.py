@@ -13,6 +13,8 @@ from fastapi import HTTPException
 from config import settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# httpx logs every request URL at INFO, API keys in the query string included.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class DownloadService:
@@ -81,9 +83,8 @@ class DownloadService:
     async def _download_pdf_bytes(self, openalex_id: str) -> bytes | None:
         """Downloads a single PDF file from OpenAlex."""
         clean_id = openalex_id.split("/")[-1]
-        download_url = (
-            f"https://content.openalex.org/works/{clean_id}.pdf?api_key={settings.OPENALEX_API_KEY}"
-        )
+        # The key goes in as a separate param, so the logged URL doesn't carry it.
+        download_url = f"https://content.openalex.org/works/{clean_id}.pdf"
 
         headers = {
             "User-Agent": "MyAppName/1.0 (mailto:your-email@domain.com)",
@@ -93,7 +94,12 @@ class DownloadService:
 
         try:
             async with httpx.AsyncClient(follow_redirects=True) as client:
-                response = await client.get(download_url, headers=headers, timeout=30.0)
+                response = await client.get(
+                    download_url,
+                    params={"api_key": settings.OPENALEX_API_KEY},
+                    headers=headers,
+                    timeout=30.0,
+                )
 
             if response.status_code != 200:
                 logging.error(
@@ -137,6 +143,7 @@ class DownloadService:
         )
 
         buffer = io.BytesIO()
+        added = 0
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
             for result in results:
                 if isinstance(result, Exception):
@@ -151,9 +158,11 @@ class DownloadService:
                 safe_title = self.sanitize_filename(title, clean_id)
                 safe_name = f"{safe_title}.pdf"
                 archive.writestr(safe_name, pdf_bytes)
+                added += 1
                 logging.info(f"Successfully added PDF to ZIP: {safe_name}")
 
-        if buffer.tell() == 0:
+        # Even an empty ZIP has a few bytes of directory, so count the PDFs instead.
+        if not added:
             return None
 
         return buffer.getvalue()

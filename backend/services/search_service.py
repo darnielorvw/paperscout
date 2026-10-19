@@ -309,6 +309,10 @@ class SearchService:
                 _add_openalex_cost(response.headers)
                 response.raise_for_status()
                 return response.json()
+            except httpx.HTTPStatusError as e:
+                # Its message would contain the request URL, API key included.
+                print(f"Error during OpenAlex request ({endpoint}): HTTP {e.response.status_code}")
+                return {}
             except Exception as e:
                 print(f"Error during OpenAlex request ({endpoint}): {e}")
                 return {}
@@ -633,7 +637,21 @@ class SearchService:
                 _merge(record, fields)
                 record["abstract"] = abstract or record.get("abstract")
 
-    async def _openalex_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
+    async def fetch_openalex_works(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
+        """OpenAlex ID and title per bare DOI. The PDF download needs the OpenAlex ID,
+        while the results only carry the DOI."""
+        works: Dict[str, Dict[str, Any]] = {}
+        # OpenAlex takes at most 100 values in one OR filter.
+        for i in range(0, len(dois), 100):
+            works.update(await self._openalex_by_dois(dois[i : i + 100], select="id,doi,title"))
+        return works
+
+    async def _openalex_by_dois(
+        self,
+        dois: List[str],
+        # `type` only tells papers from editorials, errata etc.
+        select: str = f"{_OPENALEX_SELECT},type",
+    ) -> Dict[str, Dict[str, Any]]:
         """Batch-looks up OpenAlex works for a list of bare DOIs, keyed by bare DOI."""
         dois = [d for d in dois if d]
         if not dois:
@@ -641,8 +659,7 @@ class SearchService:
         params = {
             "filter": f"doi:{'|'.join(dois)}",
             "per_page": len(dois),
-            # `type` only tells papers from editorials, errata etc.
-            "select": f"{_OPENALEX_SELECT},type",
+            "select": select,
             **_OPENALEX_INCLUDE_XPAC,
         }
         data = await self._fetch_openalex("/works", params)
