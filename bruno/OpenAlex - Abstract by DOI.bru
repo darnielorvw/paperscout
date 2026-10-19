@@ -1,0 +1,48 @@
+meta {
+  name: OpenAlex - Abstract by DOI
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{openalexBaseUrl}}/works/doi:{{doi}}?select=id,doi,title,publication_year,abstract_inverted_index&api_key={{openalexApiKey}}
+  body: none
+  auth: none
+}
+
+params:query {
+  select: id,doi,title,publication_year,abstract_inverted_index
+  api_key: {{openalexApiKey}}
+}
+
+script:post-response {
+  // OpenAlex liefert den Abstract nur als Inverted Index ({wort: [positionen]}).
+  // Hier wird daraus wieder lesbarer Text gebaut und als "abstract" in die Antwort gehängt.
+  const body = res.getBody();
+  const index = body && body.abstract_inverted_index;
+  if (index) {
+    const words = [];
+    for (const [word, positions] of Object.entries(index)) {
+      for (const pos of positions) words[pos] = word;
+    }
+    res.setBody({ abstract: words.join(" "), ...body });
+  }
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    expect(res.getBody().abstract).to.be.a("string").and.not.empty;
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die OpenAlex API.
+
+  - `doi` in der Environment setzen (ohne `https://doi.org/`-Prefix).
+  - Der API-Key kommt aus `API_KEY` in `backend/.env` (gleicher Key wie im Backend).
+  - OpenAlex liefert nur `abstract_inverted_index`; das Post-Response-Script baut daraus das Feld `abstract`.
+}

@@ -55,6 +55,29 @@ async def lifespan(app: FastAPI):
             conn.exec_driver_sql("ALTER TABLE user ADD COLUMN is_admin BOOLEAN DEFAULT 0")
             conn.commit()
 
+        existing_journal_columns = {
+            row[1] for row in conn.exec_driver_sql("PRAGMA table_info(journals)")
+        }
+        if "external_api" not in existing_journal_columns:
+            conn.exec_driver_sql("ALTER TABLE journals ADD COLUMN external_api VARCHAR")
+            # Springer journals whose abstracts Crossref/OpenAlex deliver unreliably:
+            # Nature, Motivation and Emotion, International Journal of Social Robotics.
+            conn.exec_driver_sql(
+                "UPDATE journals SET external_api = 'springer' "
+                "WHERE issn IN ('0028-0836', '0146-7239', '1875-4791')"
+            )
+            conn.commit()
+
+        # Elsevier journals whose abstracts only Scopus delivers. Only fills
+        # journals without an API yet, so a manual change isn't overwritten.
+        conn.exec_driver_sql(
+            "UPDATE journals SET external_api = 'scopus' "
+            "WHERE external_api IS NULL AND issn IN ("
+            "'2214-8043', '1472-8117', '0092-6566', '2352-1546', "
+            "'0899-8256', '0167-2681', '0022-1031')"
+        )
+        conn.commit()
+
         # Profiles no longer store a date range - drop the now-unused columns.
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         for column in ("start_date", "end_date"):
@@ -249,17 +272,13 @@ async def get_journals(
                 "issn": journal.issn,
                 "publisher": journal.publisher,
                 "homepage_url": journal.homepage,
+                "external_api": journal.external_api,
             }
         )
 
     if not results:
         return {"message": "No journals found.", "results": []}
     return {"results": results}
-
-
-@app.get("/api/test")
-async def test():
-    return "hallo"
 
 
 def _journal_values(oa_item: dict) -> dict | None:
@@ -356,11 +375,14 @@ async def search_articles(
 ):
     """Searches for scientific articles in the selected journals."""
     # journal_ids are OpenAlex source ids; Crossref needs the ISSNs.
-    statement = select(models.Journals.issn).where(models.Journals.id.in_(journal_ids))
-    issns = session.exec(statement).all()
+    statement = select(models.Journals.issn, models.Journals.external_api).where(
+        models.Journals.id.in_(journal_ids)
+    )
+    journals = session.exec(statement).all()
 
     data = await search_service.search(
-        issns=[issn for issn in issns if issn],
+        issns=[issn for issn, _ in journals if issn],
+        external_apis={issn: api for issn, api in journals if issn and api},
         keywords=keywords,
         from_date=from_date,
         to_date=to_date,

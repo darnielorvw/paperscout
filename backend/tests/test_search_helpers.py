@@ -12,7 +12,9 @@ from services.search_service import (
     _clean_doi,
     _clean_title,
     _date_parts_to_iso,
+    _is_paper,
     _issue_label,
+    _merge,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
@@ -167,3 +169,52 @@ class TestExtractAbstract:
     @pytest.mark.parametrize("value", [None, {}])
     def test_empty_returns_none(self, value):
         assert self.svc._extract_abstract(value) is None
+
+
+class TestIsPaper:
+    @pytest.mark.parametrize("work_type", ["article", "review"])
+    def test_keeps_papers(self, work_type):
+        assert _is_paper({"type": work_type})
+
+    @pytest.mark.parametrize("work_type", ["editorial", "erratum", "letter", "paratext", None])
+    def test_drops_non_papers(self, work_type):
+        assert not _is_paper({"type": work_type})
+
+    def test_keeps_dois_unknown_to_openalex(self):
+        assert _is_paper(None)
+
+
+class TestFillOpenalex:
+    def setup_method(self):
+        self.svc = SearchService()
+
+    def test_openalex_abstract_beats_crossref_but_other_fields_only_fill_gaps(self):
+        records = [
+            {"id": "a", "abstract": "From Crossref", "topic": "Kept"},
+            {"id": "b", "abstract": "From Crossref", "topic": None},
+        ]
+        oa_by_doi = {
+            "a": {
+                "abstract_inverted_index": {"From": [0], "OpenAlex": [1]},
+                "primary_topic": {"display_name": "Other"},
+            },
+            "b": {"abstract_inverted_index": None, "primary_topic": {"display_name": "Filled"}},
+        }
+        self.svc._fill_openalex(records, oa_by_doi)
+        assert [(r["abstract"], r["topic"]) for r in records] == [
+            ("From OpenAlex", "Kept"),
+            ("From Crossref", "Filled"),
+        ]
+
+
+class TestMerge:
+    def test_fills_only_empty_fields(self):
+        record = {"title": "Kept", "abstract": None}
+        _merge(record, {"title": "Other", "abstract": "Filled"})
+        assert record == {"title": "Kept", "abstract": "Filled"}
+
+    @pytest.mark.parametrize("empty", [None, "", []])
+    def test_empty_values_never_overwrite(self, empty):
+        record = {"issue": "Vol. 1"}
+        _merge(record, {"issue": empty})
+        assert record == {"issue": "Vol. 1"}

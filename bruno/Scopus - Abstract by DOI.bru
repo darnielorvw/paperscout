@@ -1,0 +1,43 @@
+meta {
+  name: Scopus - Abstract by DOI
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{scopusBaseUrl}}/scopus?query=DOI("{{doi}}")&view=COMPLETE&field=prism:doi,dc:title,dc:description
+  body: none
+  auth: none
+}
+
+params:query {
+  query: DOI("{{doi}}")
+  view: COMPLETE
+  field: prism:doi,dc:title,dc:description
+}
+
+headers {
+  X-ELS-APIKey: {{elsevierApiKey}}
+  Accept: application/json
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    const entry = res.getBody()["search-results"].entry[0];
+    expect(entry).to.have.property("dc:description");
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die Scopus Search API (Elsevier).
+
+  - Der Abstract steht unter `search-results.entry[0]["dc:description"]`, meist mit
+    Copyright-Hinweis (`© ... Elsevier ...`) am Anfang oder Ende.
+  - Abstracts (`view=COMPLETE`) gibt Scopus nur aus dem Netz einer zahlenden Institution
+    heraus (z. B. per VPN). Sonst kommt ein Fehler oder `dc:description` fehlt.
+  - Der API-Key kommt aus `ELSEVIER_API_KEY` in `backend/.env`.
+}
