@@ -1,0 +1,38 @@
+meta {
+  name: PubMed - Abstract by PMID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{pubmedBaseUrl}}/efetch.fcgi?db=pubmed&id={{pmid}}&rettype=abstract&retmode=xml
+  body: none
+  auth: none
+}
+
+params:query {
+  db: pubmed
+  id: {{pmid}}
+  rettype: abstract
+  retmode: xml
+  ~api_key: {{ncbiApiKey}}
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    expect(String(res.getBody())).to.include("<AbstractText");
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner PubMed-ID (PMID) über die NCBI E-utilities (efetch).
+
+  - `pmid` in der Environment setzen (nur die Zahl, z. B. `31452104`).
+  - Der Abstract steht im XML unter `<AbstractText>`; strukturierte Abstracts haben mehrere `<AbstractText Label="...">`-Blöcke.
+  - Für lesbaren Klartext statt XML `retmode` auf `text` setzen.
+  - Optional: `ncbiApiKey` setzen und den Query-Param `api_key` aktivieren (10 statt 3 Requests/Sekunde).
+}

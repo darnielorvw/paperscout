@@ -19,8 +19,8 @@ Handler = Callable[[List[Record]], Awaitable[None]]
 
 
 # --- Springer Nature ---------------------------------------------------------
-# Springer deposits abstracts with Crossref/OpenAlex only unreliably, so the
-# ones still missing are looked up on the Springer Nature Meta API.
+# Springer deposits abstracts with Crossref/OpenAlex only unreliably, so they
+# are looked up on the Springer Nature Meta API, which takes precedence.
 
 _SPRINGER_BASE = "https://api.springernature.com/meta/v2/json"
 # The Meta API returns at most 25 records per request on the basic plan.
@@ -77,16 +77,16 @@ async def _fetch_springer_abstracts(dois: List[str]) -> Dict[str, str]:
 
 
 async def handle_springer(records: List[Record]) -> None:
-    """Fills in abstracts Crossref and OpenAlex didn't provide."""
-    missing = [r for r in records if not r.get("abstract")]
-    abstracts = await _fetch_springer_abstracts([r["id"] for r in missing])
-    for record in missing:
-        record["abstract"] = abstracts.get(record["id"])
+    """Replaces the Crossref/OpenAlex abstracts with Springer's where it has
+    one; the others are kept."""
+    abstracts = await _fetch_springer_abstracts([r["id"] for r in records])
+    for record in records:
+        record["abstract"] = abstracts.get(record["id"]) or record.get("abstract")
 
 
 # --- Scopus (Elsevier) -------------------------------------------------------
-# Elsevier withholds abstracts from Crossref/OpenAlex, so the missing ones are
-# looked up on the Scopus Search API. Scopus only serves abstracts
+# Elsevier withholds abstracts from Crossref/OpenAlex, so they are looked up
+# on the Scopus Search API, which takes precedence. Scopus only serves abstracts
 # from inside a subscribing institution's network (e.g. via VPN), so the lookup
 # is skipped unless HAS_INSTITUTIONAL_ACCESS is set - without it every request
 # would fail anyway (e.g. on Vercel).
@@ -159,11 +159,11 @@ async def _fetch_scopus_abstracts(dois: List[str]) -> Dict[str, str]:
 
 
 async def handle_scopus(records: List[Record]) -> None:
-    """Fills in abstracts Crossref and OpenAlex didn't provide."""
-    missing = [r for r in records if not r.get("abstract")]
-    abstracts = await _fetch_scopus_abstracts([r["id"] for r in missing])
-    for record in missing:
-        record["abstract"] = abstracts.get(record["id"])
+    """Replaces the Crossref/OpenAlex abstracts with Scopus' where it has
+    one; the others are kept."""
+    abstracts = await _fetch_scopus_abstracts([r["id"] for r in records])
+    for record in records:
+        record["abstract"] = abstracts.get(record["id"]) or record.get("abstract")
 
 
 HANDLERS: Dict[str, Handler] = {

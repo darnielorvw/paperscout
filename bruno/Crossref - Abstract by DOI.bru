@@ -1,0 +1,34 @@
+meta {
+  name: Crossref - Abstract by DOI
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{crossrefBaseUrl}}/works/{{doi}}?mailto={{mailto}}
+  body: none
+  auth: none
+}
+
+params:query {
+  mailto: {{mailto}}
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    expect(res.getBody().message).to.have.property("abstract");
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die Crossref REST API.
+
+  - `doi` in der Environment setzen (ohne `https://doi.org/`-Prefix).
+  - Der Abstract steht unter `message.abstract` und ist JATS-XML (`<jats:p>...</jats:p>`).
+  - Viele Verlage hinterlegen bei Crossref keinen Abstract – dann fehlt das Feld.
+  - `mailto` (aus `SMTP_FROM`) bringt die Anfrage in den "polite pool".
+}

@@ -50,6 +50,10 @@ _CROSSREF_SELECT = (
 # OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
 _OPENALEX_SELECT = "doi,primary_topic,best_oa_location,has_fulltext,abstract_inverted_index"
 
+# OpenAlex leaves its "xpac" works (an expansion of its index, recent journal
+# papers among them) out of list queries unless asked; single lookups return them.
+_OPENALEX_INCLUDE_XPAC = {"include_xpac": "true"}
+
 # Crossref files editorials, errata, book reviews etc. as plain "journal-article",
 # so only OpenAlex's own `type` can tell them apart from actual papers.
 _PAPER_TYPES = ("article", "review")
@@ -496,6 +500,7 @@ class SearchService:
             "sort": "relevance_score:desc",
             "per_page": _OPENALEX_PAGE_SIZE,
             "select": _OPENALEX_SELECT,
+            **_OPENALEX_INCLUDE_XPAC,
         }
         openalex_slots = asyncio.Semaphore(_OPENALEX_CONCURRENCY)
         crossref_slots = asyncio.Semaphore(_CROSSREF_CONCURRENCY)
@@ -639,11 +644,15 @@ class SearchService:
     def _fill_openalex(
         self, records: List[Dict[str, Any]], oa_by_doi: Dict[str, Dict[str, Any]]
     ) -> None:
-        """Fills the records' gaps with the OpenAlex values, matched by DOI."""
+        """Fills the records' gaps with the OpenAlex values, matched by DOI. Only the
+        abstract replaces Crossref's, since OpenAlex' is usually the better one."""
         for record in records:
             oa_work = oa_by_doi.get(record["id"])
             if oa_work:
-                _merge(record, self._openalex_fields(oa_work))
+                fields = self._openalex_fields(oa_work)
+                abstract = fields.pop("abstract")
+                _merge(record, fields)
+                record["abstract"] = abstract or record.get("abstract")
 
     async def _openalex_by_dois(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
         """Batch-looks up OpenAlex works for a list of bare DOIs, keyed by bare DOI."""
@@ -655,6 +664,7 @@ class SearchService:
             "per_page": len(dois),
             # `type` only tells papers from editorials, errata etc.
             "select": f"{_OPENALEX_SELECT},type",
+            **_OPENALEX_INCLUDE_XPAC,
         }
         data = await self._fetch_openalex("/works", params)
         return {

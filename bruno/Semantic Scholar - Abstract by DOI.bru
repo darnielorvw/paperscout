@@ -1,0 +1,37 @@
+meta {
+  name: Semantic Scholar - Abstract by DOI
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{s2BaseUrl}}/paper/DOI:{{doi}}?fields=title,abstract,year,externalIds
+  body: none
+  auth: none
+}
+
+params:query {
+  fields: title,abstract,year,externalIds
+}
+
+headers {
+  ~x-api-key: {{s2ApiKey}}
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    expect(res.getBody()).to.have.property("abstract");
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die Semantic Scholar Graph API.
+
+  - `doi` in der Environment setzen (ohne `https://doi.org/`-Prefix).
+  - Optional: `s2ApiKey` setzen und den `x-api-key`-Header aktivieren (höheres Rate-Limit).
+  - `abstract` kann `null` sein, wenn Semantic Scholar aus Lizenzgründen keinen Abstract ausliefert.
+}

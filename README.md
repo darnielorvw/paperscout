@@ -1,5 +1,6 @@
 
 BUGS:
+bei aufbrauch von apis mail an mich
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
 TODO:
@@ -29,8 +30,9 @@ Journal of Occupational Health Psychology => ?
 
 IEEE Transactions on Robotics => edge case, gibt eigene api aber in meisten fällen reicht auch so
 
-science kurze abstracts und falsch
+science => abstracts falsch, maybe mit uni zugang richtig
 
+wirtschaftspsychologie hat keine abstracts
 
 
 anderer schnickschnack:

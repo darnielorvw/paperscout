@@ -1,0 +1,36 @@
+meta {
+  name: Springer - Abstract by DOI
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{springerBaseUrl}}/json?q=doi:{{doi}}&api_key={{springerApiKey}}
+  body: none
+  auth: none
+}
+
+params:query {
+  q: doi:{{doi}}
+  api_key: {{springerApiKey}}
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    const records = res.getBody().records;
+    expect(records).to.have.lengthOf.at.least(1);
+    expect(records[0].abstract).to.not.be.empty;
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die Springer Nature Meta API (v2).
+
+  - Der Abstract steht unter `records[0].abstract` – je nach Paper als Text oder als
+    Objekt mit Abschnitten. Bei manchen Papern ist er leer.
+  - Der API-Key kommt aus `SPRINGER_API_KEY` in `backend/.env`.
+}

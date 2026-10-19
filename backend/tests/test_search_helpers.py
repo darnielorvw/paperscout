@@ -183,6 +183,28 @@ class TestIsPaper:
         assert _is_paper(None)
 
 
+class TestFillOpenalex:
+    def setup_method(self):
+        self.svc = SearchService()
+
+    def test_openalex_abstract_beats_crossref_but_other_fields_only_fill_gaps(self):
+        records = [
+            {"id": "a", "abstract": "From Crossref", "topic": "Kept"},
+            {"id": "b", "abstract": "From Crossref", "topic": None},
+        ]
+        oa_by_doi = {
+            "a": {"abstract_inverted_index": {"From": [0], "OpenAlex": [1]},
+                  "primary_topic": {"display_name": "Other"}},
+            "b": {"abstract_inverted_index": None,
+                  "primary_topic": {"display_name": "Filled"}},
+        }
+        self.svc._fill_openalex(records, oa_by_doi)
+        assert [(r["abstract"], r["topic"]) for r in records] == [
+            ("From OpenAlex", "Kept"),
+            ("From Crossref", "Filled"),
+        ]
+
+
 class TestMerge:
     def test_fills_only_empty_fields(self):
         record = {"title": "Kept", "abstract": None}

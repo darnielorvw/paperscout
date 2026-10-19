@@ -116,30 +116,46 @@ class TestApplyExternalApis:
         asyncio.run(apply_external_apis(records, {"a": "dummy", "c": "unknown-api"}))
         assert seen == ["a"]
 
-    def test_springer_fills_only_missing_abstracts(self, monkeypatch):
+    def test_springer_abstracts_take_precedence(self, monkeypatch):
         requested = []
 
         async def fake_fetch(dois):
             requested.extend(dois)
-            return {"b": "From Springer"}
+            return {"a": "From Springer A", "b": "From Springer B"}
 
         monkeypatch.setattr(external_api_service, "_fetch_springer_abstracts", fake_fetch)
-        records = [{"id": "a", "abstract": "From Crossref"}, {"id": "b", "abstract": None}]
-        asyncio.run(apply_external_apis(records, {"a": "springer", "b": "springer"}))
+        records = [
+            {"id": "a", "abstract": "From Crossref"},
+            {"id": "b", "abstract": None},
+            {"id": "c", "abstract": "From OpenAlex"},
+        ]
+        asyncio.run(apply_external_apis(records, {"a": "springer", "b": "springer", "c": "springer"}))
 
-        assert requested == ["b"]
-        assert [r["abstract"] for r in records] == ["From Crossref", "From Springer"]
+        assert requested == ["a", "b", "c"]
+        assert [r["abstract"] for r in records] == [
+            "From Springer A",
+            "From Springer B",
+            "From OpenAlex",
+        ]
 
-    def test_scopus_fills_only_missing_abstracts(self, monkeypatch):
+    def test_scopus_abstracts_take_precedence(self, monkeypatch):
         requested = []
 
         async def fake_fetch(dois):
             requested.extend(dois)
-            return {"b": "From Scopus"}
+            return {"a": "From Scopus A", "b": "From Scopus B"}
 
         monkeypatch.setattr(external_api_service, "_fetch_scopus_abstracts", fake_fetch)
-        records = [{"id": "a", "abstract": "From Crossref"}, {"id": "b", "abstract": None}]
-        asyncio.run(apply_external_apis(records, {"a": "scopus", "b": "scopus"}))
+        records = [
+            {"id": "a", "abstract": "From Crossref"},
+            {"id": "b", "abstract": None},
+            {"id": "c", "abstract": "From OpenAlex"},
+        ]
+        asyncio.run(apply_external_apis(records, {"a": "scopus", "b": "scopus", "c": "scopus"}))
 
-        assert requested == ["b"]
-        assert [r["abstract"] for r in records] == ["From Crossref", "From Scopus"]
+        assert requested == ["a", "b", "c"]
+        assert [r["abstract"] for r in records] == [
+            "From Scopus A",
+            "From Scopus B",
+            "From OpenAlex",
+        ]
