@@ -643,15 +643,22 @@ async def bulk_download(
         except json.JSONDecodeError:
             parsed_titles = []
 
+    # The results carry DOIs, but the PDFs are fetched by OpenAlex ID.
+    works = await search_service.fetch_openalex_works(ids)
     papers = [
-        (work_id, parsed_titles[index] if index < len(parsed_titles) else None)
+        (
+            works[work_id]["id"],
+            (parsed_titles[index] if index < len(parsed_titles) else None)
+            or works[work_id].get("title"),
+        )
         for index, work_id in enumerate(ids)
+        if work_id in works
     ]
     archive_bytes = await download_service.download_pdf_from_openalex(papers)
     if not archive_bytes:
         raise HTTPException(
-            status_code=500,
-            detail="The bulk download could not be created.",
+            status_code=404,
+            detail="None of the selected papers has a PDF available for download.",
         )
 
     return StreamingResponse(
@@ -670,14 +677,18 @@ async def digest_download(token: str, zip_name: str = "papers"):
     """
     payload = download_service.decode_bulk_download_token(token)
     work_ids: List[str] = payload.get("work_ids", [])
-    titles_by_id = await search_service.fetch_titles_by_ids(work_ids)
-    papers = [(work_id, titles_by_id.get(work_id)) for work_id in work_ids]
+    works = await search_service.fetch_openalex_works(work_ids)
+    papers = [
+        (works[work_id]["id"], works[work_id].get("title"))
+        for work_id in work_ids
+        if work_id in works
+    ]
 
     archive_bytes = await download_service.download_pdf_from_openalex(papers)
     if not archive_bytes:
         raise HTTPException(
-            status_code=500,
-            detail="The download could not be created.",
+            status_code=404,
+            detail="None of these papers has a PDF available for download.",
         )
 
     safe_name = download_service.sanitize_filename(zip_name, "papers")

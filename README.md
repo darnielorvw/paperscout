@@ -1,5 +1,6 @@
 
 BUGS:
+keine pdf_url aber bulk download
 bei aufbrauch von apis mail an mich
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
@@ -8,7 +9,6 @@ auf redis bzw plattform die nicht serverless ist umstellen
 
 scopus institutional token
 arten von works herausfinden
-jedes journal durchtesten ob datum filterung funktioniert
 
 springer api tdm uni zugang
 bei nature viele verschiedene types von papern
