@@ -1,10 +1,13 @@
-import { Download } from "lucide-react";
+import { BookmarkCheckIcon, BookmarkPlusIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
-import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
-import { ArticleCard } from "~/components/article-card";
+import { Await, Link, useLoaderData, useLocation, useNavigate } from "react-router";
+import { ArticleCard, MetaItem } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Field, FieldLabel } from "~/components/ui/field";
+import { useReadingList } from "~/context/reading-list-context";
 import { useSearch } from "~/context/search-context";
 
 import { toast } from "sonner";
@@ -21,13 +24,11 @@ export type Article = {
   publication_date: string;
   journal_publication_date: string | null;
   issue: string | null;
-  pdf_landing_page: string;
-  pdf_url: string;
+  library_url: string | null;
   journal_name: string;
   abstract: string;
   topic: string;
   author: string;
-  has_fulltext: boolean;
 };
 
 type LoaderData = {
@@ -82,15 +83,60 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
   return { articlePromise };
 }
 
+// Selection checkbox of a result; once saved, it links to the reading list instead.
+function SelectForReadingList({
+  article,
+  isSaved,
+  isSelected,
+  onToggle,
+}: {
+  article: Article;
+  isSaved: boolean;
+  isSelected: boolean;
+  onToggle: (article: Article, checked: boolean) => void;
+}) {
+  if (isSaved) {
+    return (
+      <MetaItem label="Reading list">
+        <Link
+          to="/reading-list"
+          className="mt-1 inline-flex items-center gap-1.5 underline-offset-2 hover:text-foreground hover:underline"
+        >
+          <BookmarkCheckIcon className="size-4" />
+          On your reading list
+        </Link>
+      </MetaItem>
+    );
+  }
+  return (
+    <MetaItem label="Select">
+      <Field orientation="horizontal" className="mt-1 w-auto">
+        <Checkbox
+          id={`select-${article.id}`}
+          checked={isSelected}
+          onCheckedChange={(checked) => onToggle(article, checked === true)}
+        />
+        <FieldLabel
+          htmlFor={`select-${article.id}`}
+          className="font-normal text-muted-foreground"
+        >
+          Mark for reading list
+        </FieldLabel>
+      </Field>
+    </MetaItem>
+  );
+}
+
 export default function Results() {
   const { articlePromise, error } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
   const location = useLocation();
   const [isPending, startTransition] = useTransition();
-  const [openingPdf, setOpeningPdf] = useState<Record<string, boolean>>({});
-  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [selectedArticles, setSelectedArticles] = useState<
+    Map<string, Article>
+  >(new Map());
+  const [isSaving, setIsSaving] = useState(false);
+  const { savedArticleIds, saveArticles } = useReadingList();
   const { setRowSelection, setSearchTerm, setDate, isInitialized } =
     useSearch();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -135,43 +181,26 @@ export default function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, isInitialized]);
 
-  const handleOpenPdfInNewTab = async (article: Article) => {
-    if (!article.pdf_url) return;
-    setOpeningPdf((prev) => ({ ...prev, [article.id]: true }));
-    try {
-      window.open(article.pdf_url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "An unknown error occurred.";
-      console.error("Error opening the PDF:", error);
-      toast.error(errorMessage, { position: "top-center" });
-    } finally {
-      setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
-    }
-  };
-
-  const handleOpenLandingPage = (url: string) => {
-    window.open(url, "_blank");
-  };
-
-  const toggleSelectedArticle = (articleId: string, checked: boolean) => {
-    setSelectedArticleIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(articleId);
+  // Selection is kept across pages, so it stores the articles themselves.
+  // Articles already on the reading list can't be selected.
+  const toggleSelectedArticle = (article: Article, checked: boolean) => {
+    setSelectedArticles((prev) => {
+      const next = new Map(prev);
+      if (checked && !savedArticleIds.has(article.id)) {
+        next.set(article.id, article);
       } else {
-        next.delete(articleId);
+        next.delete(article.id);
       }
       return next;
     });
   };
 
   const selectAllCurrentPage = (articles: Article[]) => {
-    setSelectedArticleIds((prev) => {
-      const next = new Set(prev);
+    setSelectedArticles((prev) => {
+      const next = new Map(prev);
       articles.forEach((article) => {
-        if (article.has_fulltext) {
-          next.add(article.id);
+        if (!savedArticleIds.has(article.id)) {
+          next.set(article.id, article);
         }
       });
       return next;
@@ -179,62 +208,28 @@ export default function Results() {
   };
 
   const clearAllSelections = () => {
-    setSelectedArticleIds(new Set());
+    setSelectedArticles(new Map());
   };
 
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleBulkDownload = async (articles: Article[]) => {
-    const selectedArticles = articles.filter((article) =>
-      selectedArticleIds.has(article.id),
-    );
-
-    if (selectedArticles.length === 0) {
-      toast.error("No downloadable PDFs selected.", {
-        position: "top-center",
-      });
-      return;
-    }
-
-    const workIds = selectedArticles.map((article) => article.id).join(",");
-    const titles = selectedArticles.map((article) => article.title);
-    const params = new URLSearchParams({
-      work_ids: workIds,
-      titles: JSON.stringify(titles),
-    });
-
-    setIsDownloading(true);
+  const handleSaveSelected = async () => {
+    setIsSaving(true);
     try {
-      const response = await apiFetch<Blob>(
-        `/api/bulk-download?${params.toString()}`,
-        {
-          responseType: "blob",
-        },
-      );
-
-      const objectUrl = URL.createObjectURL(response);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = "papers.zip";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-
+      const { added, skipped } = await saveArticles([
+        ...selectedArticles.values(),
+      ]);
+      setSelectedArticles(new Map());
       toast.success(
-        `${selectedArticles.length} Dateien wurden als ZIP heruntergeladen.`,
-        {
-          position: "top-center",
-        },
+        `${added} ${added === 1 ? "paper" : "papers"} added to your reading list` +
+          (skipped > 0 ? ` (${skipped} already on it).` : "."),
+        { position: "top-center" },
       );
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Bulk-Download fehlgeschlagen.";
-      toast.error(message, { position: "top-center" });
+      toast.error(
+        error instanceof Error ? error.message : "Could not save the papers.",
+        { position: "top-center" },
+      );
     } finally {
-      setIsDownloading(false);
+      setIsSaving(false);
     }
   };
 
@@ -276,8 +271,8 @@ export default function Results() {
                   <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
-                        {selectedArticleIds.size > 0
-                          ? `${selectedArticleIds.size} selected`
+                        {selectedArticles.size > 0
+                          ? `${selectedArticles.size} selected`
                           : "Nothing selected"}
                       </p>
                       <Button
@@ -292,22 +287,22 @@ export default function Results() {
                         variant="outline"
                         size="sm"
                         onClick={clearAllSelections}
-                        disabled={selectedArticleIds.size === 0}
+                        disabled={selectedArticles.size === 0}
                       >
                         Clear selection
                       </Button>
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => handleBulkDownload(articles)}
-                      disabled={selectedArticleIds.size === 0 || isDownloading}
+                      onClick={handleSaveSelected}
+                      disabled={selectedArticles.size === 0 || isSaving}
                     >
-                      {isDownloading ? (
+                      {isSaving ? (
                         <Spinner data-icon="inline-start" />
                       ) : (
-                        <Download />
+                        <BookmarkPlusIcon />
                       )}
-                      Bulk Download
+                      Save to reading list
                     </Button>
                   </div>
 
@@ -316,11 +311,14 @@ export default function Results() {
                       <ArticleCard
                         key={article.id}
                         article={article}
-                        openingPdf={openingPdf[article.id] || false}
-                        isSelected={selectedArticleIds.has(article.id)}
-                        onToggleSelect={toggleSelectedArticle}
-                        onOpenPdf={handleOpenPdfInNewTab}
-                        onOpenLandingPage={handleOpenLandingPage}
+                        leftTop={
+                          <SelectForReadingList
+                            article={article}
+                            isSaved={savedArticleIds.has(article.id)}
+                            isSelected={selectedArticles.has(article.id)}
+                            onToggle={toggleSelectedArticle}
+                          />
+                        }
                       />
                     ))
                   ) : (

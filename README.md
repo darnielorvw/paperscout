@@ -1,16 +1,17 @@
 
 BUGS:
-keine pdf_url aber bulk download
 bei aufbrauch von apis mail an mich
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
 TODO:
+admin tab send digest
+digest testen
+
+lizenzrecht klären
 auf redis bzw plattform die nicht serverless ist umstellen
-
-scopus institutional token
 arten von works herausfinden
+db init script aufräumen
 
-springer api tdm uni zugang
 bei nature viele verschiedene types von papern
 
 ggf neues repo

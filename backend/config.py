@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Regex for additional allowed origins (e.g. Cloudflare quick tunnels)
     CORS_ORIGIN_REGEX: str = os.getenv("CORS_ORIGIN_REGEX", r"")
 
-    # Base URL of the backend, for download links in emails (must be reachable from outside).
+    # Base URL of the backend, for the verification links in emails (must be reachable from outside).
     # On Vercel, VERCEL_URL is set automatically to the current deployment's own
     # URL (a new one for every Preview deployment) - if BACKEND_URL isn't
     # explicitly overridden, fall back to that instead of localhost, so Previews
@@ -55,17 +55,17 @@ class Settings(BaseSettings):
     # Cron expression for the monthly digest send (default: 1st of every month, 07:00)
     DIGEST_CRON: str = os.getenv("DIGEST_CRON", "0 7 1 * *")
 
-    # Validity period of the PDF download links in digest emails (in days)
-    DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS: int = int(os.getenv("DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS", "90"))
-
     # Validity period of the email confirmation link during registration (in hours)
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24"))
 
-    # OpenAlex API configuration (still used by the PDF download service)
-    OPENALEX_API_KEY: str = os.getenv("API_KEY", "")
-
     # Contact address sent to Crossref for the "polite pool" (falls back to SMTP_FROM).
     CROSSREF_MAILTO: str = os.getenv("CROSSREF_MAILTO", "")
+
+    # Library OpenURL resolver; every result links to it so users reach the full
+    # text through their institution's subscriptions.
+    OPENURL_RESOLVER: str = os.getenv(
+        "OPENURL_RESOLVER", "https://kai.fh-swf.de/openurl/49HBZ_FSW/49HBZ_FSW:VU1"
+    )
 
     # Springer Nature Meta API key, used for journals with external_api="springer".
     SPRINGER_API_KEY: str = os.getenv("SPRINGER_API_KEY", "")

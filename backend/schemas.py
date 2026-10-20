@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -63,3 +63,28 @@ class DeleteAccountRequest(BaseModel):
 # Schema for importing one or more journals by name (admin only)
 class JournalImportByName(BaseModel):
     names: List[str]
+
+
+# Schema for a search result as it is saved to the reading list
+class SavedArticleData(BaseModel):
+    id: str = Field(min_length=1)
+    title: Optional[str] = None
+    author: Optional[str] = None
+    journal_name: Optional[str] = None
+    publication_date: Optional[str] = None
+    journal_publication_date: Optional[str] = None
+    issue: Optional[str] = None
+    doi: Optional[str] = None
+    library_url: Optional[str] = None
+    abstract: Optional[str] = None
+    topic: Optional[str] = None
+
+
+# Schema for adding search results to the reading list
+class SavedArticlesCreate(BaseModel):
+    articles: List[SavedArticleData] = Field(min_length=1, max_length=200)
+
+
+# Schema for marking a reading list entry as read or unread
+class SavedArticleUpdate(BaseModel):
+    isRead: bool

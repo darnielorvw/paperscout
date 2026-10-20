@@ -1,13 +1,13 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -26,12 +26,13 @@ from schemas import (
     ProfileCreate,
     ProfileNotificationsUpdate,
     ProfileSettings,
+    SavedArticlesCreate,
+    SavedArticleUpdate,
     UserCreate,
     UserPublic,
 )
 from services import auth_service, user_service
 from services.digest_service import DigestService
-from services.download_service import DownloadService
 from services.mail_service import MailService
 from services.search_service import SearchService
 
@@ -77,6 +78,15 @@ async def lifespan(app: FastAPI):
             "'0899-8256', '0167-2681', '0022-1031')"
         )
         conn.commit()
+
+        # Reading list entries no longer have a note (it was NOT NULL without a
+        # default, so a leftover column would make every insert fail) nor a
+        # publisher link, which was always the DOI link.
+        saved_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(savedarticle)")}
+        for column in ("note", "pdf_landing_page"):
+            if column in saved_columns:
+                conn.exec_driver_sql(f"ALTER TABLE savedarticle DROP COLUMN {column}")
+                conn.commit()
 
         # Profiles no longer store a date range - drop the now-unused columns.
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
@@ -149,7 +159,6 @@ async def lifespan(app: FastAPI):
 
     yield  # The FastAPI app runs here
     scheduler.shutdown()
-    await download_service.aclose()
 
     # ---- ON APP SHUTDOWN ----
     print("🛑 Server is shutting down...", flush=True)
@@ -169,9 +178,8 @@ app.add_middleware(
 )
 
 search_service = SearchService()
-download_service = DownloadService()
 mail_service = MailService()
-digest_service = DigestService(search_service, mail_service, download_service)
+digest_service = DigestService(search_service, mail_service)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -542,6 +550,139 @@ async def delete_profile(
     session.commit()
 
 
+def _saved_article_response(saved: models.SavedArticle) -> dict:
+    """A reading list entry: the saved search result plus the user's own data."""
+    return {
+        "id": saved.id,
+        "article": {
+            "id": saved.article_id,
+            "title": saved.title,
+            "author": saved.author,
+            "journal_name": saved.journal_name,
+            "publication_date": saved.publication_date,
+            "journal_publication_date": saved.journal_publication_date,
+            "issue": saved.issue,
+            "doi": saved.doi,
+            "library_url": saved.library_url,
+            "abstract": saved.abstract,
+            "topic": saved.topic,
+        },
+        "isRead": saved.is_read,
+        # SQLite hands the UTC timestamp back without a timezone.
+        "savedAt": saved.saved_at.replace(tzinfo=saved.saved_at.tzinfo or timezone.utc).isoformat(),
+    }
+
+
+def _get_own_saved_article(
+    session: Session, saved_id: int, user: models.User
+) -> models.SavedArticle:
+    saved = session.get(models.SavedArticle, saved_id)
+    if not saved or saved.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Reading list entry not found.")
+    return saved
+
+
+@app.get("/api/saved-articles")
+async def get_saved_articles(
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Returns the current user's reading list, most recently saved first."""
+    saved = session.exec(
+        select(models.SavedArticle)
+        .where(models.SavedArticle.user_id == current_user.id)
+        .order_by(models.SavedArticle.saved_at.desc(), models.SavedArticle.id.desc())
+    ).all()
+    return {"results": [_saved_article_response(s) for s in saved]}
+
+
+@app.post("/api/saved-articles", status_code=201)
+async def save_articles(
+    payload: SavedArticlesCreate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Adds search results to the reading list. Articles already on it are skipped."""
+    existing = set(
+        session.exec(
+            select(models.SavedArticle.article_id).where(
+                models.SavedArticle.user_id == current_user.id
+            )
+        ).all()
+    )
+
+    added: List[models.SavedArticle] = []
+    for article in payload.articles:
+        if article.id in existing:
+            continue
+        existing.add(article.id)
+        values = article.model_dump(exclude={"id"})
+        added.append(models.SavedArticle(user_id=current_user.id, article_id=article.id, **values))
+
+    try:
+        session.add_all(added)
+        session.commit()
+    except IntegrityError:
+        # Another request saved one of them in the meantime.
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Some of these articles were just saved elsewhere. Please reload.",
+        ) from None
+
+    for saved in added:
+        session.refresh(saved)
+    return {
+        "results": [_saved_article_response(s) for s in added],
+        "skipped": len(payload.articles) - len(added),
+    }
+
+
+@app.patch("/api/saved-articles/{saved_id}")
+async def update_saved_article(
+    saved_id: int,
+    payload: SavedArticleUpdate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Marks a reading list entry as read or unread."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    saved.is_read = payload.isRead
+    session.add(saved)
+    session.commit()
+    session.refresh(saved)
+    return _saved_article_response(saved)
+
+
+@app.delete("/api/saved-articles/{saved_id}", status_code=204)
+async def delete_saved_article(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Removes an article from the reading list."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    session.delete(saved)
+    session.commit()
+
+
+@app.delete("/api/saved-articles", status_code=204)
+async def delete_saved_articles(
+    ids: List[int] = Query(..., max_length=500),
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Removes several articles from the reading list at once. Ids that aren't
+    on the user's own list are ignored."""
+    session.exec(
+        sql_delete(models.SavedArticle).where(
+            models.SavedArticle.user_id == current_user.id,
+            models.SavedArticle.id.in_(ids),
+        )
+    )
+    session.commit()
+
+
 @app.api_route("/api/users/me", response_model=UserPublic, methods=["GET", "HEAD"])
 async def read_users_me(
     current_user: models.User = Depends(auth_service.get_current_user),
@@ -607,9 +748,14 @@ async def delete_account(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Irrevocably deletes the current user's account, including all search profiles."""
+    """Irrevocably deletes the current user's account, including all search profiles
+    and the reading list."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    session.exec(
+        sql_delete(models.SavedArticle).where(models.SavedArticle.user_id == current_user.id)
+    )
 
     profile_ids = session.exec(
         select(models.Profile.id).where(models.Profile.user_id == current_user.id)
@@ -624,79 +770,6 @@ async def delete_account(
 
     session.delete(current_user)
     session.commit()
-
-
-@app.get("/api/bulk-download")
-async def bulk_download(
-    work_ids: str,
-    titles: str | None = None,
-    _: models.User = Depends(auth_service.get_current_user),
-):
-    ids = [work_id for work_id in work_ids.split(",") if work_id]
-    if not ids:
-        raise HTTPException(status_code=400, detail="No work IDs provided.")
-
-    parsed_titles: list[str] = []
-    if titles:
-        try:
-            parsed_titles = json.loads(titles)
-        except json.JSONDecodeError:
-            parsed_titles = []
-
-    # The results carry DOIs, but the PDFs are fetched by OpenAlex ID.
-    works = await search_service.fetch_openalex_works(ids)
-    papers = [
-        (
-            works[work_id]["id"],
-            (parsed_titles[index] if index < len(parsed_titles) else None)
-            or works[work_id].get("title"),
-        )
-        for index, work_id in enumerate(ids)
-        if work_id in works
-    ]
-    archive_bytes = await download_service.download_pdf_from_openalex(papers)
-    if not archive_bytes:
-        raise HTTPException(
-            status_code=404,
-            detail="None of the selected papers has a PDF available for download.",
-        )
-
-    return StreamingResponse(
-        iter([archive_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=papers.zip"},
-    )
-
-
-@app.get("/api/digest/download")
-async def digest_download(token: str, zip_name: str = "papers"):
-    """Public download endpoint for the signed ZIP links from digest emails.
-
-    Requires no login since the link is clicked directly from the email —
-    the token itself handles the authorization (see DownloadService.create_bulk_download_token).
-    """
-    payload = download_service.decode_bulk_download_token(token)
-    work_ids: List[str] = payload.get("work_ids", [])
-    works = await search_service.fetch_openalex_works(work_ids)
-    papers = [
-        (works[work_id]["id"], works[work_id].get("title"))
-        for work_id in work_ids
-        if work_id in works
-    ]
-
-    archive_bytes = await download_service.download_pdf_from_openalex(papers)
-    if not archive_bytes:
-        raise HTTPException(
-            status_code=404,
-            detail="None of these papers has a PDF available for download.",
-        )
-
-    safe_name = download_service.sanitize_filename(zip_name, "papers")
-    return StreamingResponse(
-        iter([archive_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={safe_name}.zip"},
-    )
 
 
 @app.post("/api/digest/send-test")

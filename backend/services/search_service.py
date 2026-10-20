@@ -8,10 +8,12 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Dict, List, Tuple
+from urllib.parse import urlencode
 
 import httpx
 from dotenv import load_dotenv
 
+from config import settings
 from lib.cache import LRUCache
 from services.external_api_service import apply_external_apis
 
@@ -49,7 +51,7 @@ _CROSSREF_SELECT = (
 )
 
 # OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
-_OPENALEX_SELECT = "doi,primary_topic,best_oa_location,has_fulltext,abstract_inverted_index"
+_OPENALEX_SELECT = "doi,primary_topic,abstract_inverted_index"
 
 # OpenAlex leaves its "xpac" works (an expansion of its index, recent journal
 # papers among them) out of list queries unless asked; single lookups return them.
@@ -153,12 +155,10 @@ def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
         "publication_date": None,
         "journal_publication_date": None,
         "issue": None,
-        "pdf_url": None,
-        "pdf_landing_page": None,
+        "library_url": None,
         "abstract": None,
         "topic": None,
         "author": None,
-        "has_fulltext": False,
     }
 
 
@@ -248,6 +248,24 @@ def _issue_label(volume: str | None, issue: str | None) -> str | None:
     if issue:
         parts.append(f"Issue {issue}")
     return ", ".join(parts) or None
+
+
+def _openurl(record: Dict[str, Any]) -> str | None:
+    """Link to the library's OpenURL resolver for this article."""
+    doi = _clean_doi(record.get("doi") or "")
+    if not doi:
+        return None
+    params = {
+        "ctx_ver": "Z39.88-2004",
+        "rft_val_fmt": "info:ofi/fmt:kev:mtx:journal",
+        "rft.genre": "article",
+        "rft_id": f"info:doi/{doi}",
+        "rft.atitle": record.get("title") or "",
+        "rft.jtitle": record.get("journal_name") or "",
+        "rft.date": (record.get("publication_date") or "")[:4],
+    }
+    query = urlencode({key: value for key, value in params.items() if value})
+    return f"{settings.OPENURL_RESOLVER}?{query}"
 
 
 def _clean_doi(value: str) -> str:
@@ -397,7 +415,7 @@ class SearchService:
             for record in records:
                 record["abstract"] = record.get("abstract") or "No abstract available."
                 record["author"] = record.get("author") or ""
-                record["pdf_landing_page"] = record.get("pdf_landing_page") or record["doi"]
+                record["library_url"] = _openurl(record)
 
             data = {
                 "meta": {"count": count, "page": page, "per_page": limit},
@@ -637,15 +655,6 @@ class SearchService:
                 _merge(record, fields)
                 record["abstract"] = abstract or record.get("abstract")
 
-    async def fetch_openalex_works(self, dois: List[str]) -> Dict[str, Dict[str, Any]]:
-        """OpenAlex ID and title per bare DOI. The PDF download needs the OpenAlex ID,
-        while the results only carry the DOI."""
-        works: Dict[str, Dict[str, Any]] = {}
-        # OpenAlex takes at most 100 values in one OR filter.
-        for i in range(0, len(dois), 100):
-            works.update(await self._openalex_by_dois(dois[i : i + 100], select="id,doi,title"))
-        return works
-
     async def _openalex_by_dois(
         self,
         dois: List[str],
@@ -691,14 +700,11 @@ class SearchService:
         }
 
     def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:
-        """The values only OpenAlex has: topic, full-text flag and PDF link."""
-        best_oa = work.get("best_oa_location") or {}
+        """The values only OpenAlex has: topic and abstract."""
         primary_topic = work.get("primary_topic") or {}
 
         return {
-            "pdf_url": best_oa.get("pdf_url"),
             "topic": primary_topic.get("display_name"),
-            "has_fulltext": bool(work.get("has_fulltext")),
             "abstract": self._extract_abstract(work.get("abstract_inverted_index")),
         }
 

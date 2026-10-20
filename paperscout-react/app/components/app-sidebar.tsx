@@ -19,10 +19,10 @@ import { buildResultsUrl } from "~/lib/search-utils";
 
 const data = [
   {
-    title: "Input",
+    title: "New Search",
     items: [
       {
-        title: "Select Journals",
+        title: "Journals",
         url: "/#journals",
       },
       {
@@ -30,17 +30,21 @@ const data = [
         url: "/#range",
       },
       {
-        title: "Search",
-        url: "/#search",
+        title: "Keywords",
+        url: "/#keywords",
       },
     ],
   },
   {
-    title: "Output",
+    title: "Papers",
     items: [
       {
         title: "Results",
         url: "/results",
+      },
+      {
+        title: "Reading List",
+        url: "/reading-list",
       },
     ],
   },
