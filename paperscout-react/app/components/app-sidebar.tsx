@@ -26,7 +26,7 @@ const data = [
         url: "/#journals",
       },
       {
-        title: "Select Time Range",
+        title: "Time Range",
         url: "/#range",
       },
       {

@@ -68,9 +68,9 @@ class DigestService:
 
         if not articles:
             return (
-                f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+                f"<h2 style='margin-top:32px;font-size:20px;'>Profile: {escape(profile_name)}</h2>"
                 f"{browse_note}"
-                f"<p style='color:#666;'>No new results in this period.</p>"
+                f"<p style='color:#666;font-size:14px;'>No new results in this period.</p>"
             )
 
         items = []
@@ -83,13 +83,13 @@ class DigestService:
             link = article.get("library_url") or article.get("doi") or "#"
             items.append(
                 "<li style='margin-bottom:14px;'>"
-                f"<a href='{escape(link)}' style='font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
-                f"<span style='color:#555;font-size:14px;'>{author} &middot; {journal} &middot; {date}</span>"
+                f"<a href='{escape(link)}' style='font-size:16px;font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
+                f"<span style='color:#555;font-size:13px;'>{author} &middot; {journal} &middot; {date}</span>"
                 "</li>"
             )
 
         return (
-            f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+            f"<h2 style='margin-top:32px;font-size:20px;'>Profile: {escape(profile_name)}</h2>"
             f"{browse_note}"
             f"<ul style='list-style:none;padding:0;'>{''.join(items)}</ul>"
         )
@@ -145,8 +145,8 @@ class DigestService:
         body = "".join(sections)
         return (
             "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;'>"
-            f"<h1 style='margin-bottom:4px;'>Your monthly PaperScout digest</h1>"
-            f"<p style='color:#666;'>New papers from {from_date} to {to_date}, sorted by your search profiles. "
+            f"<h1 style='margin-bottom:4px;font-size:24px;'>Your monthly PaperScout digest</h1>"
+            f"<p style='color:#666;font-size:14px;'>New papers from {from_date} to {to_date}, sorted by your search profiles. "
             f"Each profile shows up to {ARTICLES_PER_PROFILE} papers here – use the "
             f"“Browse all results” link to see the full list and pick papers yourself.</p>"
             f"{body}"
@@ -163,8 +163,11 @@ class DigestService:
             html_body=html,
         )
 
-    async def run_monthly_digest(self) -> None:
-        """Generates and sends the digest to all registered users with at least one profile."""
+    async def run_monthly_digest(self) -> int:
+        """Generates and sends the digest to all registered users with at least one profile.
+
+        Returns the number of emails sent.
+        """
         logging.info("Starting monthly paper digest send...")
         sent_count = 0
         with Session(engine) as session:
@@ -176,3 +179,4 @@ class DigestService:
                 except Exception as e:
                     logging.error(f"Digest send to {user.email} failed: {e}")
         logging.info(f"Monthly digest send complete. {sent_count} email(s) sent.")
+        return sent_count

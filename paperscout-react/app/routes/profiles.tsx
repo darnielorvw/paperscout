@@ -16,7 +16,6 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import { useProfiles } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
-import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import { areFiltersEqual } from "~/lib/search-utils";
 
@@ -93,14 +92,6 @@ export default function Profiles() {
       setError(
         error instanceof Error ? error.message : "Error updating profile.",
       );
-    }
-  };
-
-  const sendTestMail = async () => {
-    try {
-      await apiFetch("/api/digest/send-test", { method: "POST" });
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Error sending mail.");
     }
   };
 
@@ -230,10 +221,6 @@ export default function Profiles() {
             )}
           </div>
         )}
-      </div>
-      <div>
-        <h2 className="mb-4 text-xl font-semibold">Email Test</h2>
-        <Button onClick={sendTestMail}>Send Mail</Button>
       </div>
     </div>
   );

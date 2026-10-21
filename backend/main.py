@@ -181,7 +181,7 @@ search_service = SearchService()
 mail_service = MailService()
 digest_service = DigestService(search_service, mail_service)
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 
 @app.post("/api/register", status_code=202)
@@ -772,19 +772,13 @@ async def delete_account(
     session.commit()
 
 
-@app.post("/api/digest/send-test")
-async def send_test_digest(
-    session: Session = Depends(get_session),
-    current_user: models.User = Depends(auth_service.get_current_user),
+@app.post("/api/digest/send-all")
+async def send_digest_to_all(
+    _: models.User = Depends(auth_service.require_admin),
 ):
-    """Sends the monthly digest immediately to the currently logged-in user (for testing purposes)."""
-    sent = await digest_service.send_digest_to_user(session, current_user)
-    if not sent:
-        raise HTTPException(
-            status_code=400,
-            detail="No digest sent (no search profiles found or SMTP not configured — see server logs).",
-        )
-    return {"message": f"Digest sent to {current_user.email}."}
+    """Runs the monthly digest send for all users right now. Admin only."""
+    sent_count = await digest_service.run_monthly_digest()
+    return {"message": f"Digest sent. {sent_count} email(s) sent.", "sent": sent_count}
 
 
 if __name__ == "__main__":
