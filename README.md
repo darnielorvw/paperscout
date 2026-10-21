@@ -7,14 +7,13 @@ möglicherweise monthly digest direkt in leseliste?
 reading list profile spezifisch?
 
 TODO:
-apialert tabelle nach vercel löschen
-bei aufbrauch von apis mail an mich
-auf redis bzw plattform die nicht serverless ist umstellen
 arten von works herausfinden
 db init script aufräumen
+apialert tabelle nach vercel löschen
+auf redis bzw plattform die nicht serverless ist umstellen
+
 
 ggf neues repo
-admin journals löschen verbessern
 Für Prod mail einrichten bei journal wünschen
 
 vercel fehler bei link auf registrierungsmail

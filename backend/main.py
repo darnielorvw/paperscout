@@ -18,6 +18,7 @@ from sqlmodel import Session, SQLModel, select
 from config import settings
 from database import models
 from database.database import engine, get_session
+from lib import log_redaction
 from schemas import (
     ChangeEmailRequest,
     ChangePasswordRequest,
@@ -37,6 +38,10 @@ from services.mail_service import MailService
 from services.search_service import SearchService
 
 scheduler = AsyncIOScheduler()
+
+# OpenAlex and Springer take the API key as a query parameter, which httpx
+# would otherwise write to the log with every request URL.
+log_redaction.install()
 
 
 @asynccontextmanager
