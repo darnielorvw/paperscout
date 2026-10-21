@@ -1,20 +1,17 @@
 
 BUGS:
-bei aufbrauch von apis mail an mich
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
-TODO:
+Fragen?
+möglicherweise monthly digest direkt in leseliste?
+reading list profile spezifisch?
 
-was passiert bei konto löschung und gelinkten papern auf reading list?
-besssere suchfunktion/filterung auf reading list
-lizenzrecht klären
+TODO:
+bei aufbrauch von apis mail an mich
 auf redis bzw plattform die nicht serverless ist umstellen
 arten von works herausfinden
 db init script aufräumen
 
-bei nature viele verschiedene types von papern
-
-möglicherweise monthly digest direkt in leseliste
 ggf neues repo
 admin journals löschen verbessern
 Für Prod mail einrichten bei journal wünschen

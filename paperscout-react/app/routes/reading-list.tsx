@@ -1,6 +1,12 @@
 import { format } from "date-fns";
-import { Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowDownWideNarrowIcon,
+  ArrowUpNarrowWideIcon,
+  ChevronDownIcon,
+  SearchIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import { ArticleCard, MetaItem } from "~/components/article-card";
@@ -16,8 +22,17 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { ButtonGroup } from "~/components/ui/button-group";
 import { Checkbox } from "~/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import { Field, FieldLabel } from "~/components/ui/field";
+import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
 import {
   useReadingList,
@@ -39,6 +54,91 @@ const filterItems: { value: Filter; title: string }[] = [
   { value: "read", title: "Read" },
   { value: "all", title: "All" },
 ];
+
+type SortField = "saved" | "published";
+type SortDirection = "asc" | "desc";
+
+const sortFieldItems: { value: SortField; title: string }[] = [
+  { value: "saved", title: "Saved" },
+  { value: "published", title: "Published" },
+];
+
+// Value for the journal/year dropdowns that disables that filter.
+const ANY = "";
+
+// The journal publication date, falling back to the index date for papers
+// that don't have one (same two dates the article card shows).
+function publishedDate(saved: SavedArticle): string | null {
+  return (
+    saved.article.journal_publication_date ||
+    saved.article.publication_date ||
+    null
+  );
+}
+
+function publishedYear(saved: SavedArticle): string | null {
+  return publishedDate(saved)?.slice(0, 4) || null;
+}
+
+function matchesSearch(saved: SavedArticle, words: string[]): boolean {
+  const { title, author, journal_name, abstract, doi, topic } = saved.article;
+  const haystack = [title, author, journal_name, abstract, doi, topic]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
+function compareSaved(
+  a: SavedArticle,
+  b: SavedArticle,
+  field: SortField,
+  direction: SortDirection,
+): number {
+  const dateA = field === "saved" ? a.savedAt : publishedDate(a);
+  const dateB = field === "saved" ? b.savedAt : publishedDate(b);
+  // Papers without a date go last, whichever direction.
+  if (!dateA || !dateB) {
+    return dateA ? -1 : dateB ? 1 : 0;
+  }
+  return direction === "desc"
+    ? dateB.localeCompare(dateA)
+    : dateA.localeCompare(dateB);
+}
+
+function FilterDropdown({
+  label,
+  value,
+  onChange,
+  items,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  items: { value: string; title: string }[];
+}) {
+  const current = items.find((item) => item.value === value);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="max-w-56">
+          <span className="text-muted-foreground">{label}:</span>
+          <span className="truncate">{current?.title}</span>
+          <ChevronDownIcon />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {items.map((item) => (
+            <DropdownMenuRadioItem key={item.value} value={item.value}>
+              {item.title}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function showError(error: unknown, fallback: string) {
   toast.error(error instanceof Error ? error.message : fallback, {
@@ -118,10 +218,72 @@ export default function ReadingList() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [journal, setJournal] = useState(ANY);
+  const [year, setYear] = useState(ANY);
+  const [sortField, setSortField] = useState<SortField>("saved");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const shown = savedArticles.filter(
-    (saved) => filter === "all" || (filter === "read") === saved.isRead,
-  );
+  const toggleSortDirection = () =>
+    setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"));
+
+  // Clicking the active field flips the direction, like a table header;
+  // switching fields starts with the newest first.
+  const handleSortFieldClick = (field: SortField) => {
+    if (field === sortField) {
+      toggleSortDirection();
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
+    }
+  };
+
+  // Dropdown options come from the papers on the list, so every option
+  // matches at least one entry.
+  const journalItems = useMemo(() => {
+    const names = new Set(
+      savedArticles
+        .map((saved) => saved.article.journal_name)
+        .filter((name): name is string => Boolean(name)),
+    );
+    return [
+      { value: ANY, title: "All journals" },
+      ...[...names]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ value: name, title: name })),
+    ];
+  }, [savedArticles]);
+
+  const yearItems = useMemo(() => {
+    const years = new Set(
+      savedArticles.map(publishedYear).filter((y): y is string => Boolean(y)),
+    );
+    return [
+      { value: ANY, title: "All years" },
+      ...[...years]
+        .sort((a, b) => b.localeCompare(a))
+        .map((y) => ({ value: y, title: y })),
+    ];
+  }, [savedArticles]);
+
+  const searchWords = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const isNarrowed = searchWords.length > 0 || journal !== ANY || year !== ANY;
+
+  const shown = savedArticles
+    .filter(
+      (saved) =>
+        (filter === "all" || (filter === "read") === saved.isRead) &&
+        (journal === ANY || saved.article.journal_name === journal) &&
+        (year === ANY || publishedYear(saved) === year) &&
+        matchesSearch(saved, searchWords),
+    )
+    .sort((a, b) => compareSaved(a, b, sortField, sortDirection));
+
+  const resetNarrowing = () => {
+    setSearch("");
+    setJournal(ANY);
+    setYear(ANY);
+  };
   // Only what is visible counts as selected: an entry that left the current
   // filter (e.g. just marked as read under "Unread") isn't removed unseen.
   const selectedShown = shown.filter((saved) => selectedIds.has(saved.id));
@@ -184,63 +346,141 @@ export default function ReadingList() {
         <>
           {/* Stays visible when the current filter shows nothing, so the
               filter can be switched back. */}
-          <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-muted-foreground">
-                {selectedShown.length > 0
-                  ? `${selectedShown.length} selected`
-                  : "Nothing selected"}
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setSelectedIds(new Set(shown.map((saved) => saved.id)))
-                }
-                disabled={selectedShown.length === shown.length}
-              >
-                Select all
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedIds(new Set())}
-                disabled={selectedShown.length === 0}
-              >
-                Clear selection
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-2 mr-4" role="group" aria-label="Filter">
+          <div className="sticky top-2 z-10 flex flex-col gap-3 rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-48 flex-1">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search title, author, abstract..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 pl-8"
+                  aria-label="Search reading list"
+                />
+              </div>
+              <ButtonGroup aria-label="Filter">
                 {filterItems.map((item) => (
                   <Button
                     key={item.value}
                     size="sm"
                     variant={filter === item.value ? "default" : "outline"}
                     aria-pressed={filter === item.value}
+                    // Fill the transparent border too, so the active button
+                    // is as large as the outlined ones next to it.
+                    className="aria-pressed:border-primary"
                     onClick={() => handleFilterChange(item.value)}
                   >
                     {item.title}
                   </Button>
                 ))}
+              </ButtonGroup>
+              <FilterDropdown
+                label="Journal"
+                value={journal}
+                onChange={setJournal}
+                items={journalItems}
+              />
+              <FilterDropdown
+                label="Published"
+                value={year}
+                onChange={setYear}
+                items={yearItems}
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Sort by</span>
+                <ButtonGroup aria-label="Sort by">
+                  {sortFieldItems.map((item) => (
+                    <Button
+                      key={item.value}
+                      size="sm"
+                      variant={sortField === item.value ? "default" : "outline"}
+                      aria-pressed={sortField === item.value}
+                      // Fill the transparent border too, so the active button
+                      // is as large as the outlined ones next to it.
+                      className="aria-pressed:border-primary"
+                      onClick={() => handleSortFieldClick(item.value)}
+                    >
+                      {item.title}
+                    </Button>
+                  ))}
+                </ButtonGroup>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSortDirection}
+                  aria-label={
+                    sortDirection === "desc"
+                      ? "Sorted newest first, switch to oldest first"
+                      : "Sorted oldest first, switch to newest first"
+                  }
+                  title={
+                    sortDirection === "desc" ? "Newest first" : "Oldest first"
+                  }
+                >
+                  {sortDirection === "desc" ? (
+                    <ArrowDownWideNarrowIcon />
+                  ) : (
+                    <ArrowUpNarrowWideIcon />
+                  )}
+                  {sortDirection === "desc" ? "Newest" : "Oldest"}
+                </Button>
               </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setConfirmOpen(true)}
-                disabled={selectedShown.length === 0 || isRemoving}
-              >
-                <Trash2Icon />
-                Remove selected
-              </Button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {selectedShown.length > 0
+                    ? `${selectedShown.length} selected`
+                    : "Nothing selected"}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setSelectedIds(new Set(shown.map((saved) => saved.id)))
+                  }
+                  disabled={selectedShown.length === shown.length}
+                >
+                  Select all
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  disabled={selectedShown.length === 0}
+                >
+                  Clear selection
+                </Button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={selectedShown.length === 0 || isRemoving}
+                >
+                  <Trash2Icon />
+                  Remove selected
+                </Button>
+              </div>
             </div>
           </div>
 
           {shown.length === 0 ? (
-            <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-muted-foreground">
-              {filter === "read"
-                ? "No papers marked as read yet."
-                : "All papers read."}
+            <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-muted-foreground">
+              {isNarrowed ? (
+                <>
+                  <p>No papers match your search or filters.</p>
+                  <Button variant="outline" size="sm" onClick={resetNarrowing}>
+                    Reset search &amp; filters
+                  </Button>
+                </>
+              ) : filter === "read" ? (
+                "No papers marked as read yet."
+              ) : (
+                "All papers read."
+              )}
             </div>
           ) : (
             shown.map((saved) => (
