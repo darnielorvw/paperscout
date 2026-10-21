@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{openalexBaseUrl}}/works/doi:{{doi}}?select=id,doi,title,publication_year,abstract_inverted_index&api_key={{openalexApiKey}}
+  url: {{openalexBaseUrl}}/works/doi:{{doi}}?select=id,doi,has_content,content_urls,open_access,best_oa_location,locations,title,publication_year,abstract_inverted_index&api_key={{openalexApiKey}}
   body: none
   auth: none
 }

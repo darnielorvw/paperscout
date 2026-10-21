@@ -87,7 +87,7 @@ export default function Home() {
         content: rangeContent,
       },
       {
-        value: "search",
+        value: "keywords",
         trigger: "Enter a Search Term",
         content: searchContent,
       },

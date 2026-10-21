@@ -1,23 +1,25 @@
 
 BUGS:
-keine pdf_url aber bulk download
 bei aufbrauch von apis mail an mich
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
 TODO:
+
+was passiert bei konto löschung und gelinkten papern auf reading list?
+besssere suchfunktion/filterung auf reading list
+lizenzrecht klären
 auf redis bzw plattform die nicht serverless ist umstellen
-
-scopus institutional token
 arten von works herausfinden
+db init script aufräumen
 
-springer api tdm uni zugang
 bei nature viele verschiedene types von papern
 
+möglicherweise monthly digest direkt in leseliste
 ggf neues repo
 admin journals löschen verbessern
 Für Prod mail einrichten bei journal wünschen
 
-vercel fehler
+vercel fehler bei link auf registrierungsmail
 
 TESTS:
 sind alle journals noch beim alten verlag?

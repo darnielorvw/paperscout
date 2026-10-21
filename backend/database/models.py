@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
@@ -49,3 +50,29 @@ class Profile(SQLModel, table=True):
 
     user: User = Relationship(back_populates="profiles")
     journals: List[Journals] = Relationship(link_model=ProfileJournalLink)
+
+
+class SavedArticle(SQLModel, table=True):
+    """A paper on a user's reading list. Stores the search result as it was when
+    saved, so the list doesn't need Crossref/OpenAlex to be shown again."""
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "article_id", name="uq_saved_article_user_article"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str
+    title: Optional[str] = None
+    author: Optional[str] = None
+    journal_name: Optional[str] = None
+    publication_date: Optional[str] = None
+    journal_publication_date: Optional[str] = None
+    issue: Optional[str] = None
+    doi: Optional[str] = None
+    library_url: Optional[str] = None
+    abstract: Optional[str] = None
+    topic: Optional[str] = None
+    is_read: bool = Field(default=False)
+    saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

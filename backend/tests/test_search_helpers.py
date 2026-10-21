@@ -4,8 +4,11 @@ These functions do no I/O - they only reshape the JSON that Crossref and
 OpenAlex return - so they can be tested directly with plain dicts.
 """
 
+from urllib.parse import parse_qs
+
 import pytest
 
+from config import settings
 from services.search_service import (
     SearchService,
     _apa_from_last_names,
@@ -15,6 +18,7 @@ from services.search_service import (
     _is_paper,
     _issue_label,
     _merge,
+    _openurl,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
@@ -38,6 +42,36 @@ class TestCleanDoi:
 
     def test_none_input(self):
         assert _clean_doi(None) == ""
+
+
+class TestOpenurl:
+    def test_builds_resolver_link(self):
+        url = _openurl(
+            {
+                "doi": "https://doi.org/10.1000/ABC",
+                "title": "Deep Learning & Co",
+                "journal_name": "Nature",
+                "publication_date": "2024-03-07",
+            }
+        )
+        base, query = url.split("?", 1)
+        assert base == settings.OPENURL_RESOLVER
+        assert parse_qs(query) == {
+            "ctx_ver": ["Z39.88-2004"],
+            "rft_val_fmt": ["info:ofi/fmt:kev:mtx:journal"],
+            "rft.genre": ["article"],
+            "rft_id": ["info:doi/10.1000/abc"],
+            "rft.atitle": ["Deep Learning & Co"],
+            "rft.jtitle": ["Nature"],
+            "rft.date": ["2024"],
+        }
+
+    def test_skips_missing_fields(self):
+        query = parse_qs(_openurl({"doi": "10.1000/abc", "title": None}).split("?", 1)[1])
+        assert set(query) == {"ctx_ver", "rft_val_fmt", "rft.genre", "rft_id"}
+
+    def test_no_doi(self):
+        assert _openurl({"doi": None, "title": "Something"}) is None
 
 
 class TestDatePartsToIso:
