@@ -76,3 +76,17 @@ class SavedArticle(SQLModel, table=True):
     topic: Optional[str] = None
     is_read: bool = Field(default=False)
     saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ApiAlert(SQLModel, table=True):
+    """A quota alert mail that has gone out, so every API is reported at most
+    once per day and kind (quota running low / quota exhausted)."""
+
+    __table_args__ = (UniqueConstraint("api", "kind", "day", name="uq_api_alert_api_kind_day"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    api: str
+    # "low" or "exhausted"
+    kind: str
+    # ISO date (UTC) of the day the alert went out.
+    day: str

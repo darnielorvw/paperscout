@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from config import settings
 from lib.cache import LRUCache
 from services.external_api_service import apply_external_apis
+from services.quota_alert_service import check_quota
 
 load_dotenv()
 
@@ -325,6 +326,7 @@ class SearchService:
                 params = {"api_key": api_key, **params}
                 response = await client.get(endpoint, params=params)
                 _add_openalex_cost(response.headers)
+                await check_quota("openalex", response)
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as e:

@@ -7,6 +7,7 @@ möglicherweise monthly digest direkt in leseliste?
 reading list profile spezifisch?
 
 TODO:
+apialert tabelle nach vercel löschen
 bei aufbrauch von apis mail an mich
 auf redis bzw plattform die nicht serverless ist umstellen
 arten von works herausfinden

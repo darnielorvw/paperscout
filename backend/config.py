@@ -67,6 +67,13 @@ class Settings(BaseSettings):
         "OPENURL_RESOLVER", "https://kai.fh-swf.de/openurl/49HBZ_FSW/49HBZ_FSW:VU1"
     )
 
+    # Quota alerts: admins get a mail once an external API's remaining quota drops
+    # below this share (in percent) or the quota is used up.
+    API_QUOTA_WARN_PERCENT: float = float(os.getenv("API_QUOTA_WARN_PERCENT", "10"))
+    # OpenAlex only reports the remaining budget, not the total, so the daily
+    # budget of the API key is configured here.
+    OPENALEX_DAILY_BUDGET_USD: float = float(os.getenv("OPENALEX_DAILY_BUDGET_USD", "1.0"))
+
     # Springer Nature Meta API key, used for journals with external_api="springer".
     SPRINGER_API_KEY: str = os.getenv("SPRINGER_API_KEY", "")
 

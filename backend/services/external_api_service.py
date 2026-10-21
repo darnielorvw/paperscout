@@ -4,6 +4,8 @@ from typing import Any, Awaitable, Callable, Dict, List
 
 import httpx
 
+from services.quota_alert_service import check_quota
+
 # --- Journal-specific external APIs ------------------------------------------
 # `Journals.external_api` flags a journal whose papers need individual handling
 # on top of Crossref/OpenAlex. After the regular search has built its records,
@@ -62,6 +64,7 @@ async def _fetch_springer_abstracts(dois: List[str]) -> Dict[str, str]:
             }
             try:
                 response = await client.get(_SPRINGER_BASE, params=params)
+                await check_quota("springer", response)
                 response.raise_for_status()
                 records = response.json().get("records", [])
             except httpx.HTTPStatusError as e:
@@ -146,6 +149,7 @@ async def _fetch_scopus_abstracts(dois: List[str]) -> Dict[str, str]:
             }
             try:
                 response = await client.get(_SCOPUS_BASE, params=params)
+                await check_quota("scopus", response)
                 response.raise_for_status()
                 entries = response.json().get("search-results", {}).get("entry", [])
             except Exception as e:
