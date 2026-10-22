@@ -4,11 +4,12 @@ from html import escape
 
 import httpx
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from config import settings
 from database import models
 from database.database import engine
+from services import user_service
 from services.mail_service import MailService
 
 logger = logging.getLogger(__name__)
@@ -107,9 +108,7 @@ async def _alert(api: str, kind: str, message: str) -> None:
             session.rollback()
             return
 
-        admin_emails = session.exec(
-            select(models.User.email).where(models.User.is_admin == True)  # noqa: E712
-        ).all()
+        admin_emails = user_service.get_admin_emails(session)
         if not admin_emails:
             logger.warning(f"Quota alert for {api} ({kind}) not sent: no admin users.")
             return

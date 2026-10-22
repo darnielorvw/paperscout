@@ -1,7 +1,13 @@
 import { BookmarkCheckIcon, BookmarkPlusIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
-import { Await, Link, useLoaderData, useLocation, useNavigate } from "react-router";
-import { ArticleCard, MetaItem } from "~/components/article-card";
+import {
+  Await,
+  Link,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+} from "react-router";
+import { ActionButton, ArticleCard, MetaItem } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
 import { Button } from "~/components/ui/button";
@@ -67,18 +73,16 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
   const articlePromise = apiFetch<{
     meta?: { count?: number; per_page?: number; page?: number };
     results?: Article[];
-  }>(`/api/articles?${paramsString}`).then(
-    (data) => {
-      const meta = data.meta || {};
-      const results = data.results || [];
-      return {
-        articles: results,
-        totalCount: meta.count || 0,
-        perPage: meta.per_page || 25,
-        currentPage: meta.page || 1,
-      };
-    },
-  );
+  }>(`/api/articles?${paramsString}`).then((data) => {
+    const meta = data.meta || {};
+    const results = data.results || [];
+    return {
+      articles: results,
+      totalCount: meta.count || 0,
+      perPage: meta.per_page || 25,
+      currentPage: meta.page || 1,
+    };
+  });
 
   return { articlePromise };
 }
@@ -98,13 +102,12 @@ function SelectForReadingList({
   if (isSaved) {
     return (
       <MetaItem label="Reading list">
-        <Link
-          to="/reading-list"
-          className="mt-1 inline-flex items-center gap-1.5 underline-offset-2 hover:text-foreground hover:underline"
-        >
-          <BookmarkCheckIcon className="size-4" />
-          On your reading list
-        </Link>
+        <ActionButton asChild>
+          <Link to="/reading-list">
+            <BookmarkCheckIcon />
+            On your reading list
+          </Link>
+        </ActionButton>
       </MetaItem>
     );
   }

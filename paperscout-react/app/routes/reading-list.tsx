@@ -2,14 +2,23 @@ import { format } from "date-fns";
 import {
   ArrowDownWideNarrowIcon,
   ArrowUpNarrowWideIcon,
+  CheckIcon,
   ChevronDownIcon,
+  FileTextIcon,
+  MailIcon,
   SearchIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
-import { ArticleCard, MetaItem } from "~/components/article-card";
+import {
+  ActionButton,
+  ActionLink,
+  ArticleCard,
+  MetaItem,
+} from "~/components/article-card";
 import { SkeletonList } from "~/components/skeletons";
 import {
   AlertDialog,
@@ -146,12 +155,92 @@ function showError(error: unknown, fallback: string) {
   });
 }
 
+// Lets the user ask the admins for a PDF when the library has no access to
+// the paper, and links the PDF once an admin has uploaded it.
+function PdfStatus({ saved }: { saved: SavedArticle }) {
+  const { requestPdf, cancelPdfRequest } = useReadingList();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
+
+  const run = async (action: () => Promise<void>, fallback: string) => {
+    setIsBusy(true);
+    try {
+      await action();
+    } catch (error) {
+      showError(error, fallback);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  if (saved.pdfUrl) {
+    return (
+      <ActionLink href={saved.pdfUrl} className="text-success">
+        <FileTextIcon />
+        Open PDF
+      </ActionLink>
+    );
+  }
+
+  if (saved.pdfRequested) {
+    return (
+      <ActionButton
+        className="text-destructive"
+        disabled={isBusy}
+        onClick={() =>
+          run(
+            () => cancelPdfRequest(saved.id),
+            "Could not withdraw the request.",
+          )
+        }
+      >
+        <XIcon />
+        Withdraw request
+      </ActionButton>
+    );
+  }
+
+  return (
+    <>
+      <ActionButton disabled={isBusy} onClick={() => setConfirmOpen(true)}>
+        <MailIcon />
+        Request PDF
+      </ActionButton>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Request this PDF?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Only if the library gives you no access to this paper. An admin is
+              notified and looks for the PDF; once it is uploaded, it shows up
+              here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                run(() => requestPdf(saved.id), "Could not request the PDF.")
+              }
+            >
+              Request PDF
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 function ReadingListEntry({
   saved,
+  isRemoveMode,
   isSelected,
   onToggleSelect,
 }: {
   saved: SavedArticle;
+  // The "Mark for removal" checkbox only shows in remove mode.
+  isRemoveMode: boolean;
   isSelected: boolean;
   onToggleSelect: (savedId: number, checked: boolean) => void;
 }) {
@@ -186,13 +275,17 @@ function ReadingListEntry({
           <MetaItem label="Saved">
             {format(new Date(saved.savedAt), "d MMM yyyy")}
           </MetaItem>
+          <MetaItem label="PDF">
+            <PdfStatus saved={saved} />
+          </MetaItem>
         </>
       }
       leftBottom={
-        <>
+        isRemoveMode && (
           <Field orientation="horizontal" className="mt-1 w-auto">
             <Checkbox
               id={`select-${saved.id}`}
+              className="data-checked:border-destructive data-checked:bg-destructive data-checked:text-white dark:data-checked:bg-destructive"
               checked={isSelected}
               onCheckedChange={(checked) =>
                 onToggleSelect(saved.id, checked === true)
@@ -200,21 +293,40 @@ function ReadingListEntry({
             />
             <FieldLabel
               htmlFor={`select-${saved.id}`}
-              className="font-normal text-muted-foreground hover:text-destructive"
+              className="font-normal text-destructive"
             >
               Mark for removal
             </FieldLabel>
           </Field>
-        </>
+        )
       }
     ></ArticleCard>
   );
 }
 
 export default function ReadingList() {
-  const { savedArticles, isLoading, error, removeSavedArticles } =
-    useReadingList();
+  const {
+    savedArticles,
+    isLoading,
+    error,
+    reloadSavedArticles,
+    removeSavedArticles,
+  } = useReadingList();
+
+  // The provider keeps the list for the whole session, so changes made
+  // elsewhere (e.g. a PDF an admin uploaded) are fetched whenever the page is
+  // opened or its tab becomes visible again.
+  useEffect(() => {
+    reloadSavedArticles();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") reloadSavedArticles();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [reloadSavedArticles]);
   const [filter, setFilter] = useState<Filter>("unread");
+  const [isRemoveMode, setIsRemoveMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
@@ -298,6 +410,12 @@ export default function ReadingList() {
       }
       return next;
     });
+  };
+
+  // Leaving remove mode drops the selection, so nothing stays marked unseen.
+  const toggleRemoveMode = () => {
+    setIsRemoveMode((prev) => !prev);
+    setSelectedIds(new Set());
   };
 
   const handleFilterChange = (value: Filter) => {
@@ -426,45 +544,57 @@ export default function ReadingList() {
                   {sortDirection === "desc" ? "Newest" : "Oldest"}
                 </Button>
               </div>
+              <Button
+                size="sm"
+                variant={isRemoveMode ? "default" : "outline"}
+                aria-pressed={isRemoveMode}
+                className="ml-auto aria-pressed:border-primary"
+                onClick={toggleRemoveMode}
+              >
+                {isRemoveMode ? <CheckIcon /> : <Trash2Icon />}
+                {isRemoveMode ? "Done" : "Remove papers"}
+              </Button>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <p className="text-sm text-muted-foreground">
-                  {selectedShown.length > 0
-                    ? `${selectedShown.length} selected`
-                    : "Nothing selected"}
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setSelectedIds(new Set(shown.map((saved) => saved.id)))
-                  }
-                  disabled={selectedShown.length === shown.length}
-                >
-                  Select all
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedIds(new Set())}
-                  disabled={selectedShown.length === 0}
-                >
-                  Clear selection
-                </Button>
+            {isRemoveMode && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedShown.length > 0
+                      ? `${selectedShown.length} selected`
+                      : "Nothing selected"}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setSelectedIds(new Set(shown.map((saved) => saved.id)))
+                    }
+                    disabled={selectedShown.length === shown.length}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set())}
+                    disabled={selectedShown.length === 0}
+                  >
+                    Clear selection
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={selectedShown.length === 0 || isRemoving}
+                  >
+                    <Trash2Icon />
+                    Remove selected
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={selectedShown.length === 0 || isRemoving}
-                >
-                  <Trash2Icon />
-                  Remove selected
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
 
           {shown.length === 0 ? (
@@ -487,6 +617,7 @@ export default function ReadingList() {
               <ReadingListEntry
                 key={saved.id}
                 saved={saved}
+                isRemoveMode={isRemoveMode}
                 isSelected={selectedIds.has(saved.id)}
                 onToggleSelect={toggleSelected}
               />

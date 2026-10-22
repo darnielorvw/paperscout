@@ -90,3 +90,30 @@ class ApiAlert(SQLModel, table=True):
     kind: str
     # ISO date (UTC) of the day the alert went out.
     day: str
+
+
+class PaperRequest(SQLModel, table=True):
+    """A user asking the admins for a paper's PDF, because the library has no
+    access to it. Removed together with the paper from the reading list."""
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "article_id", name="uq_paper_request_user_article"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str = Field(index=True)
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PaperPdf(SQLModel, table=True):
+    """A PDF an admin uploaded for a paper. Every user with the paper on their
+    reading list can open it."""
+
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str = Field(primary_key=True)
+    # Public Vercel Blob URL. Its random suffix keeps it unguessable, and the
+    # API only hands it to users with the paper on their reading list.
+    url: str
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

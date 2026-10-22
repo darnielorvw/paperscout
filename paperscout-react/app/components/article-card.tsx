@@ -1,5 +1,6 @@
 import { ChevronDown, ExternalLinkIcon, Library } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "~/components/ui/button";
 import type { SavedArticleData } from "~/context/reading-list-context";
 import { formatDateForDisplay } from "~/lib/date-utils";
 import { cn } from "~/lib/utils";
@@ -17,39 +18,51 @@ const DEFAULT_CLAMP_LINES = 6;
 // "Show more" button: mt-3 (12px) + text-sm line height (20px).
 const TOGGLE_BUTTON_HEIGHT = 32;
 
-const actionLinkClass =
-  "inline-flex items-center gap-1.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline";
-
 type MetaField = {
   label: string;
   description: string;
   value: React.ReactNode;
 };
 
-// Opens `href` in a new tab; without one it is shown greyed out.
-function ActionLink({
+// A small outlined button, as wide as its column, for actions next to plain
+// meta data, so clickable entries stand out from the ones that are only text.
+export function ActionButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className={cn("mt-1 w-full justify-start font-normal", className)}
+      {...props}
+    />
+  );
+}
+
+// Opens `href` in a new tab; without one the button is disabled.
+export function ActionLink({
   href,
+  className,
   children,
 }: {
   href: string | null;
+  className?: string;
   children: React.ReactNode;
 }) {
   if (!href) {
     return (
-      <span aria-disabled="true" className={cn(actionLinkClass, "opacity-50")}>
+      <ActionButton className={className} disabled>
         {children}
-      </span>
+      </ActionButton>
     );
   }
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={actionLinkClass}
-    >
-      {children}
-    </a>
+    <ActionButton className={className} asChild>
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    </ActionButton>
   );
 }
 
@@ -166,14 +179,14 @@ export function ArticleCard({
             {leftTop}
             <MetaItem label="Library">
               <ActionLink href={article.library_url}>
-                <Library className="size-4" />
+                <Library />
                 Find at library
               </ActionLink>
             </MetaItem>
             <MetaItem label="Publisher">
               {/* The DOI link resolves to the publisher's page. */}
               <ActionLink href={article.doi}>
-                <ExternalLinkIcon className="size-4" />
+                <ExternalLinkIcon />
                 Open publisher page
               </ActionLink>
             </MetaItem>

@@ -67,6 +67,12 @@ class Settings(BaseSettings):
         "OPENURL_RESOLVER", "https://kai.fh-swf.de/openurl/49HBZ_FSW/49HBZ_FSW:VU1"
     )
 
+    # Vercel Blob store for the paper PDFs admins upload. Vercel sets it when a
+    # Blob store is connected to the project; without it, uploads are disabled.
+    BLOB_READ_WRITE_TOKEN: str = os.getenv("BLOB_READ_WRITE_TOKEN", "")
+    # Largest PDF an admin may upload (in MB).
+    PAPER_PDF_MAX_MB: int = int(os.getenv("PAPER_PDF_MAX_MB", "50"))
+
     # Quota alerts: admins get a mail once an external API's remaining quota drops
     # below this share (in percent) or the quota is used up.
     API_QUOTA_WARN_PERCENT: float = float(os.getenv("API_QUOTA_WARN_PERCENT", "10"))

@@ -7,6 +7,8 @@ möglicherweise monthly digest direkt in leseliste?
 reading list profile spezifisch?
 
 TODO:
+
+user sollen selber link resolver auswählen können
 arten von works herausfinden
 db init script aufräumen
 apialert tabelle nach vercel löschen

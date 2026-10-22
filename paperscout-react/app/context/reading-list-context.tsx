@@ -30,6 +30,10 @@ export interface SavedArticle {
   article: SavedArticleData;
   isRead: boolean;
   savedAt: string;
+  // PDF an admin uploaded for this paper, if any.
+  pdfUrl: string | null;
+  // Whether the user asked the admins for the PDF.
+  pdfRequested: boolean;
 }
 
 interface ReadingListContextState {
@@ -38,6 +42,8 @@ interface ReadingListContextState {
   savedArticleIds: Set<string>;
   isLoading: boolean;
   error: string | null;
+  /** Refetches the list, e.g. to pick up PDFs an admin uploaded meanwhile. */
+  reloadSavedArticles: () => Promise<void>;
   saveArticles: (
     articles: SavedArticleData[],
   ) => Promise<{ added: number; skipped: number }>;
@@ -45,6 +51,8 @@ interface ReadingListContextState {
     savedId: number,
     changes: { isRead: boolean },
   ) => Promise<void>;
+  requestPdf: (savedId: number) => Promise<void>;
+  cancelPdfRequest: (savedId: number) => Promise<void>;
   removeSavedArticle: (savedId: number) => Promise<void>;
   removeSavedArticles: (savedIds: number[]) => Promise<void>;
 }
@@ -62,16 +70,27 @@ export function ReadingListProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiFetch<{ results: SavedArticle[] }>("/api/saved-articles")
-      .then((data) => setSavedArticles(data.results || []))
-      .catch((err) =>
-        setError(
-          err instanceof Error ? err.message : "Failed to load reading list.",
-        ),
-      )
-      .finally(() => setIsLoading(false));
+  // Only the first load shows the loading state; later reloads swap the
+  // list in place, so the page doesn't flicker.
+  const reloadSavedArticles = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ results: SavedArticle[] }>(
+        "/api/saved-articles",
+      );
+      setSavedArticles(data.results || []);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load reading list.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    reloadSavedArticles();
+  }, [reloadSavedArticles]);
 
   const savedArticleIds = useMemo(
     () => new Set(savedArticles.map((saved) => saved.article.id)),
@@ -109,6 +128,29 @@ export function ReadingListProvider({
     [],
   );
 
+  const setPdfRequest = useCallback(
+    async (savedId: number, method: "POST" | "DELETE") => {
+      const updated = await apiFetch<SavedArticle>(
+        `/api/saved-articles/${savedId}/pdf-request`,
+        { method },
+      );
+      setSavedArticles((prev) =>
+        prev.map((saved) => (saved.id === savedId ? updated : saved)),
+      );
+    },
+    [],
+  );
+
+  const requestPdf = useCallback(
+    (savedId: number) => setPdfRequest(savedId, "POST"),
+    [setPdfRequest],
+  );
+
+  const cancelPdfRequest = useCallback(
+    (savedId: number) => setPdfRequest(savedId, "DELETE"),
+    [setPdfRequest],
+  );
+
   const removeSavedArticle = useCallback(async (savedId: number) => {
     await apiFetch(`/api/saved-articles/${savedId}`, { method: "DELETE" });
     setSavedArticles((prev) => prev.filter((saved) => saved.id !== savedId));
@@ -129,8 +171,11 @@ export function ReadingListProvider({
       savedArticleIds,
       isLoading,
       error,
+      reloadSavedArticles,
       saveArticles,
       updateSavedArticle,
+      requestPdf,
+      cancelPdfRequest,
       removeSavedArticle,
       removeSavedArticles,
     }),
@@ -139,8 +184,11 @@ export function ReadingListProvider({
       savedArticleIds,
       isLoading,
       error,
+      reloadSavedArticles,
       saveArticles,
       updateSavedArticle,
+      requestPdf,
+      cancelPdfRequest,
       removeSavedArticle,
       removeSavedArticles,
     ],

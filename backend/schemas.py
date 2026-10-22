@@ -88,3 +88,14 @@ class SavedArticlesCreate(BaseModel):
 # Schema for marking a reading list entry as read or unread
 class SavedArticleUpdate(BaseModel):
     isRead: bool
+
+
+# Schema for requesting a client token to upload a paper's PDF (admin only)
+class PaperPdfUploadToken(BaseModel):
+    article_id: str = Field(min_length=1)
+
+
+# Schema for storing the URL of an uploaded paper PDF (admin only)
+class PaperPdfCreate(BaseModel):
+    article_id: str = Field(min_length=1)
+    url: str = Field(min_length=1)

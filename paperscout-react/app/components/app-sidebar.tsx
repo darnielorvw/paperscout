@@ -66,6 +66,10 @@ const adminGroup = {
       title: "Import Journals",
       url: "/admin",
     },
+    {
+      title: "PDF Requests",
+      url: "/admin/pdf-requests",
+    },
   ],
 };
 

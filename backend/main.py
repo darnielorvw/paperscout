@@ -1,6 +1,7 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from html import escape
 from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -24,6 +25,8 @@ from schemas import (
     ChangePasswordRequest,
     DeleteAccountRequest,
     JournalImportByName,
+    PaperPdfCreate,
+    PaperPdfUploadToken,
     ProfileCreate,
     ProfileNotificationsUpdate,
     ProfileSettings,
@@ -32,7 +35,7 @@ from schemas import (
     UserCreate,
     UserPublic,
 )
-from services import auth_service, user_service
+from services import auth_service, blob_service, user_service
 from services.digest_service import DigestService
 from services.mail_service import MailService
 from services.search_service import SearchService
@@ -555,7 +558,9 @@ async def delete_profile(
     session.commit()
 
 
-def _saved_article_response(saved: models.SavedArticle) -> dict:
+def _saved_article_response(
+    saved: models.SavedArticle, pdf_url: str | None = None, pdf_requested: bool = False
+) -> dict:
     """A reading list entry: the saved search result plus the user's own data."""
     return {
         "id": saved.id,
@@ -575,7 +580,36 @@ def _saved_article_response(saved: models.SavedArticle) -> dict:
         "isRead": saved.is_read,
         # SQLite hands the UTC timestamp back without a timezone.
         "savedAt": saved.saved_at.replace(tzinfo=saved.saved_at.tzinfo or timezone.utc).isoformat(),
+        "pdfUrl": pdf_url,
+        "pdfRequested": pdf_requested,
     }
+
+
+def _saved_article_responses(
+    session: Session, user: models.User, saved: List[models.SavedArticle]
+) -> List[dict]:
+    """Reading list entries, each with its uploaded PDF and whether the user
+    asked for one."""
+    article_ids = [s.article_id for s in saved]
+    pdf_urls = dict(
+        session.exec(
+            select(models.PaperPdf.article_id, models.PaperPdf.url).where(
+                models.PaperPdf.article_id.in_(article_ids)
+            )
+        ).all()
+    )
+    requested = set(
+        session.exec(
+            select(models.PaperRequest.article_id).where(
+                models.PaperRequest.user_id == user.id,
+                models.PaperRequest.article_id.in_(article_ids),
+            )
+        ).all()
+    )
+    return [
+        _saved_article_response(s, pdf_urls.get(s.article_id), s.article_id in requested)
+        for s in saved
+    ]
 
 
 def _get_own_saved_article(
@@ -598,7 +632,7 @@ async def get_saved_articles(
         .where(models.SavedArticle.user_id == current_user.id)
         .order_by(models.SavedArticle.saved_at.desc(), models.SavedArticle.id.desc())
     ).all()
-    return {"results": [_saved_article_response(s) for s in saved]}
+    return {"results": _saved_article_responses(session, current_user, saved)}
 
 
 @app.post("/api/saved-articles", status_code=201)
@@ -638,7 +672,7 @@ async def save_articles(
     for saved in added:
         session.refresh(saved)
     return {
-        "results": [_saved_article_response(s) for s in added],
+        "results": _saved_article_responses(session, current_user, added),
         "skipped": len(payload.articles) - len(added),
     }
 
@@ -656,7 +690,7 @@ async def update_saved_article(
     session.add(saved)
     session.commit()
     session.refresh(saved)
-    return _saved_article_response(saved)
+    return _saved_article_responses(session, current_user, [saved])[0]
 
 
 @app.delete("/api/saved-articles/{saved_id}", status_code=204)
@@ -665,8 +699,9 @@ async def delete_saved_article(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Removes an article from the reading list."""
+    """Removes an article from the reading list, along with a PDF request for it."""
     saved = _get_own_saved_article(session, saved_id, current_user)
+    _delete_paper_requests(session, current_user, [saved.article_id])
     session.delete(saved)
     session.commit()
 
@@ -679,6 +714,13 @@ async def delete_saved_articles(
 ):
     """Removes several articles from the reading list at once. Ids that aren't
     on the user's own list are ignored."""
+    article_ids = session.exec(
+        select(models.SavedArticle.article_id).where(
+            models.SavedArticle.user_id == current_user.id,
+            models.SavedArticle.id.in_(ids),
+        )
+    ).all()
+    _delete_paper_requests(session, current_user, list(article_ids))
     session.exec(
         sql_delete(models.SavedArticle).where(
             models.SavedArticle.user_id == current_user.id,
@@ -686,6 +728,203 @@ async def delete_saved_articles(
         )
     )
     session.commit()
+
+
+def _delete_paper_requests(session: Session, user: models.User, article_ids: List[str]) -> None:
+    if article_ids:
+        session.exec(
+            sql_delete(models.PaperRequest).where(
+                models.PaperRequest.user_id == user.id,
+                models.PaperRequest.article_id.in_(article_ids),
+            )
+        )
+
+
+async def _notify_admins_of_pdf_request(
+    session: Session, user: models.User, saved: models.SavedArticle
+) -> None:
+    """Mails all admins that a user is asking for a paper's PDF."""
+    title = escape(saved.title or saved.article_id)
+    journal = escape(saved.journal_name or "")
+    doi_link = escape(saved.doi or f"https://doi.org/{saved.article_id}")
+    admin_link = escape(f"{settings.FRONTEND_URL}/admin/pdf-requests")
+    html = (
+        "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;'>"
+        "<h1 style='font-size:20px;'>New PDF request</h1>"
+        f"<p style='font-size:14px;'>{escape(user.name)} ({escape(user.email)}) has no access "
+        "to this paper through the library and asks for its PDF:</p>"
+        f"<p style='font-size:16px;font-weight:600;margin-bottom:4px;'>{title}</p>"
+        f"<p style='color:#555;font-size:13px;margin-top:0;'>{journal} &middot; "
+        f"<a href='{doi_link}'>{doi_link}</a></p>"
+        f"<p style='font-size:14px;'><a href='{admin_link}'>Upload the PDF in PaperScout</a></p>"
+        "</div>"
+    )
+    for email in user_service.get_admin_emails(session):
+        await mail_service.send_email(to=email, subject=f"PDF request: {title}", html_body=html)
+
+
+@app.post("/api/saved-articles/{saved_id}/pdf-request")
+async def request_paper_pdf(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Asks the admins for the PDF of a paper on the reading list, for papers the
+    library has no access to. Does nothing if a PDF is already there."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    has_pdf = session.get(models.PaperPdf, saved.article_id) is not None
+    if not has_pdf:
+        session.add(models.PaperRequest(user_id=current_user.id, article_id=saved.article_id))
+        try:
+            session.commit()
+        except IntegrityError:
+            # Already requested.
+            session.rollback()
+        else:
+            await _notify_admins_of_pdf_request(session, current_user, saved)
+    return _saved_article_responses(session, current_user, [saved])[0]
+
+
+@app.delete("/api/saved-articles/{saved_id}/pdf-request")
+async def cancel_paper_pdf_request(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Withdraws the user's PDF request for a paper on the reading list."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    _delete_paper_requests(session, current_user, [saved.article_id])
+    session.commit()
+    return _saved_article_responses(session, current_user, [saved])[0]
+
+
+@app.get("/api/admin/pdf-requests")
+async def list_pdf_requests(
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """All requested papers, oldest request first, with who asked for them and the
+    uploaded PDF if there is one, followed by uploaded PDFs without requests.
+    Admin only."""
+    rows = session.exec(
+        select(models.PaperRequest, models.User.email, models.SavedArticle)
+        .join(models.User, models.PaperRequest.user_id == models.User.id)
+        .join(
+            models.SavedArticle,
+            (models.SavedArticle.user_id == models.PaperRequest.user_id)
+            & (models.SavedArticle.article_id == models.PaperRequest.article_id),
+        )
+        .order_by(models.PaperRequest.requested_at, models.PaperRequest.id)
+    ).all()
+    pdfs = {pdf.article_id: pdf for pdf in session.exec(select(models.PaperPdf)).all()}
+
+    papers: dict = {}
+    for request, email, saved in rows:
+        paper = papers.get(request.article_id)
+        if paper is None:
+            pdf = pdfs.get(request.article_id)
+            requested_at = request.requested_at.replace(
+                tzinfo=request.requested_at.tzinfo or timezone.utc
+            )
+            paper = papers[request.article_id] = {
+                "articleId": request.article_id,
+                "title": saved.title,
+                "journalName": saved.journal_name,
+                "doi": saved.doi,
+                "libraryUrl": saved.library_url,
+                "requestedAt": requested_at.isoformat(),
+                "requesters": [],
+                "pdfUrl": pdf.url if pdf else None,
+            }
+        paper["requesters"].append(email)
+
+    # PDFs nobody asks for anymore (every requester removed the paper) are listed
+    # too, so they can still be replaced or deleted.
+    for pdf in pdfs.values():
+        if pdf.article_id in papers:
+            continue
+        saved = session.exec(
+            select(models.SavedArticle).where(models.SavedArticle.article_id == pdf.article_id)
+        ).first()
+        papers[pdf.article_id] = {
+            "articleId": pdf.article_id,
+            "title": saved.title if saved else None,
+            "journalName": saved.journal_name if saved else None,
+            "doi": saved.doi if saved else f"https://doi.org/{pdf.article_id}",
+            "libraryUrl": saved.library_url if saved else None,
+            "requestedAt": None,
+            "requesters": [],
+            "pdfUrl": pdf.url,
+        }
+    return {"results": list(papers.values()), "uploadsEnabled": blob_service.is_configured()}
+
+
+@app.post("/api/admin/pdf-upload-token")
+async def create_pdf_upload_token(
+    payload: PaperPdfUploadToken,
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """A short-lived token the admin's browser uploads one paper PDF to Vercel Blob
+    with. Admin only."""
+    if not blob_service.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="PDF uploads are not configured (BLOB_READ_WRITE_TOKEN missing).",
+        )
+    pathname = blob_service.paper_pathname(payload.article_id)
+    token = blob_service.create_client_token(
+        pathname,
+        allowed_content_types=["application/pdf"],
+        maximum_size_in_bytes=settings.PAPER_PDF_MAX_MB * 1024 * 1024,
+    )
+    return {"pathname": pathname, "clientToken": token}
+
+
+@app.put("/api/admin/pdfs")
+async def store_paper_pdf(
+    payload: PaperPdfCreate,
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Stores the URL of a PDF uploaded with a token from /api/admin/pdf-upload-token.
+    From then on everyone with the paper on their reading list can open it. A PDF
+    already stored for the paper is replaced. Admin only."""
+    if not blob_service.is_uploaded_blob_url(
+        payload.url, blob_service.paper_pathname(payload.article_id)
+    ):
+        raise HTTPException(status_code=400, detail="Not an uploaded PDF for this paper.")
+
+    pdf = session.get(models.PaperPdf, payload.article_id)
+    replaced_url = pdf.url if pdf and pdf.url != payload.url else None
+    if pdf is None:
+        pdf = models.PaperPdf(article_id=payload.article_id, url=payload.url)
+    else:
+        pdf.url = payload.url
+        pdf.uploaded_at = datetime.now(timezone.utc)
+    session.add(pdf)
+    session.commit()
+
+    if replaced_url:
+        await blob_service.delete_blob(replaced_url)
+    return {"articleId": pdf.article_id, "pdfUrl": pdf.url}
+
+
+@app.delete("/api/admin/pdfs", status_code=204)
+async def delete_paper_pdf(
+    # A query parameter, since DOIs contain slashes.
+    article_id: str = Query(..., min_length=1),
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Deletes a paper's uploaded PDF. Its requests stay, so the paper is open
+    again and a new PDF can be uploaded. Admin only."""
+    pdf = session.get(models.PaperPdf, article_id)
+    if pdf is None:
+        raise HTTPException(status_code=404, detail="No PDF uploaded for this paper.")
+    url = pdf.url
+    session.delete(pdf)
+    session.commit()
+    await blob_service.delete_blob(url)
 
 
 @app.api_route("/api/users/me", response_model=UserPublic, methods=["GET", "HEAD"])
@@ -760,6 +999,9 @@ async def delete_account(
 
     session.exec(
         sql_delete(models.SavedArticle).where(models.SavedArticle.user_id == current_user.id)
+    )
+    session.exec(
+        sql_delete(models.PaperRequest).where(models.PaperRequest.user_id == current_user.id)
     )
 
     profile_ids = session.exec(

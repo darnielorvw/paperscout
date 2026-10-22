@@ -1,0 +1,43 @@
+meta {
+  name: Alma Link Resolver - Availability by DOI
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{almaResolverUrl}}?ctx_ver=Z39.88-2004&rft.genre=article&rft_id=info:doi/{{doi}}&svc_dat=CTO
+  body: none
+  auth: none
+}
+
+params:query {
+  ctx_ver: Z39.88-2004
+  rft.genre: article
+  rft_id: info:doi/{{doi}}
+  svc_dat: CTO
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("returns a context object", function() {
+    expect(res.getBody()).to.include("<uresolver_content");
+    expect(res.getBody()).to.include('<key id="full_text_indicator">');
+  });
+}
+
+docs {
+  Fragt beim Alma-Link-Resolver der FH SWF ab, ob und wie ein Paper über die
+  Bibliothek verfügbar ist. Das ist derselbe Resolver wie `OPENURL_RESOLVER` im
+  Backend, nur liefert er mit `svc_dat=CTO` XML statt auf Primo weiterzuleiten.
+
+  - `full_text_indicator`: `true`, wenn es irgendeinen Volltext gibt.
+  - Je Zugriffsweg ein `<context_service service_type="...">`:
+    `getFullTxt` (über die FH lizenziert), `getOpenAccessFullText` (frei),
+    `getHolding` (Printbestand). Mit `package_display_name` und `target_url`.
+  - Keine Services und `full_text_indicator=false`: nicht verfügbar oder nicht gefunden.
+  - Kein API-Key nötig. Inoffiziell: `svc_dat=CTO` ist bei Ex Libris nur als
+    Debugging-Hilfe beschrieben, Format und Verfügbarkeit sind nicht zugesichert.
+}

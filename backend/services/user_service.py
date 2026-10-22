@@ -1,5 +1,7 @@
+from typing import List
+
 from passlib.context import CryptContext
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from database import models
 
@@ -27,3 +29,12 @@ def create_db_user_from_hash(
     )
     session.add(db_user)
     return db_user
+
+
+def get_admin_emails(session: Session) -> List[str]:
+    """The email addresses of all admins, e.g. for notifications."""
+    return list(
+        session.exec(
+            select(models.User.email).where(models.User.is_admin == True)  # noqa: E712
+        ).all()
+    )
