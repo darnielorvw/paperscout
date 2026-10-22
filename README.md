@@ -3,10 +3,11 @@ BUGS:
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
 Fragen?
-möglicherweise monthly digest direkt in leseliste?
+möglicherweise monthly digest direkt in leseliste packen? (marking an einzelnem paper)
 reading list profile spezifisch?
 
 TODO:
+xml antwort link resolver testen
 
 user sollen selber link resolver auswählen können
 arten von works herausfinden

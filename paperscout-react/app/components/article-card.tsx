@@ -1,4 +1,4 @@
-import { ChevronDown, ExternalLinkIcon, Library } from "lucide-react";
+import { ChevronDown, ExternalLinkIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import type { SavedArticleData } from "~/context/reading-list-context";
@@ -179,7 +179,7 @@ export function ArticleCard({
             {leftTop}
             <MetaItem label="Library">
               <ActionLink href={article.library_url}>
-                <Library />
+                <ExternalLinkIcon />
                 Find at library
               </ActionLink>
             </MetaItem>
