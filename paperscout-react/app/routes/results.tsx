@@ -1,13 +1,12 @@
-import { BookmarkCheckIcon, BookmarkPlusIcon } from "lucide-react";
+import { BookmarkPlusIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import {
   Await,
-  Link,
   useLoaderData,
   useLocation,
-  useNavigate,
+  useNavigate
 } from "react-router";
-import { ActionButton, ArticleCard, MetaItem } from "~/components/article-card";
+import { ArticleCard, MetaItem } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
 import { Button } from "~/components/ui/button";
@@ -100,16 +99,7 @@ function SelectForReadingList({
   onToggle: (article: Article, checked: boolean) => void;
 }) {
   if (isSaved) {
-    return (
-      <MetaItem label="Reading list">
-        <ActionButton asChild>
-          <Link to="/reading-list">
-            <BookmarkCheckIcon />
-            On your reading list
-          </Link>
-        </ActionButton>
-      </MetaItem>
-    );
+    return <MetaItem label="Reading list">On your reading list</MetaItem>;
   }
   return (
     <MetaItem label="Select">

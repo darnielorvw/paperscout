@@ -1,4 +1,15 @@
-import { UserIcon } from "lucide-react";
+import {
+  BookmarkIcon,
+  CalendarRangeIcon,
+  FileInputIcon,
+  ImportIcon,
+  ListIcon,
+  NewspaperIcon,
+  SlidersHorizontalIcon,
+  TextSearchIcon,
+  UserIcon,
+  type LucideIcon,
+} from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation } from "react-router";
 import {
@@ -17,20 +28,28 @@ import { useAuth } from "~/context/auth-context";
 import { useSearch } from "~/context/search-context";
 import { buildResultsUrl } from "~/lib/search-utils";
 
-const data = [
+type NavGroup = {
+  title: string;
+  items: { title: string; url: string; icon: LucideIcon }[];
+};
+
+const data: NavGroup[] = [
   {
     title: "New Search",
     items: [
       {
         title: "Journals",
+        icon: NewspaperIcon,
         url: "/#journals",
       },
       {
         title: "Time Range",
+        icon: CalendarRangeIcon,
         url: "/#range",
       },
       {
         title: "Keywords",
+        icon: TextSearchIcon,
         url: "/#keywords",
       },
     ],
@@ -40,10 +59,12 @@ const data = [
     items: [
       {
         title: "Results",
+        icon: ListIcon,
         url: "/results",
       },
       {
         title: "Reading List",
+        icon: BookmarkIcon,
         url: "/reading-list",
       },
     ],
@@ -53,21 +74,24 @@ const data = [
     items: [
       {
         title: "Profiles",
+        icon: SlidersHorizontalIcon,
         url: "/profiles",
       },
     ],
   },
 ];
 
-const adminGroup = {
+const adminGroup: NavGroup = {
   title: "Admin",
   items: [
     {
       title: "Import Journals",
+      icon: ImportIcon,
       url: "/admin",
     },
     {
       title: "PDF Requests",
+      icon: FileInputIcon,
       url: "/admin/pdf-requests",
     },
   ],
@@ -126,7 +150,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         isActive={isActive}
                         className="w-full justify-start"
                       >
-                        <NavLink to={finalUrl}>{subItem.title}</NavLink>
+                        <NavLink to={finalUrl}>
+                          <subItem.icon />
+                          {subItem.title}
+                        </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
