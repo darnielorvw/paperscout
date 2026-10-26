@@ -2,6 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from html import escape
+from pathlib import Path
 from typing import List
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -42,6 +43,8 @@ from services.search_service import SearchService
 
 scheduler = AsyncIOScheduler()
 
+JOURNALS_SEED_PATH = Path(__file__).resolve().parent / "database" / "journals_seed.json"
+
 # OpenAlex and Springer take the API key as a query parameter, which httpx
 # would otherwise write to the log with every request URL.
 log_redaction.install()
@@ -52,6 +55,27 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
 
     with engine.connect() as conn:
+        # A fresh database (e.g. on another machine) gets the journal list from
+        # the versioned seed file. Only an empty table is filled, so journals
+        # added or removed later aren't overwritten on every start.
+        if conn.exec_driver_sql("SELECT COUNT(*) FROM journals").scalar() == 0:
+            journals = json.loads(JOURNALS_SEED_PATH.read_text(encoding="utf-8"))
+            for journal in journals:
+                conn.exec_driver_sql(
+                    "INSERT INTO journals (id, name, issn, publisher, homepage, external_api) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        journal["id"],
+                        journal["name"],
+                        journal["issn"],
+                        journal["publisher"],
+                        journal["homepage"],
+                        journal["external_api"],
+                    ),
+                )
+            conn.commit()
+            print(f"🌱 Seeded {len(journals)} journals.", flush=True)
+
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         if "email_notifications" not in existing_columns:
             conn.exec_driver_sql(

@@ -1,0 +1,514 @@
+[
+  {
+    "id": "S89276529",
+    "name": "ACM Transactions on Computer-Human Interaction",
+    "issn": "1073-0516",
+    "publisher": "Association for Computing Machinery",
+    "homepage": "http://tochi.acm.org/",
+    "external_api": null
+  },
+  {
+    "id": "S4210193251",
+    "name": "ACM Transactions on Human-Robot Interaction",
+    "issn": "2573-9522",
+    "publisher": "Association for Computing Machinery",
+    "homepage": "https://thri.acm.org/",
+    "external_api": null
+  },
+  {
+    "id": "S27614628",
+    "name": "Academy of Management Annals",
+    "issn": "1941-6067",
+    "publisher": "Routledge",
+    "homepage": "https://journals.aom.org/journal/annals",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S4210202650",
+    "name": "Academy of Management Discoveries",
+    "issn": "2168-1007",
+    "publisher": "Academy of Management",
+    "homepage": "http://www.amd.aom.org",
+    "external_api": null
+  },
+  {
+    "id": "S117778295",
+    "name": "Academy of Management Journal",
+    "issn": "0001-4273",
+    "publisher": "Academy of Management",
+    "homepage": "http://aom.org/amj/",
+    "external_api": "NULL"
+  },
+  {
+    "id": "S45682993",
+    "name": "Academy of Management Learning and Education",
+    "issn": "1537-260X",
+    "publisher": "Academy of Management",
+    "homepage": "http://aom.org/amle/",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S33741590",
+    "name": "Academy of Management Perspectives",
+    "issn": "1558-9080",
+    "publisher": "Academy of Management",
+    "homepage": "http://aom.org/amp/",
+    "external_api": null
+  },
+  {
+    "id": "S46763546",
+    "name": "Academy of Management Review",
+    "issn": "0363-7425",
+    "publisher": "Academy of Management",
+    "homepage": "http://aom.org/amr/",
+    "external_api": null
+  },
+  {
+    "id": "S143668711",
+    "name": "Administrative Science Quarterly",
+    "issn": "0001-8392",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://asq.sagepub.com/",
+    "external_api": null
+  },
+  {
+    "id": "S47864991",
+    "name": "Applied Psychology",
+    "issn": "0269-994X",
+    "publisher": "Wiley",
+    "homepage": "http://www.wiley.com/bw/journal.asp?ref=0269-994X&site=1",
+    "external_api": null
+  },
+  {
+    "id": "S150535073",
+    "name": "Cognition & Emotion",
+    "issn": "0269-9931",
+    "publisher": "Taylor & Francis",
+    "homepage": "https://www.tandfonline.com/toc/pcem20/current",
+    "external_api": null
+  },
+  {
+    "id": "S114020440",
+    "name": "Current Directions in Psychological Science",
+    "issn": "0963-7214",
+    "publisher": "SAGE Publishing",
+    "homepage": "https://us.sagepub.com/en-us/nam/journal/current-directions-psychological-science",
+    "external_api": null
+  },
+  {
+    "id": "S2764598273",
+    "name": "Current Opinion in Behavioral Sciences",
+    "issn": "2352-1546",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/current-opinion-in-behavioral-sciences",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S11479521",
+    "name": "Decision Support Systems",
+    "issn": "0167-9236",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/decision-support-systems",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S4210228147",
+    "name": "European Journal of Health Psychology",
+    "issn": "2512-8442",
+    "publisher": "Hogrefe Verlag",
+    "homepage": "https://econtent.hogrefe.com/loi/ejh?expanded=y1999&expanded=y2019",
+    "external_api": null
+  },
+  {
+    "id": "S125186969",
+    "name": "European Journal of Psychology of Education",
+    "issn": "0256-2928",
+    "publisher": "Springer Science+Business Media",
+    "homepage": "https://www.springer.com/journal/10212",
+    "external_api": "springer"
+  },
+  {
+    "id": "S10288104",
+    "name": "European Journal of Social Psychology",
+    "issn": "0046-2772",
+    "publisher": "Wiley",
+    "homepage": "http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1099-0992",
+    "external_api": null
+  },
+  {
+    "id": "S172313144",
+    "name": "European Management Review",
+    "issn": "1740-4754",
+    "publisher": "Wiley",
+    "homepage": "http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1740-4762",
+    "external_api": null
+  },
+  {
+    "id": "S94044085",
+    "name": "Games and Economic Behavior",
+    "issn": "0899-8256",
+    "publisher": "Elsevier BV",
+    "homepage": "http://www.elsevier.com/wps/find/journaldescription.cws_home/622836/description#description",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S34137071",
+    "name": "Health Psychology",
+    "issn": "0278-6133",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/hea/",
+    "external_api": null
+  },
+  {
+    "id": "S61446109",
+    "name": "Human Relations",
+    "issn": "0018-7267",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://www.humanrelationsjournal.org/",
+    "external_api": null
+  },
+  {
+    "id": "S144620930",
+    "name": "IEEE Transactions on Robotics",
+    "issn": "1552-3098",
+    "publisher": "Institute of Electrical and Electronics Engineers",
+    "homepage": "https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=8860",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S165559636",
+    "name": "International Journal of Human-Computer Interaction",
+    "issn": "1044-7318",
+    "publisher": "Taylor & Francis",
+    "homepage": "https://www.tandfonline.com/toc/hihc20/current",
+    "external_api": null
+  },
+  {
+    "id": "S168738021",
+    "name": "International Journal of Social Robotics",
+    "issn": "1875-4791",
+    "publisher": "Springer Science+Business Media",
+    "homepage": "https://www.springer.com/journal/12369",
+    "external_api": "springer"
+  },
+  {
+    "id": "S166002381",
+    "name": "Journal of Applied Psychology",
+    "issn": "0021-9010",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/apl/index.aspx",
+    "external_api": null
+  },
+  {
+    "id": "S117214846",
+    "name": "Journal of Behavioral Decision Making",
+    "issn": "0894-3257",
+    "publisher": "Wiley",
+    "homepage": "https://onlinelibrary.wiley.com/journal/10990771",
+    "external_api": null
+  },
+  {
+    "id": "S4210233753",
+    "name": "Journal of Behavioral and Experimental Economics",
+    "issn": "2214-8043",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/journal-of-behavioral-and-experimental-economics",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S118719888",
+    "name": "Journal of Consulting and Clinical Psychology",
+    "issn": "0022-006X",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/ccp/index.aspx",
+    "external_api": null
+  },
+  {
+    "id": "S163545350",
+    "name": "Journal of Consumer Psychology",
+    "issn": "1057-7408",
+    "publisher": "Elsevier BV",
+    "homepage": "https://onlinelibrary.wiley.com/journal/15327663",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S62201805",
+    "name": "Journal of Economic Behavior & Organization",
+    "issn": "0167-2681",
+    "publisher": "Elsevier BV",
+    "homepage": "http://www.elsevier.com/wps/find/journaldescription.cws_home/505559/description",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S71968408",
+    "name": "Journal of Economic Psychology",
+    "issn": "0167-4870",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/journal-of-economic-psychology",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S26008998",
+    "name": "Journal of Experimental Psychology Human Perception & Performance",
+    "issn": "0096-1523",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/xhp/index.aspx",
+    "external_api": "NULL"
+  },
+  {
+    "id": "S12410666",
+    "name": "Journal of Experimental Social Psychology",
+    "issn": "0022-1031",
+    "publisher": "Elsevier BV",
+    "homepage": "http://www.elsevier.com/wps/find/journaldescription.cws_home/622874/description#description",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S64831726",
+    "name": "Journal of Leadership & Organizational Studies",
+    "issn": "1548-0518",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://jlo.sagepub.com/",
+    "external_api": null
+  },
+  {
+    "id": "S122767448",
+    "name": "Journal of Management",
+    "issn": "0149-2063",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://www.sagepub.com/journals/Journal201724/title",
+    "external_api": null
+  },
+  {
+    "id": "S151705444",
+    "name": "Journal of Management Studies",
+    "issn": "0022-2380",
+    "publisher": "Wiley",
+    "homepage": "https://onlinelibrary.wiley.com/journal/14676486",
+    "external_api": null
+  },
+  {
+    "id": "S3481703",
+    "name": "Journal of Occupational Health Psychology",
+    "issn": "1076-8998",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/ocp",
+    "external_api": null
+  },
+  {
+    "id": "S87328381",
+    "name": "Journal of Occupational and Organizational Psychology",
+    "issn": "0963-1798",
+    "publisher": "Wiley",
+    "homepage": "http://onlinelibrary.wiley.com/journal/10.1111/(ISSN)2044-8325",
+    "external_api": null
+  },
+  {
+    "id": "S160573970",
+    "name": "Journal of Organizational Behavior",
+    "issn": "0894-3796",
+    "publisher": "Wiley",
+    "homepage": "http://onlinelibrary.wiley.com/journal/10.1002/(ISSN)1099-1379",
+    "external_api": null
+  },
+  {
+    "id": "S29984966",
+    "name": "Journal of Personality and Social Psychology",
+    "issn": "0022-3514",
+    "publisher": "American Psychological Association",
+    "homepage": "http://www.apa.org/pubs/journals/psp/",
+    "external_api": null
+  },
+  {
+    "id": "S156995526",
+    "name": "Journal of Research in Personality",
+    "issn": "0092-6566",
+    "publisher": "Elsevier BV",
+    "homepage": "http://www.elsevier.com/wps/find/journaldescription.cws_home/622897/description",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S33323087",
+    "name": "Management Science",
+    "issn": "0025-1909",
+    "publisher": "Institute for Operations Research and the Management Sciences",
+    "homepage": "http://pubsonline.informs.org/journal/mnsc",
+    "external_api": null
+  },
+  {
+    "id": "S4210185842",
+    "name": "Management Teaching Review",
+    "issn": "2379-2981",
+    "publisher": "SAGE Publishing",
+    "homepage": "https://us.sagepub.com/en-us/nam/management-teaching-review/journal202457",
+    "external_api": null
+  },
+  {
+    "id": "S19400212",
+    "name": "Motivation and Emotion",
+    "issn": "0146-7239",
+    "publisher": "Springer Science+Business Media",
+    "homepage": "https://link.springer.com/journal/11031",
+    "external_api": "springer"
+  },
+  {
+    "id": "S137773608",
+    "name": "Nature",
+    "issn": "0028-0836",
+    "publisher": "Nature Portfolio",
+    "homepage": "https://www.nature.com/nature/",
+    "external_api": "springer"
+  },
+  {
+    "id": "S206124708",
+    "name": "Organization Science",
+    "issn": "1047-7039",
+    "publisher": "Institute for Operations Research and the Management Sciences",
+    "homepage": "http://orgsci.pubs.informs.org/",
+    "external_api": null
+  },
+  {
+    "id": "S28882882",
+    "name": "Organization Studies",
+    "issn": "0170-8406",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://www.sagepub.com/journals/Journal201657/title",
+    "external_api": null
+  },
+  {
+    "id": "S64744539",
+    "name": "Organizational Behavior and Human Decision Processes",
+    "issn": "0749-5978",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/organizational-behavior-and-human-decision-processes",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S133599136",
+    "name": "Organizational Research Methods",
+    "issn": "1094-4281",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://www.sagepub.com/journals/Journal200894/title",
+    "external_api": null
+  },
+  {
+    "id": "S187348256",
+    "name": "Personality and Social Psychology Bulletin",
+    "issn": "0146-1672",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://psp.sagepub.com/",
+    "external_api": null
+  },
+  {
+    "id": "S84664706",
+    "name": "Personnel Psychology",
+    "issn": "0031-5826",
+    "publisher": "Wiley",
+    "homepage": "https://onlinelibrary.wiley.com/journal/17446570",
+    "external_api": null
+  },
+  {
+    "id": "S58854535",
+    "name": "Psychological Science",
+    "issn": "0956-7976",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://pss.sagepub.com/",
+    "external_api": null
+  },
+  {
+    "id": "S100167944",
+    "name": "Review of General Psychology",
+    "issn": "1089-2680",
+    "publisher": "SAGE Publishing",
+    "homepage": "https://journals.sagepub.com/home/rgpa",
+    "external_api": null
+  },
+  {
+    "id": "S3880285",
+    "name": "Science",
+    "issn": "0036-8075",
+    "publisher": "American Association for the Advancement of Science",
+    "homepage": "http://www.sciencemag.org/",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S177779441",
+    "name": "Social Cognition",
+    "issn": "0278-016X",
+    "publisher": "Guilford Press",
+    "homepage": "",
+    "external_api": null
+  },
+  {
+    "id": "S59311786",
+    "name": "Social Science Research",
+    "issn": "0049-089X",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/social-science-research",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S102949365",
+    "name": "Strategic Management Journal",
+    "issn": "0143-2095",
+    "publisher": "Wiley",
+    "homepage": "https://onlinelibrary.wiley.com/journal/10970266",
+    "external_api": null
+  },
+  {
+    "id": "S25720340",
+    "name": "Telematics and Informatics",
+    "issn": "0736-5853",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/telematics-and-informatics",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S135394783",
+    "name": "The International Journal of Management Education",
+    "issn": "1472-8117",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/the-international-journal-of-management-education",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S73484101",
+    "name": "The International Journal of Robotics Research",
+    "issn": "0278-3649",
+    "publisher": "SAGE Publishing",
+    "homepage": "http://www.sagepub.com/journals/Journal201324/title",
+    "external_api": null
+  },
+  {
+    "id": "S84268765",
+    "name": "The Journal of Positive Psychology",
+    "issn": "1743-9760",
+    "publisher": "Routledge",
+    "homepage": "http://www.tandfonline.com/action/journalInformation?journalCode=rpos20",
+    "external_api": null
+  },
+  {
+    "id": "S152304618",
+    "name": "The Leadership Quarterly",
+    "issn": "1048-9843",
+    "publisher": "Elsevier BV",
+    "homepage": "https://www.journals.elsevier.com/the-leadership-quarterly",
+    "external_api": "scopus"
+  },
+  {
+    "id": "S141527467",
+    "name": "Work & Stress",
+    "issn": "0267-8373",
+    "publisher": "Taylor & Francis",
+    "homepage": "https://www.tandfonline.com/toc/twst20/current",
+    "external_api": null
+  },
+  {
+    "id": "S7407062949",
+    "name": "wirtschaftspsychologie aktuell",
+    "issn": "1611-9207",
+    "publisher": "Unknown",
+    "homepage": "",
+    "external_api": null
+  }
+]
