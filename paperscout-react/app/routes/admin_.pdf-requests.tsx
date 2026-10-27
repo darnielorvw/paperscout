@@ -1,7 +1,6 @@
 import { put } from "@vercel/blob/client";
 import { format } from "date-fns";
 import {
-  ExternalLinkIcon,
   FileTextIcon,
   Library,
   Trash2Icon,
@@ -9,7 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ActionLink } from "~/components/article-card";
+import { ActionLink, ExternalIcon } from "~/components/article-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -246,7 +245,7 @@ function PaperTable({
                   Library
                 </ActionLink>
                 <ActionLink href={paper.doi} className="w-auto">
-                  <ExternalLinkIcon />
+                  <ExternalIcon />
                   Publisher
                 </ActionLink>
                 {paper.pdfUrl && (

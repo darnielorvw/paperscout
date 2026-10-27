@@ -40,6 +40,12 @@ export function ActionButton({
   );
 }
 
+// Lucide's external-link icon is bottom-heavy (its box spans y 6-21 of 24), so it
+// sits about 1px low next to the text; lift it to the text's optical centre.
+export function ExternalIcon() {
+  return <ExternalLinkIcon className="-translate-y-px" />;
+}
+
 // Opens `href` in a new tab; without one the button is disabled.
 export function ActionLink({
   href,
@@ -150,8 +156,8 @@ export function ArticleCard({
       // to the meta column's bottom, minus room for the toggle button.
       const available = meta
         ? meta.getBoundingClientRect().bottom -
-          el.getBoundingClientRect().top -
-          TOGGLE_BUTTON_HEIGHT
+        el.getBoundingClientRect().top -
+        TOGGLE_BUTTON_HEIGHT
         : 0;
       const lines =
         meta && sideBySide && lineHeight
@@ -179,14 +185,14 @@ export function ArticleCard({
             {leftTop}
             <MetaItem label="Library">
               <ActionLink href={article.library_url}>
-                <ExternalLinkIcon />
+                <ExternalIcon />
                 Find at library
               </ActionLink>
             </MetaItem>
             <MetaItem label="Publisher">
               {/* The DOI link resolves to the publisher's page. */}
               <ActionLink href={article.doi}>
-                <ExternalLinkIcon />
+                <ExternalIcon />
                 Open publisher page
               </ActionLink>
             </MetaItem>

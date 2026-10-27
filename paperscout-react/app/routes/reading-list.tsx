@@ -136,7 +136,12 @@ function FilterDropdown({
           <ChevronDownIcon />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 overflow-y-auto">
+      {/* As wide as its entries rather than the (truncated) trigger, so long
+          journal names don't wrap on every other word. */}
+      <DropdownMenuContent
+        align="start"
+        className="max-h-80 w-auto max-w-[min(32rem,calc(100vw-2rem))] min-w-(--radix-dropdown-menu-trigger-width) overflow-y-auto"
+      >
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
           {items.map((item) => (
             <DropdownMenuRadioItem key={item.value} value={item.value}>
@@ -442,7 +447,7 @@ export default function ReadingList() {
   };
 
   return (
-    <div className="flex w-full flex-col gap-4 py-4 pr-2">
+    <div className="flex w-full flex-col gap-4 pr-2">
       {isLoading ? (
         <SkeletonList />
       ) : error ? (

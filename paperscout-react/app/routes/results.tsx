@@ -1,4 +1,5 @@
-import { BookmarkPlusIcon } from "lucide-react";
+import { format } from "date-fns";
+import { BookmarkPlusIcon, CalendarIcon, SearchIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import {
   Await,
@@ -9,6 +10,7 @@ import {
 import { ArticleCard, MetaItem } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Field, FieldLabel } from "~/components/ui/field";
@@ -120,6 +122,40 @@ function SelectForReadingList({
   );
 }
 
+// The keywords and date range these results were searched with, from the URL.
+function SearchSummary({
+  search,
+  totalCount,
+}: {
+  search: string;
+  totalCount: number;
+}) {
+  const params = new URLSearchParams(search);
+  const keywords = params.get("keywords")?.trim();
+  const from = params.get("from_date");
+  const to = params.get("to_date");
+
+  return (
+    <div className="flex flex-wrap pt-2 gap-2 text-sm">
+      <Badge variant="secondary" title="Keywords">
+        <SearchIcon />
+        {keywords ? `“${keywords}”` : "No keywords"}
+      </Badge>
+      {from && to && (
+        <Badge variant="secondary" title="Date range">
+          <CalendarIcon />
+          {format(new Date(from), "d MMM yyyy")} –{" "}
+          {format(new Date(to), "d MMM yyyy")}
+        </Badge>
+      )}
+      <span className="text-muted-foreground">
+        {totalCount.toLocaleString("en")}{" "}
+        {totalCount === 1 ? "result" : "results"}
+      </span>
+    </div>
+  );
+}
+
 export default function Results() {
   const { articlePromise, error } = useLoaderData<LoaderData>();
   const navigate = useNavigate();
@@ -143,7 +179,7 @@ export default function Results() {
       () => {
         if (!cancelled) scrollAreaRef.current?.scrollTo({ top: 0 });
       },
-      () => {},
+      () => { },
     );
     return () => {
       cancelled = true;
@@ -213,7 +249,7 @@ export default function Results() {
       setSelectedArticles(new Map());
       toast.success(
         `${added} ${added === 1 ? "paper" : "papers"} added to your reading list` +
-          (skipped > 0 ? ` (${skipped} already on it).` : "."),
+        (skipped > 0 ? ` (${skipped} already on it).` : "."),
         { position: "top-center" },
       );
     } catch (error) {
@@ -242,8 +278,15 @@ export default function Results() {
     );
   }
 
+  // Navigations run as transitions, so an already shown <Suspense> keeps the old
+  // results until the new ones arrive and the page seems frozen. A new search
+  // (e.g. switching profiles) remounts it to show the skeleton instead; paging
+  // keeps it and dims the old page (see isPending).
+  const searchKey = new URLSearchParams(location.search);
+  searchKey.delete("page");
+
   return (
-    <Suspense fallback={<SkeletonList />}>
+    <Suspense key={searchKey.toString()} fallback={<SkeletonList />}>
       <Await resolve={articlePromise}>
         {(resolvedData) => {
           const { articles, totalCount, perPage, currentPage } = resolvedData;
@@ -260,7 +303,8 @@ export default function Results() {
                   transition: "opacity 1s",
                 }}
               >
-                <div className="space-y-4 pt-4 pr-2">
+                <div className="space-y-4 pr-2">
+
                   <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
@@ -298,7 +342,10 @@ export default function Results() {
                       Save to reading list
                     </Button>
                   </div>
-
+                  <SearchSummary
+                    search={location.search}
+                    totalCount={totalCount}
+                  />
                   {articles.length > 0 ? (
                     articles.map((article) => (
                       <ArticleCard

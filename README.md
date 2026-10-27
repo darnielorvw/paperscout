@@ -8,7 +8,7 @@ reading list profile spezifisch?
 
 TODO:
 in results ansicht aktuelle suchparameter anzeigen
-xml antwort link resolver testen
+xml antwort link resolver bei bib nachfragen
 
 user sollen selber link resolver auswählen können
 arten von works herausfinden

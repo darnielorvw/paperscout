@@ -1,11 +1,11 @@
 import {
-    Pagination,
-    PaginationContent,
-    PaginationEllipsis,
-    PaginationItem,
-    PaginationLink,
-    PaginationNext,
-    PaginationPrevious,
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
 } from "~/components/ui/pagination";
 
 type ResultsPaginationProps = {
@@ -24,7 +24,7 @@ export function ResultsPagination({
   }
 
   return (
-    <div className="mt-auto border-t bg-background p-4">
+    <div className="mt-auto border-t bg-background p-3">
       <Pagination>
         <PaginationContent className="w-full justify-between">
           <PaginationItem>
