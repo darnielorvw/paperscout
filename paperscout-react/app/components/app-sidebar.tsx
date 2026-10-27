@@ -1,6 +1,7 @@
 import {
   BookmarkIcon,
   CalendarRangeIcon,
+  CircleHelpIcon,
   FileInputIcon,
   ImportIcon,
   ListIcon,
@@ -76,6 +77,11 @@ const data: NavGroup[] = [
         title: "Profiles",
         icon: SlidersHorizontalIcon,
         url: "/profiles",
+      },
+      {
+        title: "Help",
+        icon: CircleHelpIcon,
+        url: "/help",
       },
     ],
   },

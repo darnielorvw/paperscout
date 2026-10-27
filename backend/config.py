@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # Cron expression for the monthly digest send (default: 1st of every month, 07:00)
     DIGEST_CRON: str = os.getenv("DIGEST_CRON", "0 7 1 * *")
 
+    # Only people with an email at one of these domains (or a subdomain, e.g.
+    # stud.fh-swf.de) can register.
+    ALLOWED_EMAIL_DOMAINS: list[str] = [
+        domain.strip().lower()
+        for domain in os.getenv("ALLOWED_EMAIL_DOMAINS", "uni-muenster.de,fh-swf.de").split(",")
+        if domain.strip()
+    ]
+
     # Validity period of the email confirmation link during registration (in hours)
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = int(os.getenv("EMAIL_VERIFICATION_EXPIRE_HOURS", "24"))
 

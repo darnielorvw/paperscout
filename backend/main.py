@@ -214,6 +214,10 @@ mail_service = MailService()
 digest_service = DigestService(search_service, mail_service)
 
 ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+ALLOWED_EMAIL_DETAIL = (
+    "Only email addresses of the University of Münster (@uni-muenster.de) "
+    "or FH Südwestfalen (@fh-swf.de) can be used."
+)
 
 
 @app.post("/api/register", status_code=202)
@@ -223,6 +227,9 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
     The account is only created once the link is clicked (see /api/verify-email).
     This prevents bots from flooding the DB with an unlimited number of fake registrations.
     """
+    if not user_service.is_allowed_email(user.email):
+        raise HTTPException(status_code=400, detail=ALLOWED_EMAIL_DETAIL)
+
     if auth_service.get_user_by_email(session, user.email):
         raise HTTPException(status_code=400, detail="Email already registered.")
 
@@ -970,6 +977,9 @@ async def update_email(
     since the old token was issued for the previous email address."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    if not user_service.is_allowed_email(payload.newEmail):
+        raise HTTPException(status_code=400, detail=ALLOWED_EMAIL_DETAIL)
 
     if payload.newEmail != current_user.email and auth_service.get_user_by_email(
         session, payload.newEmail

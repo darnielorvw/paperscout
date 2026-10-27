@@ -3,6 +3,7 @@ from typing import List
 from passlib.context import CryptContext
 from sqlmodel import Session, select
 
+from config import settings
 from database import models
 
 # Setup for password hashing (bcrypt is the standard)
@@ -17,6 +18,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """Creates a hash from a plaintext password."""
     return pwd_context.hash(password)
+
+
+def is_allowed_email(email: str) -> bool:
+    """Whether the email is at one of the institutions allowed to register."""
+    domain = email.rsplit("@", 1)[-1].strip().lower()
+    return any(
+        domain == allowed or domain.endswith(f".{allowed}")
+        for allowed in settings.ALLOWED_EMAIL_DOMAINS
+    )
 
 
 def create_db_user_from_hash(

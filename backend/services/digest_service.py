@@ -80,11 +80,29 @@ class DigestService:
             journal = escape(article.get("journal_name") or "")
             date = escape(article.get("publication_date") or "")
             # The library resolver leads to the full text via the institution's access.
-            link = article.get("library_url") or article.get("doi") or "#"
+            library_url = article.get("library_url")
+            doi_url = article.get("doi")
+            link = library_url or doi_url or "#"
+            link_parts = []
+            if doi_url:
+                doi = doi_url.removeprefix("https://doi.org/")
+                link_parts.append(
+                    f"DOI: <a href='{escape(doi_url)}' style='color:#1a56db;'>{escape(doi)}</a>"
+                )
+            if library_url:
+                link_parts.append(
+                    f"<a href='{escape(library_url)}' style='color:#1a56db;'>Full text via your library</a>"
+                )
+            links = (
+                f"<br/><span style='font-size:13px;'>{' &middot; '.join(link_parts)}</span>"
+                if link_parts
+                else ""
+            )
             items.append(
                 "<li style='margin-bottom:14px;'>"
                 f"<a href='{escape(link)}' style='font-size:16px;font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
                 f"<span style='color:#555;font-size:13px;'>{author} &middot; {journal} &middot; {date}</span>"
+                f"{links}"
                 "</li>"
             )
 

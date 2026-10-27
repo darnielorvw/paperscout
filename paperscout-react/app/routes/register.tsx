@@ -67,7 +67,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create account"
-      description="Create a new account to use PaperScout."
+      description="Create a new account with your @uni-muenster.de or @fh-swf.de email address."
       fields={fields}
       submitButtonText="Create account"
       onSubmit={handleRegister}
