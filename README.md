@@ -7,6 +7,7 @@ möglicherweise monthly digest direkt in leseliste packen? (marking an einzelnem
 reading list profile spezifisch?
 
 TODO:
+in results ansicht aktuelle suchparameter anzeigen
 xml antwort link resolver testen
 
 user sollen selber link resolver auswählen können

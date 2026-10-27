@@ -11,7 +11,7 @@ from config import settings
 from database import models
 from database.database import engine
 from services.mail_service import MailService
-from services.search_service import SearchService
+from services.search_service import SearchService, openurl_resolver_for
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -136,6 +136,7 @@ class DigestService:
                 to_date=to_date,
                 limit=ARTICLES_PER_PROFILE,
                 page=1,
+                resolver=openurl_resolver_for(user.email),
             )
             articles = data.get("results", [])
             sections.append(

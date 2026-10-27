@@ -39,7 +39,7 @@ from schemas import (
 from services import auth_service, blob_service, user_service
 from services.digest_service import DigestService
 from services.mail_service import MailService
-from services.search_service import SearchService
+from services.search_service import SearchService, openurl_resolver_for
 
 scheduler = AsyncIOScheduler()
 
@@ -411,7 +411,7 @@ async def search_articles(
     to_date: str = Query(...),
     page: int = Query(1),
     session: Session = Depends(get_session),
-    _: models.User = Depends(auth_service.get_current_user),
+    current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Searches for scientific articles in the selected journals."""
     # journal_ids are OpenAlex source ids; Crossref needs the ISSNs.
@@ -428,6 +428,7 @@ async def search_articles(
         to_date=to_date,
         limit=25,
         page=page,
+        resolver=openurl_resolver_for(current_user.email),
     )
     return data
 

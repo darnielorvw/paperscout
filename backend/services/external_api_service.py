@@ -122,7 +122,6 @@ def _scopus_abstract(value: Any) -> str | None:
     )
     # Trailing notice: everything from the © on.
     text = re.sub(r"\s*(?:Copyright\s*)?©.*$", "", text)
-    print(text.strip())
     return text.strip() or None
 
 

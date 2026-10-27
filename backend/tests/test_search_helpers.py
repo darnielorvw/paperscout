@@ -14,6 +14,7 @@ from services.search_service import (
     _apa_from_last_names,
     _clean_doi,
     _clean_title,
+    _crossref_openurl_fields,
     _date_parts_to_iso,
     _is_paper,
     _issue_label,
@@ -22,6 +23,7 @@ from services.search_service import (
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
+    openurl_resolver_for,
 )
 
 
@@ -52,7 +54,8 @@ class TestOpenurl:
                 "title": "Deep Learning & Co",
                 "journal_name": "Nature",
                 "publication_date": "2024-03-07",
-            }
+            },
+            settings.OPENURL_RESOLVER,
         )
         base, query = url.split("?", 1)
         assert base == settings.OPENURL_RESOLVER
@@ -61,17 +64,31 @@ class TestOpenurl:
             "rft_val_fmt": ["info:ofi/fmt:kev:mtx:journal"],
             "rft.genre": ["article"],
             "rft_id": ["info:doi/10.1000/abc"],
-            "rft.atitle": ["Deep Learning & Co"],
-            "rft.jtitle": ["Nature"],
-            "rft.date": ["2024"],
         }
 
-    def test_skips_missing_fields(self):
-        query = parse_qs(_openurl({"doi": "10.1000/abc", "title": None}).split("?", 1)[1])
-        assert set(query) == {"ctx_ver", "rft_val_fmt", "rft.genre", "rft_id"}
-
     def test_no_doi(self):
-        assert _openurl({"doi": None, "title": "Something"}) is None
+        assert _openurl({"doi": None, "title": "Something"}, settings.OPENURL_RESOLVER) is None
+
+    def test_resolver_with_own_query(self):
+        url = _openurl({"doi": "10.1000/abc"}, "https://library.example/openurl?vid=X")
+        base, query = url.split("?", 1)
+        assert base == "https://library.example/openurl"
+        assert parse_qs(query)["vid"] == ["X"]
+        assert parse_qs(query)["rft_id"] == ["info:doi/10.1000/abc"]
+
+
+class TestOpenurlResolverFor:
+    def test_muenster_users_get_their_resolver(self):
+        assert (
+            openurl_resolver_for("someone@Uni-Muenster.de")
+            == settings.OPENURL_RESOLVERS_BY_DOMAIN["uni-muenster.de"]
+        )
+
+    @pytest.mark.parametrize(
+        "email", ["someone@fh-swf.de", "someone@wi.uni-muenster.de", "uni-muenster.de@gmail.com"]
+    )
+    def test_everyone_else_gets_the_default(self, email):
+        assert openurl_resolver_for(email) == settings.OPENURL_RESOLVER
 
 
 class TestDatePartsToIso:
@@ -252,3 +269,39 @@ class TestMerge:
         record = {"issue": "Vol. 1"}
         _merge(record, {"issue": empty})
         assert record == {"issue": "Vol. 1"}
+
+
+class TestCrossrefOpenurlFields:
+    def test_citation_without_journal_title(self):
+        fields = _crossref_openurl_fields(
+            {
+                "title": ["Array programming with NumPy"],
+                "container-title": ["Nature"],
+                "issn-type": [
+                    {"type": "print", "value": "0028-0836"},
+                    {"type": "electronic", "value": "1476-4687"},
+                ],
+                "issued": {"date-parts": [[2020, 9, 16]]},
+                "volume": "585",
+                "issue": "7825",
+                "page": "357-362",
+            }
+        )
+        assert fields == {
+            "rft.atitle": "Array programming with NumPy",
+            "rft.issn": "0028-0836",
+            "rft.eissn": "1476-4687",
+            "rft.date": "2020",
+            "rft.volume": "585",
+            "rft.issue": "7825",
+            "rft.spage": "357",
+        }
+
+    def test_goes_into_the_link(self):
+        url = _openurl(
+            {"doi": "10.1000/abc", "openurl": {"rft.issn": "1234-5678"}},
+            settings.OPENURL_RESOLVER,
+        )
+        query = parse_qs(url.split("?", 1)[1])
+        assert query["rft.issn"] == ["1234-5678"]
+        assert "rft.jtitle" not in query

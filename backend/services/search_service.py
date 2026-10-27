@@ -48,7 +48,7 @@ DATE_FILTER_UNTIL = "until-issued-date"
 # ISSN tells which journal a work belongs to, for the journal-specific external APIs.
 _CROSSREF_SELECT = (
     "DOI,ISSN,title,container-title,published-print,published-online,published,issued,"
-    "volume,issue,abstract,author"
+    "volume,issue,abstract,author,issn-type,page"
 )
 
 # OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
@@ -251,22 +251,48 @@ def _issue_label(volume: str | None, issue: str | None) -> str | None:
     return ", ".join(parts) or None
 
 
-def _openurl(record: Dict[str, Any]) -> str | None:
+def openurl_resolver_for(email: str) -> str:
+    """The OpenURL resolver of the library the user with this email belongs to."""
+    domain = email.rpartition("@")[2].lower()
+    return settings.OPENURL_RESOLVERS_BY_DOMAIN.get(domain, settings.OPENURL_RESOLVER)
+
+
+def _crossref_openurl_fields(cr_work: Dict[str, Any]) -> Dict[str, str]:
+    """The OpenURL citation fields from a Crossref work. The resolver matches the
+    article to the library's licences by ISSN, volume and issue."""
+    issns = {entry.get("type"): entry.get("value") for entry in cr_work.get("issn-type") or []}
+    fields = {
+        "rft.atitle": _clean_title((cr_work.get("title") or [None])[0]),
+        # Without the ISSN the resolver can't check the licences; untyped ones still do.
+        "rft.issn": issns.get("print") or (cr_work.get("ISSN") or [None])[0],
+        "rft.eissn": issns.get("electronic"),
+        "rft.date": (_date_parts_to_iso(cr_work.get("issued")) or "")[:4],
+        "rft.volume": cr_work.get("volume"),
+        "rft.issue": cr_work.get("issue"),
+        "rft.spage": (cr_work.get("page") or "").split("-")[0],
+    }
+    return {key: value for key, value in fields.items() if value}
+
+
+def _openurl(record: Dict[str, Any], resolver: str) -> str | None:
     """Link to the library's OpenURL resolver for this article."""
     doi = _clean_doi(record.get("doi") or "")
     if not doi:
         return None
+    # The DOI alone often finds nothing, so the citation (see _crossref_openurl_fields)
+    # goes along. No journal title, though: the resolver fuzzy-matches it, and e.g.
+    # "Science" made it suggest unrelated journals.
     params = {
         "ctx_ver": "Z39.88-2004",
         "rft_val_fmt": "info:ofi/fmt:kev:mtx:journal",
         "rft.genre": "article",
         "rft_id": f"info:doi/{doi}",
-        "rft.atitle": record.get("title") or "",
-        "rft.jtitle": record.get("journal_name") or "",
-        "rft.date": (record.get("publication_date") or "")[:4],
+        **(record.get("openurl") or {}),
     }
-    query = urlencode({key: value for key, value in params.items() if value})
-    return f"{settings.OPENURL_RESOLVER}?{query}"
+    query = urlencode(params)
+    # Some resolver URLs already carry their own query (institution, view).
+    separator = "&" if "?" in resolver else "?"
+    return f"{resolver}{separator}{query}"
 
 
 def _clean_doi(value: str) -> str:
@@ -364,6 +390,7 @@ class SearchService:
         limit: int,
         page: int,
         external_apis: Dict[str, str] | None = None,
+        resolver: str = settings.OPENURL_RESOLVER,
     ) -> Dict[str, Any]:
         """Finds papers in the given journals (by ISSN) whose journal issue falls in
         the date range (Crossref). Without keywords they are enriched with OpenAlex
@@ -371,7 +398,33 @@ class SearchService:
 
         `external_apis` maps an ISSN to an external API whose handler gets that
         journal's records for individual processing (see external_api_service).
+        `resolver` is the OpenURL resolver of the user's library (see
+        openurl_resolver_for).
         """
+        data = await self._search(issns, keywords, from_date, to_date, limit, page, external_apis)
+        # The library link differs per user, so it is added to copies of the
+        # (shared, cached) records. Its citation fields stay internal.
+        return {
+            **data,
+            "results": [
+                {
+                    **{key: value for key, value in record.items() if key != "openurl"},
+                    "library_url": _openurl(record, resolver),
+                }
+                for record in data["results"]
+            ],
+        }
+
+    async def _search(
+        self,
+        issns: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
+        limit: int,
+        page: int,
+        external_apis: Dict[str, str] | None,
+    ) -> Dict[str, Any]:
         external_apis = external_apis or {}
         key_parts = (
             tuple(sorted(issns)),
@@ -417,7 +470,6 @@ class SearchService:
             for record in records:
                 record["abstract"] = record.get("abstract") or "No abstract available."
                 record["author"] = record.get("author") or ""
-                record["library_url"] = _openurl(record)
 
             data = {
                 "meta": {"count": count, "page": page, "per_page": limit},
@@ -699,6 +751,7 @@ class SearchService:
             "issue": _issue_label(cr_work.get("volume"), cr_work.get("issue")),
             "abstract": _strip_jats(cr_work.get("abstract")),
             "author": format_authors_apa_crossref(cr_work.get("author")) or None,
+            "openurl": _crossref_openurl_fields(cr_work),
         }
 
     def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:

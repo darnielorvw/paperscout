@@ -66,6 +66,12 @@ class Settings(BaseSettings):
     OPENURL_RESOLVER: str = os.getenv(
         "OPENURL_RESOLVER", "https://kai.fh-swf.de/openurl/49HBZ_FSW/49HBZ_FSW:VU1"
     )
+    # Users whose email is at one of these domains get their own library's resolver
+    # instead of OPENURL_RESOLVER.
+    OPENURL_RESOLVERS_BY_DOMAIN: dict[str, str] = {
+        "uni-muenster.de": "https://katalogplus.uni-muenster.de/discovery/openurl"
+        "?institution=49HBZ_ULM&vid=49HBZ_ULM:VU2",
+    }
 
     # Vercel Blob store for the paper PDFs admins upload. Vercel sets it when a
     # Blob store is connected to the project; without it, uploads are disabled.
