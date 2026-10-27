@@ -1,22 +1,25 @@
 import asyncio
 import html
 import logging
+import math
 import os
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from datetime import date
-from typing import Any, Dict, List, Tuple
+from datetime import date, timedelta
+from typing import Any, Callable, Dict, List, Tuple
 from urllib.parse import urlencode
 
 import httpx
 from dotenv import load_dotenv
+from sqlmodel import Session
 
 from config import settings
 from lib.cache import LRUCache
 from services.external_api_service import apply_external_apis
 from services.quota_alert_service import check_quota
+from services.site_import_service import IMPORTERS, search_site_articles, sync_site_articles
 
 load_dotenv()
 
@@ -77,6 +80,9 @@ _PageHits = Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]] | None
 
 # How far back the keyword search on OpenAlex reaches, counted from the current month.
 _KEYWORD_WINDOW_YEARS = 2
+
+# The order of searches without keywords: by the date the date range filters on.
+_CROSSREF_NEWEST_FIRST = {"sort": "issued", "order": "desc"}
 
 # Retries on Crossref rate limits (429) and server errors.
 _CROSSREF_RETRIES = 4
@@ -146,11 +152,70 @@ def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
     return oa_work is None or oa_work.get("type") in _PAPER_TYPES
 
 
+# --- Ranking website papers among the keyword hits ---------------------------
+# Website papers (see site_import_service) aren't on OpenAlex, so OpenAlex can't
+# rank them, and its relevance score can't be computed for them either (it rests
+# on OpenAlex' own index and the citation counts). Instead, the OpenAlex hits and
+# the website papers are scored with the same plain BM25 over title and
+# abstract, and every website paper goes where the OpenAlex hits stop scoring
+# higher than it does. OpenAlex' own order stays as it is.
+
+_BM25_K1 = 1.2
+_BM25_B = 0.75
+
+
+def _tokens(text: str) -> List[str]:
+    return re.findall(r"\w+", text.lower())
+
+
+def _bm25_scorer(corpus: List[List[str]], query: str) -> Callable[[List[str]], float]:
+    """A BM25 scoring function for the query, with term statistics from `corpus`."""
+    terms = set(_tokens(query))
+    avg_length = sum(map(len, corpus)) / len(corpus) if corpus else 0
+    idf = {
+        term: math.log(
+            1 + (len(corpus) - (n := sum(term in set(doc) for doc in corpus)) + 0.5) / (n + 0.5)
+        )
+        for term in terms
+    }
+
+    def score(doc: List[str]) -> float:
+        norm = _BM25_K1 * (1 - _BM25_B + _BM25_B * len(doc) / avg_length) if avg_length else 0
+        total = 0.0
+        for term in terms:
+            frequency = doc.count(term)
+            if frequency:
+                total += idf[term] * frequency * (_BM25_K1 + 1) / (frequency + norm)
+        return total
+
+    return score
+
+
+def _ranking_text(title: str | None, abstract: str | None) -> List[str]:
+    """The tokens a paper is ranked by; the title counts twice."""
+    return _tokens(f"{title or ''} {title or ''} {abstract or ''}")
+
+
+def _insertion_points(api_scores: List[float], site_scores: List[float]) -> List[int]:
+    """Where each website paper goes: in front of the first API hit (in OpenAlex
+    order) after which no API hit scores higher than the paper. Hits that score
+    the same stay in front."""
+    points = []
+    for site_score in site_scores:
+        point = len(api_scores)
+        while point > 0 and api_scores[point - 1] < site_score:
+            point -= 1
+        points.append(point)
+    return points
+
+
 def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
     """A result with every field the frontend knows, before any API has filled it."""
     return {
         "id": record_id,
         "doi": f"https://doi.org/{doi}" if doi else None,
+        # The paper's page at the publisher, for papers without a DOI.
+        "url": None,
         "title": None,
         "journal_name": None,
         "publication_date": None,
@@ -391,6 +456,7 @@ class SearchService:
         page: int,
         external_apis: Dict[str, str] | None = None,
         resolver: str = settings.OPENURL_RESOLVER,
+        session: Session | None = None,
     ) -> Dict[str, Any]:
         """Finds papers in the given journals (by ISSN) whose journal issue falls in
         the date range (Crossref). Without keywords they are enriched with OpenAlex
@@ -400,20 +466,147 @@ class SearchService:
         journal's records for individual processing (see external_api_service).
         `resolver` is the OpenURL resolver of the user's library (see
         openurl_resolver_for).
+
+        With a `session`, the papers of journals that are only on their own
+        website (see site_import_service) are included: with keywords ranked
+        among the OpenAlex hits, without by date among the Crossref results.
         """
-        data = await self._search(issns, keywords, from_date, to_date, limit, page, external_apis)
+        site_records: List[Dict[str, Any]] = []
+        site_issns = [issn for issn in issns if issn in IMPORTERS]
+        if session is not None and site_issns:
+            await sync_site_articles(session, site_issns)
+            site_records = search_site_articles(session, site_issns, keywords, from_date, to_date)
+        api_issns = [issn for issn in issns if issn not in IMPORTERS]
+
+        # Website paper j goes in front of API result points[j]; in the whole
+        # list, that is position points[j] + j.
+        points = [0] * len(site_records)
+        if site_records and api_issns:
+            if keywords:
+                site_records, points = await self._rank_site_records(
+                    site_records, api_issns, keywords, from_date, to_date
+                )
+            else:
+                points = await self._date_insertion_points(
+                    site_records, api_issns, from_date, to_date
+                )
+        site_at = {
+            point + j: record
+            for j, (point, record) in enumerate(zip(points, site_records, strict=True))
+        }
+
+        offset = max(page - 1, 0) * limit
+        page_positions = range(offset, offset + limit)
+        api_records: List[Dict[str, Any]] = []
+        count = len(site_records)
+        if api_issns:
+            data = await self._search(
+                api_issns,
+                keywords,
+                from_date,
+                to_date,
+                offset - sum(position < offset for position in site_at),
+                sum(position not in site_at for position in page_positions),
+                external_apis,
+            )
+            api_records = data["results"]
+            count += data["meta"]["count"]
+
+        # API pages can come back short (non-papers are dropped), so the website
+        # papers are placed by position and the API results fill the rest.
+        api_iter = iter(api_records)
+        records = []
+        for position in page_positions:
+            record = site_at.get(position) or next(api_iter, None)
+            if record:
+                records.append(record)
+
         # The library link differs per user, so it is added to copies of the
-        # (shared, cached) records. Its citation fields stay internal.
+        # (shared, cached) records. Its citation fields stay internal. Website
+        # papers have no DOI and bring their own link.
         return {
-            **data,
+            "meta": {"count": count, "page": page, "per_page": limit},
             "results": [
                 {
                     **{key: value for key, value in record.items() if key != "openurl"},
-                    "library_url": _openurl(record, resolver),
+                    "library_url": _openurl(record, resolver) or record.get("library_url"),
                 }
-                for record in data["results"]
+                for record in records
             ],
         }
+
+    async def _date_insertion_points(
+        self,
+        site_records: List[Dict[str, Any]],
+        api_issns: List[str],
+        from_date: str,
+        to_date: str,
+    ) -> List[int]:
+        """Where each website paper (newest first) goes among the Crossref results,
+        which are newest first too: behind every result issued after it. Crossref
+        counts those, so no result has to be fetched."""
+        issns = sorted({issn.strip() for issn in api_issns if issn and issn.strip()})
+
+        async def newer_than(published: str) -> int:
+            after = (date.fromisoformat(published) + timedelta(days=1)).isoformat()
+            if after > to_date:
+                return 0
+            cache_key = str(("crossref_count", tuple(issns), after, to_date))
+            count = self.cache.get(cache_key)
+            if count is None:
+                params = {"filter": self._crossref_filter(issns, after, to_date), "rows": 0}
+                message = (await self._fetch_crossref("/works", params)).get("message")
+                if message is None:
+                    return 0  # request failed; the paper goes first
+                count = message.get("total-results", 0)
+                self.cache.set(cache_key, count)
+            return count
+
+        dates = [record["publication_date"] for record in site_records]
+        unique_dates = list(dict.fromkeys(dates))
+        counts = await asyncio.gather(*(newer_than(d) for d in unique_dates))
+        by_date = dict(zip(unique_dates, counts, strict=True))
+        return [by_date[d] for d in dates]
+
+    async def _rank_site_records(
+        self,
+        site_records: List[Dict[str, Any]],
+        api_issns: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
+    ) -> Tuple[List[Dict[str, Any]], List[int]]:
+        """The website papers, best first, and where each goes among the keyword
+        hits of the API journals (see _insertion_points)."""
+        issns = sorted({issn.strip() for issn in api_issns if issn and issn.strip()})
+        hits, oa_by_doi = await self._cached_keyword_hits(issns, keywords, from_date, to_date)
+
+        # Scoring every hit takes a while, so the scores are kept with the hits.
+        cache_key = str(("keyword_scores", tuple(issns), keywords, from_date, to_date))
+        cached = self.keyword_cache.get(cache_key)
+        if cached is None or len(cached[0]) != len(hits):
+            corpus = []
+            for work in hits:
+                oa_work = oa_by_doi.get(_clean_doi(work.get("DOI") or "")) or {}
+                corpus.append(
+                    _ranking_text(
+                        _clean_title((work.get("title") or [None])[0]),
+                        self._extract_abstract(oa_work.get("abstract_inverted_index"))
+                        or _strip_jats(work.get("abstract")),
+                    )
+                )
+            score = _bm25_scorer(corpus, keywords)
+            cached = ([score(doc) for doc in corpus], score)
+            self.keyword_cache.set(cache_key, cached)
+        api_scores, score = cached
+
+        site_scores = [
+            score(_ranking_text(record.get("title"), record.get("abstract")))
+            for record in site_records
+        ]
+        ranked = sorted(zip(site_scores, site_records, strict=True), key=lambda pair: -pair[0])
+        site_records = [record for _, record in ranked]
+        return site_records, _insertion_points(api_scores, [s for s, _ in ranked])
 
     async def _search(
         self,
@@ -421,10 +614,11 @@ class SearchService:
         keywords: str,
         from_date: str,
         to_date: str,
-        limit: int,
-        page: int,
+        offset: int,
+        rows: int,
         external_apis: Dict[str, str] | None,
     ) -> Dict[str, Any]:
+        """`rows` results from position `offset` on, and the total count."""
         external_apis = external_apis or {}
         key_parts = (
             tuple(sorted(issns)),
@@ -432,8 +626,8 @@ class SearchService:
             keywords,
             from_date,
             to_date,
-            limit,
-            page,
+            offset,
+            rows,
         )
         cache_key = str(key_parts)
         cached_data = self.cache.get(cache_key)
@@ -443,24 +637,21 @@ class SearchService:
         issns = sorted({issn.strip() for issn in issns if issn and issn.strip()})
         if not issns:
             # No journal filter would return the entire Crossref corpus.
-            return {
-                "meta": {"count": 0, "page": page, "per_page": limit},
-                "results": [],
-            }
+            return {"meta": {"count": 0}, "results": []}
 
-        label = f"search in {len(issns)} journal(s), page {page}"
+        label = f"search in {len(issns)} journal(s), from result {offset + 1}"
         if keywords:
             label += f", keywords {keywords!r}"
         with _track_openalex_cost(label):
             if keywords:
                 items, count, oa_by_doi = await self._search_keywords(
-                    issns, keywords, from_date, to_date, limit, page
+                    issns, keywords, from_date, to_date, offset, rows
                 )
                 records, api_by_doi = self._crossref_records(items, external_apis)
                 # The keyword search already returned the OpenAlex values.
                 self._fill_openalex(records, oa_by_doi)
             else:
-                items, count = await self._search_crossref(issns, from_date, to_date, limit, page)
+                items, count = await self._search_crossref(issns, from_date, to_date, offset, rows)
                 records, api_by_doi = self._crossref_records(items, external_apis)
                 records = await self._add_openalex(records)
 
@@ -471,10 +662,7 @@ class SearchService:
                 record["abstract"] = record.get("abstract") or "No abstract available."
                 record["author"] = record.get("author") or ""
 
-            data = {
-                "meta": {"count": count, "page": page, "per_page": limit},
-                "results": records,
-            }
+            data = {"meta": {"count": count}, "results": records}
             if records:
                 self.cache.set(cache_key, data)
             return data
@@ -492,15 +680,16 @@ class SearchService:
         )
 
     async def _search_crossref(
-        self, issns: List[str], from_date: str, to_date: str, limit: int, page: int
+        self, issns: List[str], from_date: str, to_date: str, offset: int, rows: int
     ) -> Tuple[List[Dict[str, Any]], int]:
-        """One page of Crossref works, newest journal issue first, and the total count."""
-        # Crossref paginates by offset, not page number.
+        """`rows` Crossref works from position `offset` on, newest journal issue
+        first, and the total count."""
         params: Dict[str, Any] = {
             "filter": self._crossref_filter(issns, from_date, to_date),
-            "rows": limit,
-            "offset": max(page - 1, 0) * limit,
+            "rows": rows,
+            "offset": offset,
             "select": _CROSSREF_SELECT,
+            **_CROSSREF_NEWEST_FIRST,
         }
         message = (await self._fetch_crossref("/works", params)).get("message") or {}
         return message.get("items", []), message.get("total-results", 0)
@@ -511,12 +700,19 @@ class SearchService:
         keywords: str,
         from_date: str,
         to_date: str,
-        limit: int,
-        page: int,
+        offset: int,
+        rows: int,
     ) -> Tuple[List[Dict[str, Any]], int, Dict[str, Dict[str, Any]]]:
-        """One page of the papers OpenAlex finds for the keywords whose journal
-        issue (Crossref) falls in the date range, in OpenAlex's relevance order, the
-        total count, and the OpenAlex works keyed by bare DOI."""
+        """`rows` of the papers OpenAlex finds for the keywords whose journal issue
+        (Crossref) falls in the date range, from position `offset` on, in OpenAlex's
+        relevance order, the total count, and the OpenAlex works keyed by bare DOI."""
+        hits, oa_by_doi = await self._cached_keyword_hits(issns, keywords, from_date, to_date)
+        return hits[offset : offset + rows], len(hits), oa_by_doi
+
+    async def _cached_keyword_hits(
+        self, issns: List[str], keywords: str, from_date: str, to_date: str
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+        """The keyword hits of _keyword_hits, from the cache if they're in it."""
         cache_key = str(("keyword_hits", tuple(issns), keywords, from_date, to_date))
         cached = self.keyword_cache.get(cache_key)
         if cached is None:
@@ -526,10 +722,7 @@ class SearchService:
             cached = (hits, oa_by_doi)
             if complete:
                 self.keyword_cache.set(cache_key, cached)
-        hits, oa_by_doi = cached
-
-        offset = max(page - 1, 0) * limit
-        return hits[offset : offset + limit], len(hits), oa_by_doi
+        return cached
 
     async def _keyword_hits(
         self, issns: List[str], keywords: str, from_date: str, to_date: str

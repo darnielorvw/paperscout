@@ -191,7 +191,7 @@ export function ArticleCard({
             </MetaItem>
             <MetaItem label="Publisher">
               {/* The DOI link resolves to the publisher's page. */}
-              <ActionLink href={article.doi}>
+              <ActionLink href={article.doi ?? article.url}>
                 <ExternalIcon />
                 Open publisher page
               </ActionLink>

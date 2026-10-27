@@ -71,6 +71,8 @@ class SavedArticle(SQLModel, table=True):
     journal_publication_date: Optional[str] = None
     issue: Optional[str] = None
     doi: Optional[str] = None
+    # The paper's page at the publisher, for papers without a DOI.
+    url: Optional[str] = None
     library_url: Optional[str] = None
     abstract: Optional[str] = None
     topic: Optional[str] = None
@@ -117,3 +119,28 @@ class PaperPdf(SQLModel, table=True):
     # API only hands it to users with the paper on their reading list.
     url: str
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SiteArticle(SQLModel, table=True):
+    """A paper of a journal that is neither on Crossref nor on OpenAlex, imported
+    from the journal's website (see services/site_import_service.py)."""
+
+    # The paper's page on the journal website; these papers have no DOI.
+    id: str = Field(primary_key=True)
+    issn: str = Field(index=True)
+    journal_name: str
+    title: str
+    author: Optional[str] = None
+    # ISO date (YYYY-MM-DD).
+    publication_date: Optional[str] = Field(default=None, index=True)
+    issue: Optional[str] = None
+    abstract: Optional[str] = None
+    url: str
+    pdf_url: Optional[str] = None
+
+
+class SiteImport(SQLModel, table=True):
+    """When a journal's papers were last imported from its website."""
+
+    issn: str = Field(primary_key=True)
+    synced_at: datetime

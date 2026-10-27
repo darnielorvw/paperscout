@@ -7,6 +7,7 @@ möglicherweise monthly digest direkt in leseliste packen? (marking an einzelnem
 reading list profile spezifisch?
 
 TODO:
+readme: sortierung von papern
 xml antwort link resolver bei bib nachfragen
 
 user sollen selber link resolver auswählen können

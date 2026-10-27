@@ -510,5 +510,13 @@
     "publisher": "Unknown",
     "homepage": "",
     "external_api": null
+  },
+  {
+    "id": "ijcp",
+    "name": "International Journal of Coaching Psychology",
+    "issn": "2634-7946",
+    "publisher": "National Wellbeing Service",
+    "homepage": "https://ijcp.nationalwellbeingservice.com/",
+    "external_api": null
   }
 ]

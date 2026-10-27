@@ -20,6 +20,7 @@ export type SavedArticleData = Pick<
   | "journal_publication_date"
   | "issue"
   | "doi"
+  | "url"
   | "library_url"
   | "abstract"
   | "topic"

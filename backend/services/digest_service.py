@@ -82,12 +82,17 @@ class DigestService:
             # The library resolver leads to the full text via the institution's access.
             library_url = article.get("library_url")
             doi_url = article.get("doi")
-            link = library_url or doi_url or "#"
+            page_url = article.get("url")
+            link = library_url or doi_url or page_url or "#"
             link_parts = []
             if doi_url:
                 doi = doi_url.removeprefix("https://doi.org/")
                 link_parts.append(
                     f"DOI: <a href='{escape(doi_url)}' style='color:#1a56db;'>{escape(doi)}</a>"
+                )
+            elif page_url:
+                link_parts.append(
+                    f"<a href='{escape(page_url)}' style='color:#1a56db;'>Article page</a>"
                 )
             if library_url:
                 link_parts.append(
@@ -155,6 +160,7 @@ class DigestService:
                 limit=ARTICLES_PER_PROFILE,
                 page=1,
                 resolver=openurl_resolver_for(user.email),
+                session=session,
             )
             articles = data.get("results", [])
             sections.append(

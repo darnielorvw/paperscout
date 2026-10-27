@@ -75,6 +75,7 @@ class SavedArticleData(BaseModel):
     journal_publication_date: Optional[str] = None
     issue: Optional[str] = None
     doi: Optional[str] = None
+    url: Optional[str] = None
     library_url: Optional[str] = None
     abstract: Optional[str] = None
     topic: Optional[str] = None

@@ -28,6 +28,8 @@ export type Article = {
   id: string;
   title: string;
   doi: string | null;
+  // The paper's page at the publisher, for papers without a DOI.
+  url: string | null;
   publication_date: string;
   journal_publication_date: string | null;
   issue: string | null;

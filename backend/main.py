@@ -120,6 +120,20 @@ async def lifespan(app: FastAPI):
                 conn.exec_driver_sql(f"ALTER TABLE savedarticle DROP COLUMN {column}")
                 conn.commit()
 
+        # Papers without a DOI link their page at the publisher instead.
+        if "url" not in saved_columns:
+            conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN url VARCHAR")
+            conn.commit()
+
+        # The International Journal of Coaching Psychology is on neither Crossref
+        # nor OpenAlex; its papers come from its website (see site_import_service).
+        conn.exec_driver_sql(
+            "INSERT OR IGNORE INTO journals (id, name, issn, publisher, homepage, external_api) "
+            "VALUES ('ijcp', 'International Journal of Coaching Psychology', '2634-7946', "
+            "'National Wellbeing Service', 'https://ijcp.nationalwellbeingservice.com/', NULL)"
+        )
+        conn.commit()
+
         # Profiles no longer store a date range - drop the now-unused columns.
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         for column in ("start_date", "end_date"):
@@ -436,6 +450,7 @@ async def search_articles(
         limit=25,
         page=page,
         resolver=openurl_resolver_for(current_user.email),
+        session=session,
     )
     return data
 
@@ -605,6 +620,7 @@ def _saved_article_response(
             "journal_publication_date": saved.journal_publication_date,
             "issue": saved.issue,
             "doi": saved.doi,
+            "url": saved.url,
             "library_url": saved.library_url,
             "abstract": saved.abstract,
             "topic": saved.topic,
@@ -778,7 +794,7 @@ async def _notify_admins_of_pdf_request(
     """Mails all admins that a user is asking for a paper's PDF."""
     title = escape(saved.title or saved.article_id)
     journal = escape(saved.journal_name or "")
-    doi_link = escape(saved.doi or f"https://doi.org/{saved.article_id}")
+    doi_link = escape(saved.doi or saved.url or f"https://doi.org/{saved.article_id}")
     admin_link = escape(f"{settings.FRONTEND_URL}/admin/pdf-requests")
     html = (
         "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;'>"
