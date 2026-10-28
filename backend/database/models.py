@@ -46,6 +46,10 @@ class Profile(SQLModel, table=True):
     profile_name: str
     user_id: int = Field(foreign_key="user.id")
     searchTerm: str
+    # Which of the two searches the profile runs: "keywords" (searchTerm) or
+    # "semantic" (semantic_query). Only the query of that mode is kept.
+    semantic_query: str = Field(default="")
+    search_mode: str = Field(default="keywords")
     email_notifications: bool = Field(default=True)
 
     user: User = Relationship(back_populates="profiles")
@@ -125,8 +129,9 @@ class SiteArticle(SQLModel, table=True):
     """A paper of a journal that is neither on Crossref nor on OpenAlex, imported
     from the journal's website (see services/site_import_service.py)."""
 
-    # The paper's page on the journal website; these papers have no DOI.
+    # The bare DOI, or for papers without one their page on the journal website.
     id: str = Field(primary_key=True)
+    doi: Optional[str] = None
     issn: str = Field(index=True)
     journal_name: str
     title: str

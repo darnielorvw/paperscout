@@ -4,6 +4,7 @@ import logging
 import math
 import os
 import re
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -79,7 +80,16 @@ _OPENALEX_PAGED_MAX = 10_000
 _PageHits = Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]] | None
 
 # How far back the keyword search on OpenAlex reaches, counted from the current month.
-_KEYWORD_WINDOW_YEARS = 2
+_SEARCH_WINDOW_YEARS = 2
+
+# Semantic search: OpenAlex embeds title and abstract of every work and returns
+# the works closest in meaning to the query. Of our filters it only takes the
+# source id, type and publication year, and it returns at most 50 works (one
+# page, no cursor) at one request per second. Crossref then narrows them to the
+# journal issue dates, as with keywords. It replaces the keyword search; the
+# two don't go together.
+_SEMANTIC_MAX_RESULTS = 50
+_SEMANTIC_INTERVAL_SECONDS = 1.0
 
 # The order of searches without keywords: by the date the date range filters on.
 _CROSSREF_NEWEST_FIRST = {"sort": "issued", "order": "desc"}
@@ -136,11 +146,11 @@ def _add_openalex_cost(headers: httpx.Headers) -> None:
     cost.remaining_usd = headers.get("x-ratelimit-remaining-usd") or cost.remaining_usd
 
 
-def _keyword_window(from_date: str, to_date: str) -> Tuple[str, str]:
+def _search_window(from_date: str, to_date: str) -> Tuple[str, str]:
     """The publication-date window of the keyword search: from the first day of
-    the month `_KEYWORD_WINDOW_YEARS` years before `from_date` up to `to_date`."""
+    the month `_SEARCH_WINDOW_YEARS` years before `from_date` up to `to_date`."""
     start = date.fromisoformat(from_date)  # "2026-10-01" -> date(2026, 10, 1)
-    start = date(start.year - _KEYWORD_WINDOW_YEARS, start.month, 1)
+    start = date(start.year - _SEARCH_WINDOW_YEARS, start.month, 1)
     return start.isoformat(), to_date
 
 
@@ -388,6 +398,10 @@ class SearchService:
         # rebuilding one costs OpenAlex requests.
         self.keyword_cache = LRUCache(max_size=20, ttl=86400)
 
+        # OpenAlex takes one semantic search per second; they queue up here.
+        self._semantic_lock = asyncio.Lock()
+        self._semantic_last = 0.0
+
     async def _fetch_crossref(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
         headers = {"User-Agent": f"PaperScout/1.0 (mailto:{self.mailto})"}
         if self.mailto:
@@ -457,10 +471,16 @@ class SearchService:
         external_apis: Dict[str, str] | None = None,
         resolver: str = settings.OPENURL_RESOLVER,
         session: Session | None = None,
+        semantic_query: str = "",
+        source_ids: Dict[str, str] | None = None,
     ) -> Dict[str, Any]:
         """Finds papers in the given journals (by ISSN) whose journal issue falls in
         the date range (Crossref). Without keywords they are enriched with OpenAlex
         metadata; with keywords OpenAlex finds them first (see top of module).
+
+        With a `semantic_query`, OpenAlex' semantic search finds them instead, in
+        the journals whose OpenAlex source id `source_ids` maps their ISSN to; the
+        keywords are ignored then.
 
         `external_apis` maps an ISSN to an external API whose handler gets that
         journal's records for individual processing (see external_api_service).
@@ -469,11 +489,15 @@ class SearchService:
 
         With a `session`, the papers of journals that are only on their own
         website (see site_import_service) are included: with keywords ranked
-        among the OpenAlex hits, without by date among the Crossref results.
+        among the OpenAlex hits, without by date among the Crossref results. The
+        semantic search leaves them out, as OpenAlex has no embeddings for them.
         """
+        semantic_query = semantic_query.strip()
+        if semantic_query:
+            keywords = ""
         site_records: List[Dict[str, Any]] = []
         site_issns = [issn for issn in issns if issn in IMPORTERS]
-        if session is not None and site_issns:
+        if session is not None and site_issns and not semantic_query:
             await sync_site_articles(session, site_issns)
             site_records = search_site_articles(session, site_issns, keywords, from_date, to_date)
         api_issns = [issn for issn in issns if issn not in IMPORTERS]
@@ -508,6 +532,8 @@ class SearchService:
                 offset - sum(position < offset for position in site_at),
                 sum(position not in site_at for position in page_positions),
                 external_apis,
+                semantic_query,
+                [(source_ids or {})[issn] for issn in api_issns if issn in (source_ids or {})],
             )
             api_records = data["results"]
             count += data["meta"]["count"]
@@ -617,13 +643,17 @@ class SearchService:
         offset: int,
         rows: int,
         external_apis: Dict[str, str] | None,
+        semantic_query: str = "",
+        source_ids: List[str] | None = None,
     ) -> Dict[str, Any]:
         """`rows` results from position `offset` on, and the total count."""
         external_apis = external_apis or {}
+        source_ids = sorted(set(source_ids or []))
         key_parts = (
             tuple(sorted(issns)),
             tuple(sorted(external_apis.items())),
             keywords,
+            semantic_query,
             from_date,
             to_date,
             offset,
@@ -642,8 +672,19 @@ class SearchService:
         label = f"search in {len(issns)} journal(s), from result {offset + 1}"
         if keywords:
             label += f", keywords {keywords!r}"
+        elif semantic_query:
+            label += f", semantic query {semantic_query[:60]!r}"
         with _track_openalex_cost(label):
-            if keywords:
+            if semantic_query:
+                hits, oa_by_doi = await self._cached_semantic_hits(
+                    source_ids, semantic_query, from_date, to_date
+                )
+                records, api_by_doi = self._crossref_records(
+                    hits[offset : offset + rows], external_apis
+                )
+                count = len(hits)
+                self._fill_openalex(records, oa_by_doi)
+            elif keywords:
                 items, count, oa_by_doi = await self._search_keywords(
                     issns, keywords, from_date, to_date, offset, rows
                 )
@@ -736,7 +777,7 @@ class SearchService:
         The OpenAlex pages are fetched in parallel, and each is checked on Crossref
         as soon as it arrives, so both APIs work at the same time.
         """
-        from_pub, to_pub = _keyword_window(from_date, to_date)
+        from_pub, to_pub = _search_window(from_date, to_date)
         params = {
             "filter": ",".join(
                 [
@@ -818,6 +859,82 @@ class SearchService:
                     hits.append(work)
                     oa_by_doi[doi] = page_oa[doi]
         return hits, oa_by_doi, complete
+
+    async def _cached_semantic_hits(
+        self,
+        source_ids: List[str],
+        query: str,
+        from_date: str,
+        to_date: str,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+        """The hits of _semantic_hits, from the cache if they're in it."""
+        cache_key = str(("semantic_hits", tuple(source_ids), query, from_date, to_date))
+        cached = self.keyword_cache.get(cache_key)
+        if cached is None:
+            hits, oa_by_doi, complete = await self._semantic_hits(
+                source_ids, query, from_date, to_date
+            )
+            cached = (hits, oa_by_doi)
+            if complete:
+                self.keyword_cache.set(cache_key, cached)
+        return cached
+
+    async def _semantic_hits(
+        self,
+        source_ids: List[str],
+        query: str,
+        from_date: str,
+        to_date: str,
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], bool]:
+        """The papers in the journals (OpenAlex source ids) closest in meaning to the
+        query (published in the years from two years before `from_date` up to
+        `to_date`) whose journal issue (Crossref) falls in the date range, most similar first; the OpenAlex works of those papers,
+        keyed by bare DOI; and whether every request succeeded."""
+        if not source_ids:
+            return [], {}, True
+        from_pub, to_pub = _search_window(from_date, to_date)
+        params = {
+            "filter": ",".join(
+                [
+                    f"primary_location.source.id:{'|'.join(source_ids)}",
+                    f"type:{'|'.join(_PAPER_TYPES)}",
+                    # Publication dates aren't supported, only years.
+                    f"publication_year:{from_pub[:4]}-{to_pub[:4]}",
+                ]
+            ),
+            "search.semantic": query,
+            "sort": "relevance_score:desc",
+            "per_page": _SEMANTIC_MAX_RESULTS,
+            "select": _OPENALEX_SELECT,
+            **_OPENALEX_INCLUDE_XPAC,
+        }
+        data = await self._fetch_openalex_semantic(params)
+        if "results" not in data:
+            return [], {}, False
+
+        oa_by_doi: Dict[str, Dict[str, Any]] = {}
+        for work in data["results"]:
+            doi = _clean_doi(work.get("doi") or "")
+            if doi:
+                oa_by_doi.setdefault(doi, work)
+
+        hits = await self._crossref_issued_in_range(
+            list(oa_by_doi), from_date, to_date, asyncio.Semaphore(_CROSSREF_CONCURRENCY)
+        )
+        if hits is None:
+            return [], {}, False
+        return hits, oa_by_doi, True
+
+    async def _fetch_openalex_semantic(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """A semantic search on OpenAlex, at most one per second (its rate limit)."""
+        async with self._semantic_lock:
+            wait = self._semantic_last + _SEMANTIC_INTERVAL_SECONDS - time.monotonic()
+            if wait > 0:
+                await asyncio.sleep(wait)
+            try:
+                return await self._fetch_openalex("/works", params)
+            finally:
+                self._semantic_last = time.monotonic()
 
     async def _crossref_issued_in_range(
         self,

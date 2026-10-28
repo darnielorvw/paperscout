@@ -9,14 +9,16 @@ from typing import Any, Awaitable, Callable, Dict, List
 import httpx
 from sqlmodel import Session, select
 
+from config import settings
 from database import models
 
 logger = logging.getLogger(__name__)
 
 # --- Journals that only exist on their own website ----------------------------
-# Some journals are neither on Crossref nor on OpenAlex. Their papers are
-# imported from the journal's website into `SiteArticle` and searched there
-# alongside the Crossref/OpenAlex results (see search_service).
+# Some journals are neither on Crossref nor on OpenAlex, or their data there is
+# too incomplete to search. Their papers are imported (mostly from the journal's
+# website) into `SiteArticle` and searched there alongside the Crossref/OpenAlex
+# results (see search_service), which leave these journals out.
 #
 # A new journal is added by writing an importer that returns its papers as
 # `SiteArticle` values and registering it in `IMPORTERS` under the journal's ISSN.
@@ -184,8 +186,104 @@ async def import_ijcp() -> List[SiteArticleValues]:
             page_number += 1
 
 
+# --- Wirtschaftspsychologie aktuell -------------------------------------------
+# Nomos registers the papers with Crossref, but dates them by year only, so a
+# date range within the year never finds them, and OpenAlex has the same. The
+# papers come from Crossref; the date of their issue from the journal's website,
+# where every issue has a post ("Ausgabe 3/2026") from the day it came out. The
+# issue's contents are paywalled there.
+
+WPA_ISSN = "1611-9207"
+_WPA_NAME = "Wirtschaftspsychologie aktuell"
+_WPA_CROSSREF = f"https://api.crossref.org/journals/{WPA_ISSN}/works"
+# The website's "Heftausgaben" category, which holds one post per issue.
+_WPA_ISSUE_POSTS = "https://wirtschaftspsychologie-aktuell.de/wp-json/wp/v2/posts?categories=26"
+_WPA_ISSUE_TITLE = re.compile(r"Ausgabe\s+(\d+)\s*/\s*(\d{4})")
+# Regular sections that aren't papers. The others (editorial, contents, news,
+# imprint, front matter) have no author.
+_WPA_SECTIONS = re.compile(r"Bücher, die mich inspirieren", flags=re.I)
+
+
+def wpa_issue_dates(posts: List[Dict[str, Any]]) -> Dict[tuple[str, str], str]:
+    """The publication date of every issue, keyed by (year, issue number)."""
+    dates = {}
+    for post in posts:
+        match = _WPA_ISSUE_TITLE.search(_text((post.get("title") or {}).get("rendered") or ""))
+        if match and post.get("date"):
+            number, year = match.groups()
+            dates[(year, number)] = post["date"][:10]
+    return dates
+
+
+def parse_wpa_work(
+    work: Dict[str, Any], issue_dates: Dict[tuple[str, str], str]
+) -> SiteArticleValues | None:
+    """A paper from a Crossref work, dated by its issue; None for everything that
+    isn't a paper."""
+    doi = (work.get("DOI") or "").lower()
+    title = _text((work.get("title") or [""])[0])
+    authors = work.get("author") or []
+    if work.get("type") != "journal-article" or not doi or not title or not authors:
+        return None
+    if _WPA_SECTIONS.search(title):
+        return None
+    year = str(((work.get("issued") or {}).get("date-parts") or [[None]])[0][0] or "")
+    number = work.get("issue") or ""
+    if not year or not number:
+        return None
+    # An issue the website has no post for yet: four issues a year, at the end of
+    # each quarter, give a date close enough.
+    estimate = f"{year}-{min(int(number), 4) * 3:02d}-15" if number.isdigit() else f"{year}-01-01"
+    return {
+        "id": doi,
+        "doi": doi,
+        "issn": WPA_ISSN,
+        "journal_name": _WPA_NAME,
+        "title": title,
+        "author": _apa_authors(
+            [(a.get("family") or a.get("name") or "").strip() for a in authors if a]
+        )
+        or None,
+        "publication_date": issue_dates.get((year, number), estimate),
+        "issue": f"Issue {number}/{year}",
+        "abstract": None,
+        "url": f"https://doi.org/{doi}",
+        "pdf_url": None,
+    }
+
+
+async def import_wpa() -> List[SiteArticleValues]:
+    """Every paper of Wirtschaftspsychologie aktuell on Crossref."""
+    headers = {"User-Agent": f"PaperScout/1.0 (mailto:{settings.CROSSREF_MAILTO})"}
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=headers) as client:
+        response = await client.get(
+            _WPA_ISSUE_POSTS, params={"per_page": 100, "_fields": "date,title"}
+        )
+        response.raise_for_status()
+        issue_dates = wpa_issue_dates(response.json())
+
+        works: List[Dict[str, Any]] = []
+        cursor = "*"
+        while cursor:
+            response = await client.get(
+                _WPA_CROSSREF,
+                params={
+                    "rows": 1000,
+                    "cursor": cursor,
+                    "select": "DOI,type,title,author,issue,issued",
+                },
+            )
+            response.raise_for_status()
+            message = response.json().get("message") or {}
+            items = message.get("items") or []
+            works += items
+            cursor = message.get("next-cursor") if items else None
+    return [a for a in (parse_wpa_work(work, issue_dates) for work in works) if a]
+
+
 IMPORTERS: Dict[str, Importer] = {
     IJCP_ISSN: import_ijcp,
+    WPA_ISSN: import_wpa,
 }
 
 
@@ -249,16 +347,17 @@ def search_site_articles(
     return [
         {
             "id": article.id,
-            "doi": None,
+            "doi": f"https://doi.org/{article.doi}" if article.doi else None,
             "url": article.url,
             "title": article.title,
             "journal_name": article.journal_name,
             "publication_date": article.publication_date,
             "journal_publication_date": article.publication_date,
             "issue": article.issue,
-            # Open access, so the PDF (or the page that shows it) stands in for
-            # the library's full text.
+            # Papers with a DOI get the library link (see search_service); the
+            # open-access ones without link the PDF or the page that shows it.
             "library_url": article.pdf_url or article.url,
+            "openurl": {"rft.issn": article.issn, "rft.date": (article.publication_date or "")[:4]},
             "abstract": article.abstract,
             "topic": None,
             "author": article.author,

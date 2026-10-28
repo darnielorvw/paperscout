@@ -1,6 +1,7 @@
 """Unit tests for the pure helpers defined in main.py (no DB, no request)."""
 
-from main import _journal_values
+from main import _journal_values, _profile_queries
+from schemas import ProfileSettings
 
 
 class TestJournalValues:
@@ -39,3 +40,23 @@ class TestJournalValues:
 
     def test_missing_homepage_falls_back_to_empty_string(self):
         assert _journal_values(self._source(homepage_url=None))["homepage"] == ""
+
+
+class TestProfileQueries:
+    def test_keyword_profile_drops_the_semantic_query(self):
+        settings = ProfileSettings(searchTerm="robots", semanticQuery="trust in robots")
+        assert _profile_queries(settings) == {
+            "searchTerm": "robots",
+            "semantic_query": "",
+            "search_mode": "keywords",
+        }
+
+    def test_semantic_profile_drops_the_search_term(self):
+        settings = ProfileSettings(
+            searchTerm="robots", semanticQuery="trust in robots", searchMode="semantic"
+        )
+        assert _profile_queries(settings) == {
+            "searchTerm": "",
+            "semantic_query": "trust in robots",
+            "search_mode": "semantic",
+        }

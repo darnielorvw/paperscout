@@ -19,7 +19,13 @@ from services.search_service import (
     _insertion_points,
     _ranking_text,
 )
-from services.site_import_service import IJCP_ISSN, parse_ijcp_page
+from services.site_import_service import (
+    IJCP_ISSN,
+    WPA_ISSN,
+    parse_ijcp_page,
+    parse_wpa_work,
+    wpa_issue_dates,
+)
 
 BASE = "https://ijcp.nationalwellbeingservice.com/volumes"
 
@@ -130,6 +136,104 @@ class TestParseIjcpPage:
     )
     def test_other_pages_are_no_papers(self, link, content):
         assert parse_ijcp_page(_page(link, content)) is None
+
+
+def _work(page: str, issue: str = "3", **overrides) -> dict:
+    """A Crossref work of Wirtschaftspsychologie aktuell, shaped like Nomos' ones."""
+    work = {
+        "DOI": f"10.5771/1611-9207-2026-{issue}-{page}",
+        "type": "journal-article",
+        "title": ["Vom Feedbackgeben zum Feedbacknehmen"],
+        "author": [{"given": "Anna", "family": "Zerna"}, {"given": "Ben", "family": "Weiss"}],
+        "issue": issue,
+        "issued": {"date-parts": [[2026]]},
+    }
+    work.update(overrides)
+    return work
+
+
+ISSUE_DATES = {("2026", "3"): "2026-09-17"}
+
+
+class TestWpa:
+    def test_issue_dates_from_the_issue_posts(self):
+        posts = [
+            {"date": "2026-09-17T10:00:00", "title": {"rendered": "Ausgabe 3/2026"}},
+            {"date": "2025-12-18T10:00:00", "title": {"rendered": "Ausgabe 4 / 2025"}},
+            {"date": "2026-01-01T10:00:00", "title": {"rendered": "Sonderheft"}},
+        ]
+        assert wpa_issue_dates(posts) == {
+            ("2026", "3"): "2026-09-17",
+            ("2025", "4"): "2025-12-18",
+        }
+
+    def test_reads_a_paper_dated_by_its_issue(self):
+        assert parse_wpa_work(_work("8"), ISSUE_DATES) == {
+            "id": "10.5771/1611-9207-2026-3-8",
+            "doi": "10.5771/1611-9207-2026-3-8",
+            "issn": WPA_ISSN,
+            "journal_name": "Wirtschaftspsychologie aktuell",
+            "title": "Vom Feedbackgeben zum Feedbacknehmen",
+            "author": "Zerna & Weiss",
+            "publication_date": "2026-09-17",
+            "issue": "Issue 3/2026",
+            "abstract": None,
+            "url": "https://doi.org/10.5771/1611-9207-2026-3-8",
+            "pdf_url": None,
+        }
+
+    def test_an_issue_without_post_gets_an_estimate(self):
+        article = parse_wpa_work(_work("8", issue="4"), ISSUE_DATES)
+        assert article["publication_date"] == "2026-12-15"
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"title": ["Editorial"], "author": []},
+            {"title": ["Titelei"]},  # no author key at all
+            {"title": ["5 Bücher, die mich inspirieren"]},
+            {"type": "journal-issue"},
+        ],
+    )
+    def test_sections_are_no_papers(self, overrides):
+        work = _work("1", **overrides)
+        if overrides.get("title") == ["Titelei"]:
+            del work["author"]
+        assert parse_wpa_work(work, ISSUE_DATES) is None
+
+    def test_search_results_carry_the_doi(self, db):
+        db.add(models.SiteArticle(**parse_wpa_work(_work("8"), ISSUE_DATES)))
+        db.commit()
+        result = site_import_service.search_site_articles(
+            db, [WPA_ISSN], "feedback", "2026-09-01", "2026-09-30"
+        )[0]
+        assert result["doi"] == "https://doi.org/10.5771/1611-9207-2026-3-8"
+        assert result["openurl"] == {"rft.issn": WPA_ISSN, "rft.date": "2026"}
+
+    def test_the_library_link_comes_from_the_resolver(self, db, monkeypatch):
+        db.add(models.SiteArticle(**parse_wpa_work(_work("8"), ISSUE_DATES)))
+        db.commit()
+
+        async def no_import():
+            return []
+
+        monkeypatch.setitem(site_import_service.IMPORTERS, WPA_ISSN, no_import)
+        data = asyncio.run(
+            SearchService().search(
+                issns=[WPA_ISSN],
+                keywords="",
+                from_date="2026-09-01",
+                to_date="2026-09-30",
+                limit=25,
+                page=1,
+                resolver="https://resolver.example/openurl",
+                session=db,
+            )
+        )
+        library_url = data["results"][0]["library_url"]
+        assert library_url.startswith("https://resolver.example/openurl?")
+        assert "rft_id=info%3Adoi%2F10.5771%2F1611-9207-2026-3-8" in library_url
+        assert "openurl" not in data["results"][0]
 
 
 @pytest.fixture
@@ -263,7 +367,9 @@ class TestSearchMerge:
         service.calls = []
         service.counts = []
 
-        async def fake_search(issns, keywords, from_date, to_date, offset, rows, external_apis):
+        async def fake_search(
+            issns, keywords, from_date, to_date, offset, rows, external_apis, *semantic
+        ):
             service.calls.append((issns, offset, rows))
             api = [{"id": f"10.1/{n}", "doi": f"https://doi.org/10.1/{n}"} for n in range(6)]
             return {"meta": {"count": len(api)}, "results": api[offset : offset + rows]}
@@ -393,7 +499,9 @@ class TestKeywordRanking:
         async def fake_hits(issns, keywords, from_date, to_date):
             return hits, {}
 
-        async def fake_search(issns, keywords, from_date, to_date, offset, rows, external_apis):
+        async def fake_search(
+            issns, keywords, from_date, to_date, offset, rows, external_apis, *semantic
+        ):
             api = [{"id": hit["DOI"]} for hit in hits]
             return {"meta": {"count": len(api)}, "results": api[offset : offset + rows]}
 

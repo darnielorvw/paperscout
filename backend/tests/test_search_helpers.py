@@ -4,6 +4,7 @@ These functions do no I/O - they only reshape the JSON that Crossref and
 OpenAlex return - so they can be tested directly with plain dicts.
 """
 
+import asyncio
 from urllib.parse import parse_qs
 
 import pytest
@@ -256,6 +257,51 @@ class TestFillOpenalex:
             ("From OpenAlex", "Kept"),
             ("From Crossref", "Filled"),
         ]
+
+
+class TestSemanticHits:
+    def setup_method(self):
+        self.svc = SearchService()
+        self.requests = []
+
+        async def fetch_openalex(endpoint, params):
+            self.requests.append(params)
+            return {
+                "results": [
+                    {"doi": "https://doi.org/10.1/A", "title": "Trust in robots"},
+                    {"doi": "https://doi.org/10.1/b", "title": "Robot navigation"},
+                    {"doi": None, "title": "Trust without a DOI"},
+                ]
+            }
+
+        async def issued_in_range(dois, from_date, to_date, slots):
+            # Crossref drops 10.1/b, which isn't issued in the date range.
+            return [{"DOI": doi} for doi in dois if doi != "10.1/b"]
+
+        self.svc._fetch_openalex = fetch_openalex
+        self.svc._crossref_issued_in_range = issued_in_range
+
+    def test_filters_by_source_type_and_year_and_keeps_similarity_order(self):
+        hits, oa_by_doi, complete = asyncio.run(
+            self.svc._semantic_hits(["S1", "S2"], "trust", "2026-01-01", "2026-03-31")
+        )
+        params = self.requests[0]
+        assert params["search.semantic"] == "trust"
+        assert params["filter"] == (
+            "primary_location.source.id:S1|S2,type:article|review,publication_year:2024-2026"
+        )
+        assert params["per_page"] == 50
+        assert hits == [{"DOI": "10.1/a"}]
+        assert set(oa_by_doi) == {"10.1/a", "10.1/b"}
+        assert complete
+
+    def test_no_journals_no_request(self):
+        assert asyncio.run(self.svc._semantic_hits([], "trust", "2026-01-01", "2026-03-31")) == (
+            [],
+            {},
+            True,
+        )
+        assert self.requests == []
 
 
 class TestMerge:

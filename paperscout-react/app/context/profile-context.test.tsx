@@ -75,7 +75,12 @@ describe("useProfiles", () => {
     expect(options.method).toBe("POST");
     expect(JSON.parse(options.body)).toEqual({
       name: "New",
-      settings: { rowSelection: { J9: true }, searchTerm: "genome" },
+      settings: {
+        rowSelection: { J9: true },
+        searchTerm: "genome",
+        semanticQuery: "",
+        searchMode: "keywords",
+      },
     });
     expect(result.current.profiles.profiles.map((p) => p.id)).toContain(5);
   });

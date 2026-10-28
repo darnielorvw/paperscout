@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { BookmarkPlusIcon, CalendarIcon, SearchIcon } from "lucide-react";
+import { BookmarkPlusIcon, CalendarIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
 import {
   Await,
@@ -124,7 +124,7 @@ function SelectForReadingList({
   );
 }
 
-// The keywords and date range these results were searched with, from the URL.
+// The keywords, semantic query and date range these results were searched with, from the URL.
 function SearchSummary({
   search,
   totalCount,
@@ -134,15 +134,27 @@ function SearchSummary({
 }) {
   const params = new URLSearchParams(search);
   const keywords = params.get("keywords")?.trim();
+  const semanticQuery = params.get("semantic_query")?.trim();
   const from = params.get("from_date");
   const to = params.get("to_date");
 
   return (
     <div className="flex flex-wrap pt-2 gap-2 text-sm">
-      <Badge variant="secondary" title="Keywords">
-        <SearchIcon />
-        {keywords ? `“${keywords}”` : "No keywords"}
-      </Badge>
+      {semanticQuery ? (
+        <Badge
+          variant="secondary"
+          title={semanticQuery}
+          className="max-w-xs"
+        >
+          <SparklesIcon />
+          <span className="truncate">“{semanticQuery}”</span>
+        </Badge>
+      ) : (
+        <Badge variant="secondary" title="Keywords">
+          <SearchIcon />
+          {keywords ? `“${keywords}”` : "No keywords"}
+        </Badge>
+      )}
       {from && to && (
         <Badge variant="secondary" title="Date range">
           <CalendarIcon />
@@ -168,8 +180,14 @@ export default function Results() {
   >(new Map());
   const [isSaving, setIsSaving] = useState(false);
   const { savedArticleIds, saveArticles } = useReadingList();
-  const { setRowSelection, setSearchTerm, setDate, isInitialized } =
-    useSearch();
+  const {
+    setRowSelection,
+    setSearchTerm,
+    setSemanticQuery,
+    setSearchMode,
+    setDate,
+    isInitialized,
+  } = useSearch();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // The list scrolls in its own container, which <ScrollRestoration> (window
@@ -201,7 +219,16 @@ export default function Results() {
     if (journalIds.length === 0) return;
 
     setRowSelection(Object.fromEntries(journalIds.map((id) => [id, true])));
-    setSearchTerm(params.get("keywords") || "");
+    // A semantic search keeps the search term the user had typed before.
+    const semanticQuery = params.get("semantic_query") || "";
+    if (semanticQuery) {
+      setSemanticQuery(semanticQuery);
+      setSearchMode("semantic");
+    } else if (params.get("keywords")) {
+      setSearchTerm(params.get("keywords") || "");
+      setSearchMode("keywords");
+    }
+    // Without either, the mode can't be told from the URL and stays as it is.
 
     const from = params.get("from_date");
     const to = params.get("to_date");
@@ -305,7 +332,7 @@ export default function Results() {
                   transition: "opacity 1s",
                 }}
               >
-                <div className="space-y-4 pr-2">
+                <div className="space-y-4 pb-4 pr-2">
 
                   <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="flex items-center gap-2">

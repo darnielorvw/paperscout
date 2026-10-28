@@ -7,6 +7,11 @@ möglicherweise monthly digest direkt in leseliste packen? (marking an einzelnem
 reading list profile spezifisch?
 
 TODO:
+help page semantic
+möglicherweise rerank für digest?
+editorial etc. manuell rausfiltern
+Hinweis wirtschaftspsychologie aktuell: nicht mit keywords verwenden weil keine abstracts bzw genau herausfinden was abgeht
+
 readme: sortierung von papern
 xml antwort link resolver bei bib nachfragen
 

@@ -106,7 +106,8 @@ const adminGroup: NavGroup = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const { user } = useAuth();
-  const { rowSelection, date, searchTerm, isInitialized } = useSearch();
+  const { rowSelection, date, searchTerm, semanticQuery, searchMode, isInitialized } =
+    useSearch();
   const [isMounted, setIsMounted] = React.useState(false);
 
   const sidebarGroups = user?.is_admin ? [...data, adminGroup] : data;
@@ -119,8 +120,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // useMemo ensures this is only recalculated on changes.
   const resultsUrl = React.useMemo(() => {
     if (!isInitialized) return "/results"; // Wait until the state has been loaded from storage
-    return buildResultsUrl({ rowSelection, date, searchTerm });
-  }, [rowSelection, date, searchTerm, isInitialized]);
+    return buildResultsUrl({ rowSelection, date, searchTerm, semanticQuery, searchMode });
+  }, [rowSelection, date, searchTerm, semanticQuery, searchMode, isInitialized]);
 
   return (
     <Sidebar {...props}>

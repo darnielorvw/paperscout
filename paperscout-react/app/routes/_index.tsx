@@ -27,6 +27,10 @@ export default function Home() {
     setDate,
     searchTerm,
     setSearchTerm,
+    semanticQuery,
+    setSemanticQuery,
+    searchMode,
+    setSearchMode,
   } = useSearch();
 
   // State for the results
@@ -41,7 +45,7 @@ export default function Home() {
   }, [location, navigate]);
 
   const handleSearch = async () => {
-    const resultsUrl = buildResultsUrl({ rowSelection, date, searchTerm });
+    const resultsUrl = buildResultsUrl({ rowSelection, date, searchTerm, semanticQuery, searchMode });
     navigate(resultsUrl);
   };
 
@@ -63,15 +67,34 @@ export default function Home() {
     [date],
   );
 
+  const unsupportedJournals = useMemo(
+    () => journals.filter((j) => j.semantic_search === false).map((j) => j.name),
+    [journals],
+  );
+
   const searchContent = useMemo(
     () => (
       <SearchPage
         searchTerm={searchTerm}
         onSearchTermChange={setSearchTerm}
+        semanticQuery={semanticQuery}
+        onSemanticQueryChange={setSemanticQuery}
+        searchMode={searchMode}
+        onSearchModeChange={setSearchMode}
+        unsupportedJournals={unsupportedJournals}
         onSearch={handleSearch}
       />
     ),
-    [searchTerm, setSearchTerm, handleSearch],
+    [
+      searchTerm,
+      setSearchTerm,
+      semanticQuery,
+      setSemanticQuery,
+      searchMode,
+      setSearchMode,
+      unsupportedJournals,
+      handleSearch,
+    ],
   );
 
   const accordionItems = useMemo(

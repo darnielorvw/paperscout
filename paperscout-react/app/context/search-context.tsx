@@ -3,10 +3,15 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { normalizeDateRange } from "~/lib/date-utils";
 
+// Which field searches: the search term or the semantic query.
+export type SearchMode = "keywords" | "semantic";
+
 interface SearchState {
   rowSelection: Record<string, boolean>;
   date: DateRange | undefined;
   searchTerm: string;
+  semanticQuery: string;
+  searchMode: SearchMode;
 }
 
 interface SearchContextType extends SearchState {
@@ -15,6 +20,8 @@ interface SearchContextType extends SearchState {
   >;
   setDate: (newDate: DateRange | undefined) => void;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  setSemanticQuery: React.Dispatch<React.SetStateAction<string>>;
+  setSearchMode: React.Dispatch<React.SetStateAction<SearchMode>>;
   isInitialized: boolean;
 }
 
@@ -26,6 +33,8 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [date, setDateState] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [semanticQuery, setSemanticQuery] = useState<string>("");
+  const [searchMode, setSearchMode] = useState<SearchMode>("keywords");
 
   // Wrapper around setDate to ensure the time is always set to 00:00:00 UTC.
   const setDate = (newDate: DateRange | undefined) => {
@@ -50,6 +59,12 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
 
       const savedSearchTerm = sessionStorage.getItem("ps_search_term");
       setSearchTerm(savedSearchTerm || "");
+
+      const savedSemanticQuery = sessionStorage.getItem("ps_semantic_query");
+      setSemanticQuery(savedSemanticQuery || "");
+
+      const savedSearchMode = sessionStorage.getItem("ps_search_mode");
+      setSearchMode(savedSearchMode === "semantic" ? "semantic" : "keywords");
     } catch (error) {
       console.error("Failed to parse from sessionStorage", error);
     } finally {
@@ -76,6 +91,18 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     }
   }, [searchTerm, isInitialized]);
 
+  useEffect(() => {
+    if (isInitialized) {
+      sessionStorage.setItem("ps_semantic_query", semanticQuery);
+    }
+  }, [semanticQuery, isInitialized]);
+
+  useEffect(() => {
+    if (isInitialized) {
+      sessionStorage.setItem("ps_search_mode", searchMode);
+    }
+  }, [searchMode, isInitialized]);
+
   const value = {
     rowSelection,
     setRowSelection,
@@ -83,6 +110,10 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     setDate,
     searchTerm,
     setSearchTerm,
+    semanticQuery,
+    setSemanticQuery,
+    searchMode,
+    setSearchMode,
     isInitialized,
   };
 

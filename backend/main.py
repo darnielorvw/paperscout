@@ -40,6 +40,7 @@ from services import auth_service, blob_service, user_service
 from services.digest_service import DigestService
 from services.mail_service import MailService
 from services.search_service import SearchService, openurl_resolver_for
+from services.site_import_service import IMPORTERS
 
 scheduler = AsyncIOScheduler()
 
@@ -125,6 +126,12 @@ async def lifespan(app: FastAPI):
             conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN url VARCHAR")
             conn.commit()
 
+        # Papers imported from a journal website may have a DOI.
+        site_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(sitearticle)")}
+        if "doi" not in site_columns:
+            conn.exec_driver_sql("ALTER TABLE sitearticle ADD COLUMN doi VARCHAR")
+            conn.commit()
+
         # The International Journal of Coaching Psychology is on neither Crossref
         # nor OpenAlex; its papers come from its website (see site_import_service).
         conn.exec_driver_sql(
@@ -190,6 +197,20 @@ async def lifespan(app: FastAPI):
             )
             conn.exec_driver_sql("DROP TABLE profile")
             conn.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
+            conn.commit()
+
+        # Profiles can run a semantic search instead of the keyword search. After
+        # the rebuild above, which would drop the columns again.
+        profile_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
+        if "semantic_query" not in profile_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE profile ADD COLUMN semantic_query VARCHAR NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+        if "search_mode" not in profile_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE profile ADD COLUMN search_mode VARCHAR NOT NULL DEFAULT 'keywords'"
+            )
             conn.commit()
 
     print("🚀 Database has been checked and is ready!", flush=True)
@@ -334,6 +355,8 @@ async def get_journals(
                 "publisher": journal.publisher,
                 "homepage_url": journal.homepage,
                 "external_api": journal.external_api,
+                # Papers only on the journal's own website aren't on OpenAlex.
+                "semantic_search": journal.issn not in IMPORTERS,
             }
         )
 
@@ -428,6 +451,7 @@ async def delete_journal(
 async def search_articles(
     journal_ids: List[str] = Query([]),
     keywords: str = Query(""),
+    semantic_query: str = Query("", max_length=2000),
     from_date: str = Query(...),
     to_date: str = Query(...),
     page: int = Query(1),
@@ -436,15 +460,17 @@ async def search_articles(
 ):
     """Searches for scientific articles in the selected journals."""
     # journal_ids are OpenAlex source ids; Crossref needs the ISSNs.
-    statement = select(models.Journals.issn, models.Journals.external_api).where(
-        models.Journals.id.in_(journal_ids)
-    )
+    statement = select(
+        models.Journals.issn, models.Journals.external_api, models.Journals.id
+    ).where(models.Journals.id.in_(journal_ids))
     journals = session.exec(statement).all()
 
     data = await search_service.search(
-        issns=[issn for issn, _ in journals if issn],
-        external_apis={issn: api for issn, api in journals if issn and api},
+        issns=[issn for issn, _, _ in journals if issn],
+        external_apis={issn: api for issn, api, _ in journals if issn and api},
         keywords=keywords,
+        semantic_query=semantic_query,
+        source_ids={issn: journal_id for issn, _, journal_id in journals if issn},
         from_date=from_date,
         to_date=to_date,
         limit=25,
@@ -491,7 +517,19 @@ def _profile_response(profile: models.Profile, journal_ids: list[str] | None = N
         "name": profile.profile_name,
         "rowSelection": dict.fromkeys(journal_ids, True),
         "searchTerm": profile.searchTerm,
+        "semanticQuery": profile.semantic_query,
+        "searchMode": profile.search_mode,
         "emailNotifications": profile.email_notifications,
+    }
+
+
+def _profile_queries(settings: ProfileSettings) -> dict:
+    """The profile's query fields; only the query of its search mode is kept."""
+    semantic = settings.searchMode == "semantic"
+    return {
+        "searchTerm": "" if semantic else settings.searchTerm,
+        "semantic_query": settings.semanticQuery if semantic else "",
+        "search_mode": settings.searchMode,
     }
 
 
@@ -508,7 +546,7 @@ async def create_profile(
     new_profile = models.Profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
-        searchTerm=profile_data.settings.searchTerm,
+        **_profile_queries(profile_data.settings),
         email_notifications=profile_data.settings.emailNotifications,
     )
 
@@ -558,7 +596,8 @@ async def update_profile(
 
     journal_ids = _valid_journal_ids(session, settings.rowSelection)
 
-    profile.searchTerm = settings.searchTerm
+    for field, value in _profile_queries(settings).items():
+        setattr(profile, field, value)
     profile.email_notifications = settings.emailNotifications
     session.add(profile)
     _set_profile_journals(session, profile.id, journal_ids)

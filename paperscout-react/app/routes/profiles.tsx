@@ -1,6 +1,7 @@
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, SearchIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { AlertDialogBasic } from "~/components/alert-dialog";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -28,7 +29,7 @@ export function clientLoader() {
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-  const { rowSelection, searchTerm: currentSearchTerm } = useSearch();
+  const { rowSelection, searchTerm, semanticQuery, searchMode } = useSearch();
   const {
     profiles,
     isLoading,
@@ -42,7 +43,9 @@ export default function Profiles() {
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = {
     rowSelection,
-    searchTerm: currentSearchTerm,
+    searchTerm,
+    semanticQuery,
+    searchMode,
   };
 
   // A profile can only be saved or updated if at least one journal is selected.
@@ -123,8 +126,8 @@ export default function Profiles() {
         <CardHeader>
           <CardTitle>Create New Profile</CardTitle>
           <CardDescription>
-            Save your current selection of journals and search term for later
-            use.
+            Save your current selection of journals and search, keyword or
+            semantic, for later use.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -165,16 +168,29 @@ export default function Profiles() {
                 const isUpdateDisabled =
                   isApplied ||
                   (activeProfileId !== null && activeProfileId !== profile.id);
+                const isSemantic = profile.searchMode === "semantic";
+                const query = isSemantic ? profile.semanticQuery : profile.searchTerm;
                 return (
                   <Card key={profile.id}>
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
                       <CardDescription>
                         {Object.keys(profile.rowSelection).length} Journals
-                        {profile.searchTerm && ` | ${profile.searchTerm}`}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="flex flex-col gap-3">
+                      <div className="flex flex-col items-start gap-1.5">
+                        <Badge variant="secondary">
+                          {isSemantic ? <SparklesIcon /> : <SearchIcon />}
+                          {isSemantic ? "Semantic search" : "Keyword search"}
+                        </Badge>
+                        <p
+                          className="line-clamp-2 text-sm text-muted-foreground"
+                          title={query || undefined}
+                        >
+                          {query ? `“${query}”` : "No query"}
+                        </p>
+                      </div>
                       <div className="flex items-center gap-2">
                         <Switch
                           id={`notify-${profile.id}`}

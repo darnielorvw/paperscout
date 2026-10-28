@@ -13,6 +13,8 @@ export type Journal = {
   issn: string | null;
   publisher: string | null;
   homepage_url: string | null;
+  // False for journals only on their own website, which OpenAlex doesn't index.
+  semantic_search?: boolean;
 };
 
 export const columns: ColumnDef<Journal>[] = [

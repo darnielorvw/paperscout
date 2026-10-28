@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -29,6 +29,8 @@ class UserLogin(BaseModel):
 class ProfileSettings(BaseModel):
     rowSelection: Dict[str, bool] = Field(default_factory=dict)
     searchTerm: str = ""
+    semanticQuery: str = Field(default="", max_length=2000)
+    searchMode: Literal["keywords", "semantic"] = "keywords"
     emailNotifications: bool = True
 
 
