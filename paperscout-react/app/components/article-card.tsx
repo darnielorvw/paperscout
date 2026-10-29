@@ -8,8 +8,7 @@ import { cn } from "~/lib/utils";
 import type { OpenAccess } from "~/routes/results";
 
 type ArticleCardProps = {
-  // Saved articles have no open access info; search results do.
-  article: SavedArticleData & { open_access?: OpenAccess | null };
+  article: SavedArticleData;
   // Page-specific entries at the top of the left column (e.g. selection).
   leftTop?: React.ReactNode;
   // Page-specific entries at the bottom of the left column.
@@ -72,28 +71,6 @@ export function ActionLink({
         {children}
       </a>
     </ActionButton>
-  );
-}
-
-// Links the free version, which needn't be where the DOI leads: for "green"
-// papers it's a copy in a repository, the publisher's version is paywalled.
-function OpenAccessBadge({ openAccess }: { openAccess: OpenAccess }) {
-  const details = [
-    openAccess.status && `${openAccess.status} open access`,
-    openAccess.host && `via ${openAccess.host}`,
-  ].filter(Boolean);
-  return (
-    <Badge variant="secondary" asChild>
-      <a
-        href={openAccess.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={`Free full text${details.length ? ` (${details.join(", ")})` : ""}`}
-      >
-        <LockOpenIcon />
-        Open Access
-      </a>
-    </Badge>
   );
 }
 
@@ -208,6 +185,14 @@ export function ArticleCard({
         <div className="flex shrink-0 flex-col gap-3 border-b pb-4 text-sm lg:w-46 lg:border-0 lg:pb-0">
           <dl className="space-y-3">
             {leftTop}
+            {article.open_access && (
+              <MetaItem label="Open Access">
+                <ActionLink href={article.open_access.url ?? article.url}>
+                  <LockOpenIcon />
+                  Open Access
+                </ActionLink>
+              </MetaItem>
+            )}
             <MetaItem label="Library">
               <ActionLink href={article.library_url}>
                 <ExternalIcon />
@@ -221,15 +206,6 @@ export function ArticleCard({
                 Open publisher page
               </ActionLink>
             </MetaItem>
-
-            {article.open_access && article.open_access.url && (
-              <MetaItem label="Open Access">
-                <ActionLink href={article.open_access.url ?? article.url}>
-                  <LockOpenIcon />
-                  Open Access
-                </ActionLink>
-              </MetaItem>
-            )}
           </dl>
           {leftBottom && (
             <div className="flex flex-col gap-3 lg:mt-auto">{leftBottom}</div>

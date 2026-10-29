@@ -67,6 +67,13 @@ class JournalImportByName(BaseModel):
     names: List[str]
 
 
+# Where the free version of a search result is (see _open_access in search_service)
+class OpenAccess(BaseModel):
+    url: str
+    status: Optional[str] = None
+    host: Optional[str] = None
+
+
 # Schema for a search result as it is saved to the reading list
 class SavedArticleData(BaseModel):
     id: str = Field(min_length=1)
@@ -81,6 +88,7 @@ class SavedArticleData(BaseModel):
     library_url: Optional[str] = None
     abstract: Optional[str] = None
     topic: Optional[str] = None
+    open_access: Optional[OpenAccess] = None
 
 
 # Schema for adding search results to the reading list

@@ -24,6 +24,7 @@ export type SavedArticleData = Pick<
   | "library_url"
   | "abstract"
   | "topic"
+  | "open_access"
 >;
 
 export interface SavedArticle {

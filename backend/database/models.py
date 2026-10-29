@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+from sqlmodel import JSON, Column, Field, Relationship, SQLModel, UniqueConstraint
 
 JournalIDStr = str
 
@@ -80,6 +80,9 @@ class SavedArticle(SQLModel, table=True):
     library_url: Optional[str] = None
     abstract: Optional[str] = None
     topic: Optional[str] = None
+    # Where the free version is: {"url", "status", "host"} (see _open_access in
+    # search_service), None if there is none.
+    open_access: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     is_read: bool = Field(default=False)
     saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

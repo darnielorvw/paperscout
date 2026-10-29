@@ -280,9 +280,12 @@ function ReadingListEntry({
           <MetaItem label="Saved">
             {format(new Date(saved.savedAt), "d MMM yyyy")}
           </MetaItem>
-          <MetaItem label="PDF">
-            <PdfStatus saved={saved} />
-          </MetaItem>
+          {/* Open access papers get the card's "Open Access" link instead. */}
+          {!saved.article.open_access && (
+            <MetaItem label="PDF">
+              <PdfStatus saved={saved} />
+            </MetaItem>
+          )}
         </>
       }
       leftBottom={

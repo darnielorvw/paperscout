@@ -122,6 +122,11 @@ async def lifespan(app: FastAPI):
             conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN url VARCHAR")
             conn.commit()
 
+        # Where the free version of an open access paper is.
+        if "open_access" not in saved_columns:
+            conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN open_access JSON")
+            conn.commit()
+
         # Papers imported from a journal website may have a DOI.
         site_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(sitearticle)")}
         if "doi" not in site_columns:
@@ -659,6 +664,7 @@ def _saved_article_response(
             "library_url": saved.library_url,
             "abstract": saved.abstract,
             "topic": saved.topic,
+            "open_access": saved.open_access,
         },
         "isRead": saved.is_read,
         # SQLite hands the UTC timestamp back without a timezone.

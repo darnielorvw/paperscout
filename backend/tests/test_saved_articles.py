@@ -77,6 +77,15 @@ class TestSaveArticles:
         assert entry["isRead"] is False
         assert entry["article"]["library_url"].endswith("10.1/a")
 
+    def test_keeps_the_open_access_version(self, client):
+        open_access = {"url": "https://repo.example/1", "status": "green", "host": "Repo"}
+        _save(client, _article("10.1/a", open_access=open_access), _article("10.1/b"))
+
+        entries = client.get("/api/saved-articles").json()["results"]
+        by_id = {entry["article"]["id"]: entry["article"] for entry in entries}
+        assert by_id["10.1/a"]["open_access"] == open_access
+        assert by_id["10.1/b"]["open_access"] is None
+
     def test_skips_articles_already_on_the_list(self, client):
         _save(client, _article("10.1/a"))
 
