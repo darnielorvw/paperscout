@@ -55,8 +55,8 @@ _CROSSREF_SELECT = (
     "volume,issue,abstract,author,issn-type,page,references-count"
 )
 
-# OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
-_OPENALEX_SELECT = "doi,primary_topic,abstract_inverted_index"
+# OpenAlex: only what Crossref doesn't have - topic, abstract and the free version.
+_OPENALEX_SELECT = "doi,primary_topic,abstract_inverted_index,open_access,best_oa_location"
 
 # OpenAlex leaves its "xpac" works (an expansion of its index, recent journal
 # papers among them) out of list queries unless asked; single lookups return them.
@@ -280,6 +280,25 @@ def _insertion_points(api_scores: List[float], site_scores: List[float]) -> List
     return points
 
 
+def _open_access(oa_work: Dict[str, Any]) -> Dict[str, Any] | None:
+    """Where the free version of an OpenAlex work is, or None if it has none.
+
+    That needn't be the publisher's page the DOI leads to: for "green" papers it
+    is a copy in a repository, while the publisher's version stays paywalled.
+    """
+    open_access = oa_work.get("open_access") or {}
+    location = oa_work.get("best_oa_location") or {}
+    url = open_access.get("oa_url") or location.get("landing_page_url")
+    if not open_access.get("is_oa") or not url:
+        return None
+    return {
+        "url": url,
+        # gold, diamond, hybrid, bronze or green (see OpenAlex' oa_status).
+        "status": open_access.get("oa_status"),
+        "host": (location.get("source") or {}).get("display_name"),
+    }
+
+
 def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
     """A result with every field the frontend knows, before any API has filled it."""
     return {
@@ -296,6 +315,8 @@ def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
         "abstract": None,
         "topic": None,
         "author": None,
+        # The free version, if there is one (see _open_access).
+        "open_access": None,
         # Likely a commentary, editorial etc. (see _low_value_score).
         "low_value": False,
     }
@@ -1091,6 +1112,7 @@ class SearchService:
                 abstract = fields.pop("abstract")
                 _merge(record, fields)
                 record["abstract"] = abstract or record.get("abstract")
+                record["open_access"] = _open_access(oa_work)
 
     async def _openalex_by_dois(
         self,

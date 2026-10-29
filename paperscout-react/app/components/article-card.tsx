@@ -1,12 +1,15 @@
-import { ChevronDown, ExternalLinkIcon } from "lucide-react";
+import { ChevronDown, ExternalLinkIcon, LockOpenIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import type { SavedArticleData } from "~/context/reading-list-context";
 import { formatDateForDisplay } from "~/lib/date-utils";
 import { cn } from "~/lib/utils";
+import type { OpenAccess } from "~/routes/results";
 
 type ArticleCardProps = {
-  article: SavedArticleData;
+  // Saved articles have no open access info; search results do.
+  article: SavedArticleData & { open_access?: OpenAccess | null };
   // Page-specific entries at the top of the left column (e.g. selection).
   leftTop?: React.ReactNode;
   // Page-specific entries at the bottom of the left column.
@@ -69,6 +72,28 @@ export function ActionLink({
         {children}
       </a>
     </ActionButton>
+  );
+}
+
+// Links the free version, which needn't be where the DOI leads: for "green"
+// papers it's a copy in a repository, the publisher's version is paywalled.
+function OpenAccessBadge({ openAccess }: { openAccess: OpenAccess }) {
+  const details = [
+    openAccess.status && `${openAccess.status} open access`,
+    openAccess.host && `via ${openAccess.host}`,
+  ].filter(Boolean);
+  return (
+    <Badge variant="secondary" asChild>
+      <a
+        href={openAccess.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={`Free full text${details.length ? ` (${details.join(", ")})` : ""}`}
+      >
+        <LockOpenIcon />
+        Open Access
+      </a>
+    </Badge>
   );
 }
 
@@ -156,8 +181,8 @@ export function ArticleCard({
       // to the meta column's bottom, minus room for the toggle button.
       const available = meta
         ? meta.getBoundingClientRect().bottom -
-        el.getBoundingClientRect().top -
-        TOGGLE_BUTTON_HEIGHT
+          el.getBoundingClientRect().top -
+          TOGGLE_BUTTON_HEIGHT
         : 0;
       const lines =
         meta && sideBySide && lineHeight
@@ -196,6 +221,15 @@ export function ArticleCard({
                 Open publisher page
               </ActionLink>
             </MetaItem>
+
+            {article.open_access && article.open_access.url && (
+              <MetaItem label="Open Access">
+                <ActionLink href={article.open_access.url ?? article.url}>
+                  <LockOpenIcon />
+                  Open Access
+                </ActionLink>
+              </MetaItem>
+            )}
           </dl>
           {leftBottom && (
             <div className="flex flex-col gap-3 lg:mt-auto">{leftBottom}</div>

@@ -7,12 +7,15 @@ möglicherweise monthly digest direkt in leseliste packen? (marking an einzelnem
 reading list profile spezifisch?
 
 TODO:
+hinweis search parameter hinter paywall
 help page semantic
 möglicherweise rerank für digest?
 editorial etc. manuell rausfiltern => kein abstract = useless? dafür journals finden
 nicht bei:
 Games and Economic Behavior (online artikel oft keinen abstract)
 Journal of Economic Psychology  (online artikel oft keinen abstract)
+
+wirtschaftspsychologie aktuell abstracts (rechtlich)
 
 
 

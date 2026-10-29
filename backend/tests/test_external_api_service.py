@@ -44,26 +44,29 @@ class TestApplyExternalApis:
         asyncio.run(apply_external_apis(records, {"a": "dummy", "c": "unknown-api"}))
         assert seen == ["a"]
 
-    def test_springer_abstracts_take_precedence(self, monkeypatch):
+    def test_springer_only_asked_for_open_access_papers_without_abstract(self, monkeypatch):
         requested = []
 
         async def fake_fetch(dois):
             requested.extend(dois)
-            return {"a": "From Springer A", "b": "From Springer B"}
+            return {doi: f"From Springer {doi}" for doi in dois if doi != "d"}
 
         monkeypatch.setattr(external_api_service, "_fetch_springer_abstracts", fake_fetch)
         records = [
-            {"id": "a", "abstract": "From Crossref"},
-            {"id": "b", "abstract": None},
-            {"id": "c", "abstract": "From OpenAlex"},
+            {"id": "a", "abstract": None, "open_access": {"url": "x"}},
+            {"id": "b", "abstract": "From OpenAlex", "open_access": {"url": "x"}},
+            {"id": "c", "abstract": None, "open_access": None},
+            {"id": "d", "abstract": None, "open_access": {"url": "x"}},
+            {"id": "e", "abstract": None},
         ]
-        asyncio.run(
-            apply_external_apis(records, {"a": "springer", "b": "springer", "c": "springer"})
-        )
+        apis = {r["id"]: "springer" for r in records}
+        asyncio.run(apply_external_apis(records, apis))
 
-        assert requested == ["a", "b", "c"]
+        assert requested == ["a", "d"]
         assert [r["abstract"] for r in records] == [
-            "From Springer A",
-            "From Springer B",
+            "From Springer a",
             "From OpenAlex",
+            None,
+            None,
+            None,
         ]

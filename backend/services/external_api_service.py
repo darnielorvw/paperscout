@@ -22,7 +22,11 @@ Handler = Callable[[List[Record]], Awaitable[None]]
 
 # --- Springer Nature ---------------------------------------------------------
 # Springer deposits abstracts with Crossref/OpenAlex only unreliably, so they
-# are looked up on the Springer Nature Meta API, which takes precedence.
+# are looked up on the Springer Nature Meta API. Only for open access papers
+# (the record's `open_access`, from OpenAlex) that have no abstract yet: the others'
+# abstracts may not be shown, and OpenAlex already has the abstract of nearly
+# every paper that is open access at Springer (hybrid). What's left are mostly
+# papers whose free copy is in a repository (green) or unlicensed (bronze).
 
 _SPRINGER_BASE = "https://api.springernature.com/meta/v2/json"
 # The Meta API returns at most 25 records per request on the basic plan.
@@ -84,11 +88,11 @@ async def _fetch_springer_abstracts(dois: List[str]) -> Dict[str, str]:
 
 
 async def handle_springer(records: List[Record]) -> None:
-    """Replaces the Crossref/OpenAlex abstracts with Springer's where it has
-    one; the others are kept."""
-    abstracts = await _fetch_springer_abstracts([r["id"] for r in records])
-    for record in records:
-        record["abstract"] = abstracts.get(record["id"]) or record.get("abstract")
+    """Fills in Springer's abstract for open access papers that have none yet."""
+    missing = [r for r in records if r.get("open_access") and not r.get("abstract")]
+    abstracts = await _fetch_springer_abstracts([r["id"] for r in missing])
+    for record in missing:
+        record["abstract"] = abstracts.get(record["id"])
 
 
 HANDLERS: Dict[str, Handler] = {

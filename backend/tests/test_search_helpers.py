@@ -21,6 +21,7 @@ from services.search_service import (
     _issue_label,
     _low_value_score,
     _merge,
+    _open_access,
     _openurl,
     _page_count,
     _strip_jats,
@@ -291,6 +292,33 @@ class TestLowValueScore:
 
     def test_zero_references_are_unknown(self):
         assert _low_value_score("Some findings", None, True, 0) == 0
+
+
+class TestOpenAccess:
+    def test_green_paper_links_the_repository_copy(self):
+        work = {
+            "open_access": {"is_oa": True, "oa_status": "green", "oa_url": "https://repo/1"},
+            "best_oa_location": {
+                "landing_page_url": "https://repo/1",
+                "source": {"display_name": "Some Repository"},
+            },
+        }
+        assert _open_access(work) == {
+            "url": "https://repo/1",
+            "status": "green",
+            "host": "Some Repository",
+        }
+
+    @pytest.mark.parametrize(
+        "work",
+        [
+            {},
+            {"open_access": {"is_oa": False, "oa_url": None}},
+            {"open_access": {"is_oa": True, "oa_url": None}, "best_oa_location": None},
+        ],
+    )
+    def test_none_without_free_version(self, work):
+        assert _open_access(work) is None
 
 
 class TestFillOpenalex:

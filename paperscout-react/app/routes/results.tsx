@@ -23,6 +23,15 @@ import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
+// Where the free version of a paper is (see _open_access in search_service.py).
+export type OpenAccess = {
+  url: string;
+  // gold, diamond, hybrid, bronze or green
+  status: string | null;
+  // Repository or journal that hosts the free version.
+  host: string | null;
+};
+
 // Define the article type based on the return value of search_service.py
 export type Article = {
   id: string;
@@ -40,6 +49,8 @@ export type Article = {
   author: string;
   // Likely a commentary, editorial etc.; left out of the monthly digest.
   low_value?: boolean;
+  // Missing for website papers, which OpenAlex doesn't know.
+  open_access?: OpenAccess | null;
 };
 
 type LoaderData = {
