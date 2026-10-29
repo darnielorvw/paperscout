@@ -52,7 +52,7 @@ DATE_FILTER_UNTIL = "until-issued-date"
 # ISSN tells which journal a work belongs to, for the journal-specific external APIs.
 _CROSSREF_SELECT = (
     "DOI,ISSN,title,container-title,published-print,published-online,published,issued,"
-    "volume,issue,abstract,author,issn-type,page"
+    "volume,issue,abstract,author,issn-type,page,references-count"
 )
 
 # OpenAlex: only what Crossref doesn't have - topic, full-text flag and PDF link.
@@ -162,6 +162,67 @@ def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
     return oa_work is None or oa_work.get("type") in _PAPER_TYPES
 
 
+# --- Commentaries, editorials etc. typed as papers ----------------------------
+# OpenAlex types many commentaries, replies and editorials as "article" too. A
+# score from title, page count, abstract and reference count flags them; flagged
+# papers stay in the results (marked `low_value`) but the digest leaves them out.
+
+# Strong: the title says what it is. Words that real papers use too only count
+# where they start the title or a subtitle ("Reply to ...", "...: A commentary
+# on ...", "Editorial: ..."), so that e.g. "Neural responses to threat" or
+# "Editorial board diversity" isn't caught.
+_LOW_VALUE_TITLE = re.compile(
+    r"(?:^|[:.?!]\s*)(?:an?\s+)?"
+    r"(?:(?:commentary|comment|response|reply|rejoinder)(?:\s+(?:on|to)\b|\s*:)"
+    r"|(?:editorial|erratum|corrigendum|retraction)(?:\s*[:–-]|\s+(?:notice|to|for|on)\b|\s*$))"
+    r"|\bcorrection\s+to\b|\bintroduction\s+to\s+the\s+special\s+(?:issue|section)\b"
+    r"|\bfrom\s+the\s+editors?\b|\beditors?'?s?\s+(?:note|introduction)\b"
+    r"|call\s+for\s+(?:papers|proposals|submissions)\b|\bpublication\s+notice\b"
+    r"|\bin\s+memoriam\b|\bobituary\b|\bbook\s+review\b",
+    re.IGNORECASE,
+)
+# Medium: the title quotes another paper and names its authors ('... "X" by Y et al.').
+_QUOTED_TITLE = re.compile(r"[\"“„«‘'][^\"“”„«»‘’']{10,}[\"”“»’']")
+_BY_AUTHORS = re.compile(r"\bby\s+\S+.*\bet\s+al\b|\bby\s+[A-Z]\w+\s+(?:and|&)\s+[A-Z]")
+# Pages like "123-126" or "S12–S14"; article numbers ("e12345") don't count.
+_PAGE_RANGE = re.compile(r"^([A-Za-z]*)(\d+)\s*[-–]\s*\1?(\d+)$")
+
+_LOW_VALUE_MAX_PAGES = 4
+_LOW_VALUE_MAX_REFERENCES = 15
+_LOW_VALUE_THRESHOLD = 3
+
+
+def _page_count(page: str | None) -> int | None:
+    """The number of pages of a Crossref page range, None if it isn't one."""
+    match = _PAGE_RANGE.match((page or "").strip())
+    if not match:
+        return None
+    count = int(match.group(3)) - int(match.group(2)) + 1
+    return count if count > 0 else None
+
+
+def _low_value_score(
+    title: str | None, page: str | None, has_abstract: bool, reference_count: int | None
+) -> int:
+    """How much a paper looks like a commentary, editorial, erratum etc.; from
+    `_LOW_VALUE_THRESHOLD` on it counts as one."""
+    title = title or ""
+    score = 0
+    if _LOW_VALUE_TITLE.search(title):
+        score += 3
+    pages = _page_count(page)
+    if pages is not None and pages <= _LOW_VALUE_MAX_PAGES:
+        score += 2
+    if _QUOTED_TITLE.search(title) and _BY_AUTHORS.search(title):
+        score += 2
+    if not has_abstract:
+        score += 1
+    # Many publishers deposit no references at all, so 0 says nothing.
+    if reference_count and reference_count < _LOW_VALUE_MAX_REFERENCES:
+        score += 1
+    return score
+
+
 # --- Ranking website papers among the keyword hits ---------------------------
 # Website papers (see site_import_service) aren't on OpenAlex, so OpenAlex can't
 # rank them, and its relevance score can't be computed for them either (it rests
@@ -235,6 +296,8 @@ def _empty_record(record_id: str, doi: str | None) -> Dict[str, Any]:
         "abstract": None,
         "topic": None,
         "author": None,
+        # Likely a commentary, editorial etc. (see _low_value_score).
+        "low_value": False,
     }
 
 
@@ -700,6 +763,16 @@ class SearchService:
 
             # Guarantee the shapes the frontend expects.
             for record in records:
+                hints = record.pop("low_value_hints", None) or {}
+                record["low_value"] = (
+                    _low_value_score(
+                        record.get("title"),
+                        hints.get("page"),
+                        bool(record.get("abstract")),
+                        hints.get("reference_count"),
+                    )
+                    >= _LOW_VALUE_THRESHOLD
+                )
                 record["abstract"] = record.get("abstract") or "No abstract available."
                 record["author"] = record.get("author") or ""
 
@@ -1062,6 +1135,11 @@ class SearchService:
             "abstract": _strip_jats(cr_work.get("abstract")),
             "author": format_authors_apa_crossref(cr_work.get("author")) or None,
             "openurl": _crossref_openurl_fields(cr_work),
+            # Internal; scored once the abstract is final (see _search).
+            "low_value_hints": {
+                "page": cr_work.get("page"),
+                "reference_count": cr_work.get("references-count"),
+            },
         }
 
     def _openalex_fields(self, work: Dict[str, Any]) -> Dict[str, Any]:

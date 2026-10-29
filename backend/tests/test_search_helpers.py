@@ -19,8 +19,10 @@ from services.search_service import (
     _date_parts_to_iso,
     _is_paper,
     _issue_label,
+    _low_value_score,
     _merge,
     _openurl,
+    _page_count,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
@@ -234,6 +236,61 @@ class TestIsPaper:
 
     def test_keeps_dois_unknown_to_openalex(self):
         assert _is_paper(None)
+
+
+class TestPageCount:
+    @pytest.mark.parametrize(
+        "page, expected",
+        [("123-125", 3), ("S12–S14", 3), ("7-7", 1), ("e12345", None), ("12", None), (None, None)],
+    )
+    def test_counts_page_ranges(self, page, expected):
+        assert _page_count(page) == expected
+
+
+class TestLowValueScore:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "A Commentary on “Leadership and Trust in Remote Teams” by Smith et al.",
+            "Reply to Jones: The effect remains robust",
+            "Rethinking burnout: A response to critics",
+            "Editorial: Looking back on ten years",
+            "Correction to: Effects of sleep on memory",
+            "Introduction to the special issue on work and health",
+            "From the editors: What makes a theory contribution?",
+            "Erratum",
+            "HUMAN RELATIONSCall for Proposals: Critical Reviews Special Issue",
+        ],
+    )
+    def test_commentary_titles_reach_the_threshold(self, title):
+        assert _low_value_score(title, None, True, None) >= 3
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Neural responses to threat in anxious adolescents",
+            "Comment sections and online incivility",
+            "Employee reply behaviour in e-mail threads",
+            "Editorial board diversity and citation impact",
+            "Retraction rates in psychology journals",
+            "Why do papers get retracted? Editorial decisions under scrutiny",
+            "Erratum management in hospitals",
+        ],
+    )
+    def test_ordinary_titles_score_nothing(self, title):
+        assert _low_value_score(title, "100-120", True, 60) == 0
+
+    def test_short_paper_alone_doesnt(self):
+        assert _low_value_score("Some findings", "100-102", True, 40) == 2
+
+    def test_short_paper_without_abstract_reaches_the_threshold(self):
+        assert _low_value_score("Some findings", "100-102", False, None) >= 3
+
+    def test_missing_abstract_and_few_references_alone_dont(self):
+        assert _low_value_score("Some findings", None, False, 14) == 2
+
+    def test_zero_references_are_unknown(self):
+        assert _low_value_score("Some findings", None, True, 0) == 0
 
 
 class TestFillOpenalex:

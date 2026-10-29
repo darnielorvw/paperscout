@@ -22,17 +22,11 @@ class TestRemainingPercent:
         headers = httpx.Headers({"x-ratelimit-remaining-usd": "0.5"})
         assert remaining_percent("openalex", headers) == 25.0
 
-    def test_scopus_uses_limit_header(self):
-        headers = httpx.Headers({"x-ratelimit-remaining": "100", "x-ratelimit-limit": "20000"})
-        assert remaining_percent("scopus", headers) == 0.5
-
     @pytest.mark.parametrize(
         "api, headers",
         [
             ("openalex", {}),
-            ("scopus", {"x-ratelimit-remaining": "100"}),
-            ("scopus", {"x-ratelimit-remaining": "abc", "x-ratelimit-limit": "100"}),
-            ("scopus", {"x-ratelimit-remaining": "0", "x-ratelimit-limit": "0"}),
+            ("openalex", {"x-ratelimit-remaining-usd": "abc"}),
             ("springer", {"x-ratelimit-remaining": "1", "x-ratelimit-limit": "100"}),
         ],
     )
@@ -73,6 +67,7 @@ def alert_env(monkeypatch):
     monkeypatch.setattr(quota_alert_service, "_mail_service", mail)
     monkeypatch.setattr(quota_alert_service, "_handled", set())
     monkeypatch.setattr(quota_alert_service.settings, "API_QUOTA_WARN_PERCENT", 10.0)
+    monkeypatch.setattr(quota_alert_service.settings, "OPENALEX_DAILY_BUDGET_USD", 1.0)
     return engine, mail, sent
 
 
@@ -102,16 +97,16 @@ class TestCheckQuota:
 
     def test_low_quota_sends_warning(self, alert_env):
         engine, _, sent = alert_env
-        headers = {"x-ratelimit-remaining": "50", "x-ratelimit-limit": "1000"}
-        asyncio.run(check_quota("scopus", httpx.Response(200, headers=headers)))
+        headers = {"x-ratelimit-remaining-usd": "0.05"}
+        asyncio.run(check_quota("openalex", httpx.Response(200, headers=headers)))
 
-        assert sent == [("admin@example.com", "PaperScout: Scopus (Elsevier) quota running low")]
-        assert _alerts(engine) == [("scopus", "low")]
+        assert sent == [("admin@example.com", "PaperScout: OpenAlex quota running low")]
+        assert _alerts(engine) == [("openalex", "low")]
 
     def test_enough_quota_sends_nothing(self, alert_env):
         engine, _, sent = alert_env
-        headers = {"x-ratelimit-remaining": "500", "x-ratelimit-limit": "1000"}
-        asyncio.run(check_quota("scopus", httpx.Response(200, headers=headers)))
+        headers = {"x-ratelimit-remaining-usd": "0.5"}
+        asyncio.run(check_quota("openalex", httpx.Response(200, headers=headers)))
 
         assert sent == []
         assert _alerts(engine) == []

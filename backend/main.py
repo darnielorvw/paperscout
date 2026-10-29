@@ -102,13 +102,9 @@ async def lifespan(app: FastAPI):
             )
             conn.commit()
 
-        # Elsevier journals whose abstracts only Scopus delivers. Only fills
-        # journals without an API yet, so a manual change isn't overwritten.
+        # Scopus is no longer used; its journals go back to Crossref/OpenAlex only.
         conn.exec_driver_sql(
-            "UPDATE journals SET external_api = 'scopus' "
-            "WHERE external_api IS NULL AND issn IN ("
-            "'2214-8043', '1472-8117', '0092-6566', '2352-1546', "
-            "'0899-8256', '0167-2681', '0022-1031')"
+            "UPDATE journals SET external_api = NULL WHERE external_api = 'scopus'"
         )
         conn.commit()
 

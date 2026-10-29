@@ -1,21 +1,37 @@
 meta {
-  name: PubMed - Abstract by PMID
+  name: PubMed - Abstract by DOI
   type: http
   seq: 2
 }
 
 get {
-  url: {{pubmedBaseUrl}}/efetch.fcgi?db=pubmed&id={{pmid}}&rettype=abstract&retmode=xml
+  url: {{pubmedBaseUrl}}/efetch.fcgi?db=pubmed&rettype=abstract&retmode=xml
   body: none
   auth: none
 }
 
 params:query {
   db: pubmed
-  id: {{pmid}}
   rettype: abstract
   retmode: xml
   ~api_key: {{ncbiApiKey}}
+}
+
+script:pre-request {
+  // efetch only takes PMIDs; ESearch finds the PMID of the DOI (field [doi]).
+  // bru.sendRequest instead of axios: require() isn't available in Safe Mode.
+  const doi = bru.interpolate("{{doi}}");
+  const pubmed = bru.interpolate("{{pubmedBaseUrl}}");
+  const term = encodeURIComponent(`${doi}[doi]`);
+  const response = await bru.sendRequest({
+    method: "GET",
+    url: `${pubmed}/esearch.fcgi?db=pubmed&retmode=json&term=${term}`,
+  });
+  const ids = (response.data.esearchresult || {}).idlist || [];
+  if (ids.length !== 1) {
+    throw new Error(`ESearch found ${ids.length} PMIDs for DOI ${doi}`);
+  }
+  req.setUrl(`${req.getUrl()}&id=${ids[0]}`);
 }
 
 tests {
@@ -29,10 +45,13 @@ tests {
 }
 
 docs {
-  Liefert den Abstract eines Papers anhand seiner PubMed-ID (PMID) über die NCBI E-utilities (efetch).
+  Liefert den Abstract eines Papers anhand seiner DOI über die NCBI E-utilities.
 
-  - `pmid` in der Environment setzen (nur die Zahl, z. B. `31452104`).
+  - Nur `doi` in der Environment setzen (ohne `https://doi.org/`-Prefix), keine PMID.
+  - Das Pre-Request-Script sucht die PMID per ESearch (`<doi>[doi]`) und hängt sie
+    als `id` an die efetch-URL. Kein oder mehr als ein Treffer bricht den Request ab.
   - Der Abstract steht im XML unter `<AbstractText>`; strukturierte Abstracts haben mehrere `<AbstractText Label="...">`-Blöcke.
   - Für lesbaren Klartext statt XML `retmode` auf `text` setzen.
   - Optional: `ncbiApiKey` setzen und den Query-Param `api_key` aktivieren (10 statt 3 Requests/Sekunde).
+  - Alternative ohne PubMed-Suche: OpenAlex liefert die PMID unter `ids.pmid`, bei neuen Papern aber oft noch nicht.
 }

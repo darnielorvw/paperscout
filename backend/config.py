@@ -97,17 +97,5 @@ class Settings(BaseSettings):
     # Springer Nature Meta API key, used for journals with external_api="springer".
     SPRINGER_API_KEY: str = os.getenv("SPRINGER_API_KEY", "")
 
-    # Elsevier (Scopus) API key, used for journals with external_api="scopus".
-    ELSEVIER_API_KEY: str = os.getenv("ELSEVIER_API_KEY", "")
-
-    # Scopus only returns abstracts from inside a subscribing institution's
-    # network (e.g. university VPN). Leave this off where that isn't the case
-    # (e.g. Vercel) - the Scopus lookup is then skipped.
-    HAS_INSTITUTIONAL_ACCESS: bool = os.getenv("HAS_INSTITUTIONAL_ACCESS", "false").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-
 
 settings = Settings()

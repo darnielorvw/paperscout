@@ -20,17 +20,15 @@ logger = logging.getLogger(__name__)
 # refuses requests (429/403), all admins get a mail - at most once per API,
 # kind and day, which the `ApiAlert` table keeps track of across instances.
 
-# Response headers with the remaining and the total quota. A missing total
-# header means the total comes from settings (see _quota_limit).
+# Response header with the remaining quota; the total comes from settings (see
+# _quota_limit). Springer doesn't report its quota, so only refusals count there.
 _QUOTA_HEADERS = {
-    "openalex": ("x-ratelimit-remaining-usd", None),
-    "scopus": ("x-ratelimit-remaining", "x-ratelimit-limit"),
-    "springer": (None, None),
+    "openalex": "x-ratelimit-remaining-usd",
+    "springer": None,
 }
 
 _API_NAMES = {
     "openalex": "OpenAlex",
-    "scopus": "Scopus (Elsevier)",
     "springer": "Springer Nature",
 }
 
@@ -45,21 +43,18 @@ def _today() -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def _quota_limit(api: str, headers: httpx.Headers) -> str | float | None:
-    if api == "openalex":
-        return settings.OPENALEX_DAILY_BUDGET_USD
-    limit_header = _QUOTA_HEADERS[api][1]
-    return headers.get(limit_header) if limit_header else None
+def _quota_limit(api: str) -> float | None:
+    return settings.OPENALEX_DAILY_BUDGET_USD if api == "openalex" else None
 
 
 def remaining_percent(api: str, headers: httpx.Headers) -> float | None:
     """The remaining quota in percent, or None if the response doesn't tell."""
-    remaining_header = _QUOTA_HEADERS[api][0]
+    remaining_header = _QUOTA_HEADERS[api]
     if not remaining_header:
         return None
     try:
         remaining = float(headers.get(remaining_header))
-        limit = float(_quota_limit(api, headers))
+        limit = float(_quota_limit(api))
     except (TypeError, ValueError):
         return None
     return remaining / limit * 100 if limit > 0 else None

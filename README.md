@@ -9,7 +9,13 @@ reading list profile spezifisch?
 TODO:
 help page semantic
 möglicherweise rerank für digest?
-editorial etc. manuell rausfiltern
+editorial etc. manuell rausfiltern => kein abstract = useless? dafür journals finden
+nicht bei:
+Games and Economic Behavior (online artikel oft keinen abstract)
+Journal of Economic Psychology  (online artikel oft keinen abstract)
+
+
+
 Hinweis wirtschaftspsychologie aktuell: nicht mit keywords verwenden weil keine abstracts bzw genau herausfinden was abgeht
 
 readme: sortierung von papern
@@ -30,29 +36,6 @@ vercel fehler bei link auf registrierungsmail
 TESTS:
 sind alle journals noch beim alten verlag?
 
-
-fehlende abstracts:
-
-Journal of Experimental Psychology Human Perception & Performance => ? nicht testbar für mich
-Journal of Occupational Health Psychology => ?
-
-IEEE Transactions on Robotics => edge case, gibt eigene api aber in meisten fällen reicht auch so
-
-science => abstracts falsch, maybe mit uni zugang richtig
-
-wirtschaftspsychologie hat keine abstracts
-
-
-anderer schnickschnack:
-Current Directions in Psychological Science (publication notice)
-European Journal of Health Psychology (editorial)
-Human Relations (Review)
-The International Journal of Robotics Research (editorial)
-Journal of Behavioral and Experimental Economics (Garden clubs and social tipping points -> komischer sonderfall) + keine abstracts
-Journal of Consumer Psychology (editorial)
-Journal of Experimental Psychology Human Perception & Performance => KEINE DATEN
-Academy of Management Discoveries (editorial etc)
-Academy of Management Perspectives
 
 
 

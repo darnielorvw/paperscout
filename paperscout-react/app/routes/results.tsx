@@ -38,6 +38,8 @@ export type Article = {
   abstract: string;
   topic: string;
   author: string;
+  // Likely a commentary, editorial etc.; left out of the monthly digest.
+  low_value?: boolean;
 };
 
 type LoaderData = {
@@ -381,12 +383,24 @@ export default function Results() {
                         key={article.id}
                         article={article}
                         leftTop={
-                          <SelectForReadingList
-                            article={article}
-                            isSaved={savedArticleIds.has(article.id)}
-                            isSelected={selectedArticles.has(article.id)}
-                            onToggle={toggleSelectedArticle}
-                          />
+                          <>
+                            <SelectForReadingList
+                              article={article}
+                              isSaved={savedArticleIds.has(article.id)}
+                              isSelected={selectedArticles.has(article.id)}
+                              onToggle={toggleSelectedArticle}
+                            />
+                            {article.low_value && (
+                              <MetaItem
+                                label="Type"
+                                description="Title, page count, abstract and references suggest a commentary, editorial or similar. It is left out of the monthly digest."
+                              >
+                                <Badge variant="outline" className="mt-1">
+                                  Likely commentary/editorial
+                                </Badge>
+                              </MetaItem>
+                            )}
+                          </>
                         }
                       />
                     ))

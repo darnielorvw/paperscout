@@ -24,7 +24,7 @@ class Journals(SQLModel, table=True):
     publisher: str
     homepage: str
     # Flags individual handling of this journal's papers by an external API, e.g.
-    # "springer" or "scopus" (see services/external_api_service.py). None = Crossref/OpenAlex only.
+    # "springer" (see services/external_api_service.py). None = Crossref/OpenAlex only.
     external_api: Optional[str] = Field(default=None)
 
 

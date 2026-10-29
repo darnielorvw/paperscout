@@ -16,6 +16,9 @@ from services.search_service import SearchService, openurl_resolver_for
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 ARTICLES_PER_PROFILE = 25
+# Commentaries, editorials etc. (`low_value`) are left out of the digest, so more
+# results are fetched to still fill the profile's section.
+_FETCH_PER_PROFILE = 2 * ARTICLES_PER_PROFILE
 
 
 class DigestService:
@@ -168,12 +171,13 @@ class DigestService:
                 source_ids={j.issn: j.id for j in profile.journals if j.issn},
                 from_date=from_date,
                 to_date=to_date,
-                limit=ARTICLES_PER_PROFILE,
+                limit=_FETCH_PER_PROFILE,
                 page=1,
                 resolver=openurl_resolver_for(user.email),
                 session=session,
             )
-            articles = data.get("results", [])
+            articles = [a for a in data.get("results", []) if not a.get("low_value")]
+            articles = articles[:ARTICLES_PER_PROFILE]
             sections.append(
                 self._render_profile_section(profile.profile_name, articles, frontend_link)
             )
