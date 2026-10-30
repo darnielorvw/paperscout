@@ -1,6 +1,6 @@
 "use client";
 
-import { SearchIcon, SparklesIcon } from "lucide-react";
+import { InfoIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
   Card,
@@ -165,6 +165,10 @@ export default function SearchPage({
                 onKeyDown={handleKeyDown}
               />
             </CardContent>
+            <CardFooter className="text-sm text-muted-foreground">
+              The keyword search looks at the title and abstract. Papers without
+              an abstract, often those behind a paywall, are harder to find.
+            </CardFooter>
           </Card>
           <Card
             className={cardClass(isSemantic)}
