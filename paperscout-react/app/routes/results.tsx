@@ -416,7 +416,7 @@ export default function Results() {
                             {article.low_value && (
                               <MetaItem
                                 label="Type"
-                                description="Title, page count, abstract and references suggest a commentary, editorial or similar. It is left out of the monthly digest."
+                                description="Title, authors, page count, abstract and references suggest a commentary, editorial, news piece or similar. It is left out of the monthly digest."
                               >
                                 <Badge variant="outline" className="mt-1">
                                   Likely commentary/editorial

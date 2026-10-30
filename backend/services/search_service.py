@@ -169,22 +169,31 @@ def _is_paper(oa_work: Dict[str, Any] | None) -> bool:
 
 
 # --- Commentaries, editorials etc. typed as papers ----------------------------
-# OpenAlex types many commentaries, replies and editorials as "article" too. A
-# score from title, page count, abstract and reference count flags them; flagged
-# papers stay in the results (marked `low_value`) but the digest leaves them out.
+# OpenAlex types many commentaries, replies and editorials as "article" too, and
+# Nature's and Science's news pieces as well. A score from title, authors, page
+# count, abstract and reference count flags them; flagged papers stay in the
+# results (marked `low_value`) but the digest leaves them out. The weights were
+# tuned on ~16,500 papers of all seed journals (Jul 2025 - Oct 2026).
 
 # Strong: the title says what it is. Words that real papers use too only count
 # where they start the title or a subtitle ("Reply to ...", "...: A commentary
 # on ...", "Editorial: ..."), so that e.g. "Neural responses to threat" or
 # "Editorial board diversity" isn't caught.
 _LOW_VALUE_TITLE = re.compile(
-    r"(?:^|[:.?!]\s*)(?:an?\s+)?"
+    r"(?:^|[:.?!—–]\s*)(?:an?\s+)?"
     r"(?:(?:commentary|comment|response|reply|rejoinder)(?:\s+(?:on|to)\b|\s*:)"
     r"|(?:editorial|erratum|corrigendum|retraction)(?:\s*[:–-]|\s+(?:notice|to|for|on)\b|\s*$))"
     r"|\bcorrection\s+to\b|\bintroduction\s+to\s+the\s+special\s+(?:issue|section)\b"
     r"|\bfrom\s+the\s+editors?\b|\beditors?'?s?\s+(?:note|introduction)\b"
     r"|call\s+for\s+(?:papers|proposals|submissions)\b|\bpublication\s+notice\b"
-    r"|\bin\s+memoriam\b|\bobituary\b|\bbook\s+review\b",
+    r"|\bin\s+memoriam\b|\bobituary\b|\bbook\s+review\b"
+    # Corrections, notices and the journal's own pages.
+    r"|^(?:author|publisher)\s+correction\b|^addendum\b|^expression\s+of\s+concern\b"
+    r"|^supplemental\s+material\s+for\b|\bet\s+al\.?\s+reply\b|\beditor[’']?s?\s+note\b"
+    r"|\bcall\s+for\s+(?:\w+\s+){0,3}(?:papers|proposals|submissions|reviews)\b"
+    r"|\breviewers?\s+(?:of\s+the\s+year|in\s+\d{4})\b|^\d{4}\s+(?:outside\s+)?reviewers\b"
+    r"|\bpaper\s+of\s+the\s+year\b|\bawards?\s*$|\bpublications\s+received\b"
+    r"|\bmeeting\s+calendar\b|^daily\s+briefing\b|^in\s+(?:science|other)\s+journals\b",
     re.IGNORECASE,
 )
 # Medium: the title quotes another paper and names its authors ('... "X" by Y et al.').
@@ -195,6 +204,8 @@ _PAGE_RANGE = re.compile(r"^([A-Za-z]*)(\d+)\s*[-–]\s*\1?(\d+)$")
 
 _LOW_VALUE_MAX_PAGES = 4
 _LOW_VALUE_MAX_REFERENCES = 15
+# Short research letters (Nature, Science) have at least this many references.
+_RESEARCH_MIN_REFERENCES = 30
 _LOW_VALUE_THRESHOLD = 3
 
 
@@ -208,23 +219,41 @@ def _page_count(page: str | None) -> int | None:
 
 
 def _low_value_score(
-    title: str | None, page: str | None, has_abstract: bool, reference_count: int | None
+    title: str | None,
+    page: str | None,
+    has_abstract: bool,
+    reference_count: int | None,
+    author_count: int | None = None,
 ) -> int:
-    """How much a paper looks like a commentary, editorial, erratum etc.; from
-    `_LOW_VALUE_THRESHOLD` on it counts as one."""
+    """How much a paper looks like a commentary, editorial, erratum, news piece
+    etc.; from `_LOW_VALUE_THRESHOLD` on it counts as one. `author_count` None
+    means unknown."""
     title = title or ""
+    references = reference_count or 0
     score = 0
     if _LOW_VALUE_TITLE.search(title):
         score += 3
+    # Notices, reviewer lists, calendars, supplements: nobody wrote them.
+    if author_count == 0:
+        score += 3
     pages = _page_count(page)
-    if pages is not None and pages <= _LOW_VALUE_MAX_PAGES:
+    if (
+        pages is not None
+        and pages <= _LOW_VALUE_MAX_PAGES
+        and references < _RESEARCH_MIN_REFERENCES
+    ):
         score += 2
     if _QUOTED_TITLE.search(title) and _BY_AUTHORS.search(title):
         score += 2
     if not has_abstract:
         score += 1
-    # Many publishers deposit no references at all, so 0 says nothing.
-    if reference_count and reference_count < _LOW_VALUE_MAX_REFERENCES:
+    if 0 < references <= _LOW_VALUE_MAX_REFERENCES:
+        score += 1
+    # Many publishers deposit no references at all, so 0 alone says nothing; with
+    # one or two authors or without an abstract it marks news pieces.
+    if not references and author_count is not None and author_count <= 2:
+        score += 1
+    if not references and not has_abstract:
         score += 1
     return score
 
@@ -469,6 +498,7 @@ def _openalex_base_fields(work: Dict[str, Any]) -> Dict[str, Any]:
         "low_value_hints": {
             "page": page,
             "reference_count": work.get("referenced_works_count"),
+            "author_count": len(work.get("authorships") or []),
         },
     }
 
@@ -831,6 +861,7 @@ class SearchService:
                         hints.get("page"),
                         bool(record.get("abstract")),
                         hints.get("reference_count"),
+                        hints.get("author_count"),
                     )
                     >= _LOW_VALUE_THRESHOLD
                 )
@@ -1219,6 +1250,7 @@ class SearchService:
             "low_value_hints": {
                 "page": cr_work.get("page"),
                 "reference_count": cr_work.get("references-count"),
+                "author_count": len(cr_work.get("author") or []),
             },
         }
 

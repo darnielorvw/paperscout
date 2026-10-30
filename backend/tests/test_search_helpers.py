@@ -261,6 +261,21 @@ class TestLowValueScore:
             "From the editors: What makes a theory contribution?",
             "Erratum",
             "HUMAN RELATIONSCall for Proposals: Critical Reviews Special Issue",
+            "Shared Leadership Is Not Just a Number—Commentary on “When Two Is Too Many”",
+            "Author Correction: Plasticity and language in the human hippocampus",
+            "Addendum: Sea level much higher than assumed",
+            "Expression of Concern: “Dishonest Deed, Clear Conscience”",
+            "Supplemental Material for What Do We Know About Job Knowledge Tests?",
+            "Y. Wang et al. reply",
+            "Human Relations Annual Call for Special Issue Proposals",
+            "Distinguished Reviewers in 2025",
+            "2025 Outside Reviewers",
+            "Human Relations Paper of the Year 2025",
+            "2025 Management Science Service Awards",
+            "Publications Received",
+            "Meeting Calendar",
+            "Daily briefing: Fusion reactor pushes plasma past crucial limit",
+            "In Science Journals",
         ],
     )
     def test_commentary_titles_reach_the_threshold(self, title):
@@ -276,13 +291,31 @@ class TestLowValueScore:
             "Retraction rates in psychology journals",
             "Why do papers get retracted? Editorial decisions under scrutiny",
             "Erratum management in hospitals",
+            "Reviewer bias in peer review of grant proposals",
+            "Awards and recognition as motivators at work",
         ],
     )
     def test_ordinary_titles_score_nothing(self, title):
         assert _low_value_score(title, "100-120", True, 60) == 0
 
     def test_short_paper_alone_doesnt(self):
-        assert _low_value_score("Some findings", "100-102", True, 40) == 2
+        assert _low_value_score("Some findings", "100-102", True, 20) == 2
+
+    def test_short_paper_with_many_references_is_research(self):
+        # A Nature or Science letter: four pages, but a full reference list.
+        assert _low_value_score("Some findings", "100-103", False, 85, 14) == 1
+
+    def test_paper_without_authors_reaches_the_threshold(self):
+        assert _low_value_score("Some findings", None, True, None, 0) >= 3
+
+    def test_news_piece_reaches_the_threshold(self):
+        # Online first, no abstract, no references, one author.
+        assert _low_value_score("Whale graveyard discovered", None, False, 0, 1) >= 3
+
+    def test_research_without_references_doesnt(self):
+        # Online-first papers often have no references deposited yet.
+        assert _low_value_score("Some findings", None, True, 0, 2) == 1
+        assert _low_value_score("Some findings", None, True, 0, 5) == 0
 
     def test_short_paper_without_abstract_reaches_the_threshold(self):
         assert _low_value_score("Some findings", "100-102", False, None) >= 3
@@ -431,7 +464,11 @@ class TestOpenalexRecords:
         assert record["issue"] == "Vol. 12, Issue 3"
         assert record["author"] == "Lovelace"
         assert record["openurl"]["rft.issn"] == "1234-5678"
-        assert record["low_value_hints"] == {"page": "5-20", "reference_count": 40}
+        assert record["low_value_hints"] == {
+            "page": "5-20",
+            "reference_count": 40,
+            "author_count": 1,
+        }
         assert api_by_doi == {"10.1/a": "api"}
 
 
