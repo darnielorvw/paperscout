@@ -1,6 +1,6 @@
 """Unit tests for the pure helpers defined in main.py (no DB, no request)."""
 
-from main import _journal_values, _profile_queries
+from main import _email_notifications, _journal_values, _profile_queries
 from schemas import ProfileSettings
 
 
@@ -60,3 +60,13 @@ class TestProfileQueries:
             "semantic_query": "trust in robots",
             "search_mode": "semantic",
         }
+
+
+class TestEmailNotifications:
+    def test_keyword_profile_keeps_the_setting(self):
+        assert _email_notifications(ProfileSettings(emailNotifications=True))
+        assert not _email_notifications(ProfileSettings(emailNotifications=False))
+
+    def test_semantic_profile_gets_no_email(self):
+        settings = ProfileSettings(semanticQuery="trust", searchMode="semantic")
+        assert not _email_notifications(settings)

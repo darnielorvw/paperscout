@@ -1,4 +1,3 @@
-
 BUGS:
 wenn alle paper rausgefiltert werden ist page leer (kein article)
 
@@ -16,7 +15,7 @@ Games and Economic Behavior (online artikel oft keinen abstract)
 Journal of Economic Psychology  (online artikel oft keinen abstract)
 
 wirtschaftspsychologie aktuell abstracts (rechtlich)
-
+AI search selber implementieren (embeddings)
 
 
 Hinweis wirtschaftspsychologie aktuell: nicht mit keywords verwenden weil keine abstracts bzw genau herausfinden was abgeht

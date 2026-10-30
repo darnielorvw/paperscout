@@ -1,0 +1,42 @@
+meta {
+  name: OpenAlex - Semantic Search
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{openalexBaseUrl}}/works?search.semantic=how trust in robots develops over repeated interactions&filter=primary_location.source.id:S4210193251|S168738021,type:article|review,publication_year:2026&sort=relevance_score:desc&per_page=50&select=doi,title,publication_date,primary_location,relevance_score&include_xpac=true&api_key={{openalexApiKey}}
+  body: none
+  auth: none
+}
+
+params:query {
+  search.semantic: how trust in robots develops over repeated interactions
+  filter: primary_location.source.id:S4210193251|S168738021,type:article|review,publication_year:2026
+  sort: relevance_score:desc
+  per_page: 50
+  select: doi,title,publication_date,primary_location,relevance_score
+  include_xpac: true
+  api_key: {{openalexApiKey}}
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("at most 50 results, most similar first", function() {
+    const scores = res.getBody().results.map((w) => w.relevance_score);
+    expect(scores.length).to.be.at.most(50);
+    expect(scores).to.deep.equal([...scores].sort((a, b) => b - a));
+  });
+}
+
+docs {
+  Semantische Suche über die OpenAlex API, wie sie `_semantic_hits` in `search_service.py` stellt.
+  
+  - `search.semantic`: Freitext, höchstens 2.000 Zeichen.
+  - `filter`: Journals als OpenAlex-Source-IDs (hier ACM Transactions on Human-Robot Interaction und International Journal of Social Robotics), Typ und Jahr.
+  - Als Datumsfilter nimmt die API nur `publication_year` an; `from_publication_date` / `publication_date` liefern 400. Den genauen Zeitraum filtert das Backend danach selbst über `publication_date`.
+  - Höchstens 50 Treffer, keine weiteren Seiten, eine Anfrage pro Sekunde.
+}

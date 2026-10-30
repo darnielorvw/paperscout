@@ -191,17 +191,27 @@ export default function Profiles() {
                           {query ? `“${query}”` : "No query"}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={`notify-${profile.id}`}
-                          checked={profile.emailNotifications}
-                          onCheckedChange={(checked) =>
-                            handleToggleNotifications(profile.id, checked)
-                          }
-                        />
-                        <Label htmlFor={`notify-${profile.id}`}>
-                          Email notifications
-                        </Label>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={`notify-${profile.id}`}
+                            // The semantic search only filters by year.
+                            checked={profile.emailNotifications && !isSemantic}
+                            disabled={isSemantic}
+                            onCheckedChange={(checked) =>
+                              handleToggleNotifications(profile.id, checked)
+                            }
+                          />
+                          <Label htmlFor={`notify-${profile.id}`}>
+                            Email notifications
+                          </Label>
+                        </div>
+                        {isSemantic && (
+                          <p className="text-xs text-muted-foreground">
+                            Not available for semantic searches: they only
+                            filter by year.
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-between gap-2">

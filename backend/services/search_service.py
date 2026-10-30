@@ -85,10 +85,16 @@ _SEARCH_WINDOW_YEARS = 2
 # Semantic search: OpenAlex embeds title and abstract of every work and returns
 # the works closest in meaning to the query. Of our filters it only takes the
 # source id, type and publication year, and it returns at most 50 works (one
-# page, no cursor) at one request per second. Crossref then narrows them to the
-# journal issue dates, as with keywords. It replaces the keyword search; the
-# two don't go together.
+# page, no cursor) at one request per second. Unlike the other searches it
+# doesn't ask Crossref: the date range only counts by its years, and the values
+# come from OpenAlex. So there is no monthly email for it either. It replaces
+# the keyword search; the two don't go together.
 _SEMANTIC_MAX_RESULTS = 50
+# What the results need from OpenAlex when Crossref isn't asked.
+_SEMANTIC_SELECT = (
+    f"{_OPENALEX_SELECT},title,publication_date,primary_location,authorships,biblio,"
+    "referenced_works_count,relevance_score"
+)
 _SEMANTIC_INTERVAL_SECONDS = 1.0
 
 # The order of searches without keywords: by the date the date range filters on.
@@ -433,6 +439,40 @@ def _crossref_openurl_fields(cr_work: Dict[str, Any]) -> Dict[str, str]:
     return {key: value for key, value in fields.items() if value}
 
 
+def _openalex_base_fields(work: Dict[str, Any]) -> Dict[str, Any]:
+    """The values Crossref would otherwise give, from an OpenAlex work. OpenAlex
+    doesn't know the journal issue date, so there is none."""
+    source = (work.get("primary_location") or {}).get("source") or {}
+    biblio = work.get("biblio") or {}
+    first, last = biblio.get("first_page"), biblio.get("last_page")
+    page = f"{first}-{last}" if first and last else first
+    title = _clean_title(work.get("title"))
+    return {
+        "title": title,
+        "journal_name": source.get("display_name"),
+        "publication_date": work.get("publication_date"),
+        "issue": _issue_label(biblio.get("volume"), biblio.get("issue")),
+        "author": format_authors_apa(work.get("authorships")) or None,
+        "openurl": {
+            key: value
+            for key, value in {
+                "rft.atitle": title,
+                "rft.issn": source.get("issn_l"),
+                "rft.date": (work.get("publication_date") or "")[:4],
+                "rft.volume": biblio.get("volume"),
+                "rft.issue": biblio.get("issue"),
+                "rft.spage": first,
+            }.items()
+            if value
+        },
+        # Internal; scored once the abstract is final (see _search).
+        "low_value_hints": {
+            "page": page,
+            "reference_count": work.get("referenced_works_count"),
+        },
+    }
+
+
 def _openurl(record: Dict[str, Any], resolver: str) -> str | None:
     """Link to the library's OpenURL resolver for this article."""
     doi = _clean_doi(record.get("doi") or "")
@@ -563,8 +603,8 @@ class SearchService:
         metadata; with keywords OpenAlex finds them first (see top of module).
 
         With a `semantic_query`, OpenAlex' semantic search finds them instead, in
-        the journals whose OpenAlex source id `source_ids` maps their ISSN to; the
-        keywords are ignored then.
+        the journals whose OpenAlex source id `source_ids` maps their ISSN to, by
+        the years of the date range only; the keywords are ignored then.
 
         `external_apis` maps an ISSN to an external API whose handler gets that
         journal's records for individual processing (see external_api_service).
@@ -763,7 +803,7 @@ class SearchService:
                 hits, oa_by_doi = await self._cached_semantic_hits(
                     source_ids, semantic_query, from_date, to_date
                 )
-                records, api_by_doi = self._crossref_records(
+                records, api_by_doi = self._openalex_records(
                     hits[offset : offset + rows], external_apis
                 )
                 count = len(hits)
@@ -980,26 +1020,26 @@ class SearchService:
         from_date: str,
         to_date: str,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]], bool]:
-        """The papers in the journals (OpenAlex source ids) closest in meaning to the
-        query (published in the years from two years before `from_date` up to
-        `to_date`) whose journal issue (Crossref) falls in the date range, most similar first; the OpenAlex works of those papers,
-        keyed by bare DOI; and whether every request succeeded."""
+        """The OpenAlex works in the journals (OpenAlex source ids) closest in
+        meaning to the query published in the years of the date range, most
+        similar first; the same works keyed by bare DOI; and whether the request
+        succeeded."""
         if not source_ids:
             return [], {}, True
-        from_pub, to_pub = _search_window(from_date, to_date)
         params = {
             "filter": ",".join(
                 [
                     f"primary_location.source.id:{'|'.join(source_ids)}",
                     f"type:{'|'.join(_PAPER_TYPES)}",
-                    # Publication dates aren't supported, only years.
-                    f"publication_year:{from_pub[:4]}-{to_pub[:4]}",
+                    # Publication dates aren't supported, only years, so the
+                    # date range only counts by its years.
+                    f"publication_year:{from_date[:4]}-{to_date[:4]}",
                 ]
             ),
             "search.semantic": query,
             "sort": "relevance_score:desc",
             "per_page": _SEMANTIC_MAX_RESULTS,
-            "select": _OPENALEX_SELECT,
+            "select": _SEMANTIC_SELECT,
             **_OPENALEX_INCLUDE_XPAC,
         }
         data = await self._fetch_openalex_semantic(params)
@@ -1011,12 +1051,9 @@ class SearchService:
             doi = _clean_doi(work.get("doi") or "")
             if doi:
                 oa_by_doi.setdefault(doi, work)
-
-        hits = await self._crossref_issued_in_range(
-            list(oa_by_doi), from_date, to_date, asyncio.Semaphore(_CROSSREF_CONCURRENCY)
+        hits = sorted(
+            oa_by_doi.values(), key=lambda work: work.get("relevance_score") or 0, reverse=True
         )
-        if hits is None:
-            return [], {}, False
         return hits, oa_by_doi, True
 
     async def _fetch_openalex_semantic(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -1087,6 +1124,27 @@ class SearchService:
             records.append(record)
             # Crossref lists print and electronic ISSN; ours is the ISSN-L, one of them.
             for issn in work.get("ISSN") or []:
+                if issn in external_apis:
+                    api_by_doi[doi] = external_apis[issn]
+                    break
+        return records, api_by_doi
+
+    def _openalex_records(
+        self, works: List[Dict[str, Any]], external_apis: Dict[str, str]
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
+        """A base record per OpenAlex work, in the given order, and the external
+        API per DOI; for the semantic search, which doesn't ask Crossref."""
+        records: List[Dict[str, Any]] = []
+        api_by_doi: Dict[str, str] = {}
+        for work in works:
+            doi = _clean_doi(work.get("doi") or "")
+            if not doi:
+                continue
+            record = _empty_record(doi, doi)
+            _merge(record, _openalex_base_fields(work))
+            records.append(record)
+            source = (work.get("primary_location") or {}).get("source") or {}
+            for issn in source.get("issn") or []:
                 if issn in external_apis:
                     api_by_doi[doi] = external_apis[issn]
                     break

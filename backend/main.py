@@ -534,6 +534,11 @@ def _profile_queries(settings: ProfileSettings) -> dict:
     }
 
 
+def _email_notifications(settings: ProfileSettings) -> bool:
+    """The semantic search only filters by year, so it has no monthly email."""
+    return settings.emailNotifications and settings.searchMode == "keywords"
+
+
 @app.post("/api/profiles", status_code=201)
 async def create_profile(
     profile_data: ProfileCreate,
@@ -548,7 +553,7 @@ async def create_profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
         **_profile_queries(profile_data.settings),
-        email_notifications=profile_data.settings.emailNotifications,
+        email_notifications=_email_notifications(profile_data.settings),
     )
 
     try:
@@ -599,7 +604,7 @@ async def update_profile(
 
     for field, value in _profile_queries(settings).items():
         setattr(profile, field, value)
-    profile.email_notifications = settings.emailNotifications
+    profile.email_notifications = _email_notifications(settings)
     session.add(profile)
     _set_profile_journals(session, profile.id, journal_ids)
     session.commit()
@@ -619,6 +624,11 @@ async def update_profile_notifications(
     profile = session.get(models.Profile, profile_id)
     if not profile or profile.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Profile not found.")
+    if payload.emailNotifications and profile.search_mode == "semantic":
+        raise HTTPException(
+            status_code=400,
+            detail="Semantic searches filter by year only, so they have no monthly email.",
+        )
 
     profile.email_notifications = payload.emailNotifications
     session.add(profile)
