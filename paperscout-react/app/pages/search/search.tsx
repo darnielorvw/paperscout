@@ -179,7 +179,9 @@ export default function SearchPage({
                 Finds up to 50 papers by meaning rather than exact words.
                 Semantic search shines when you have a longer description — an
                 abstract, a grant aim, or a paragraph from a paper you’re
-                writing. The richer the input, the better the matches.
+                writing. The richer the input, the better the matches. The date
+                range only counts by year, so there is no monthly email for
+                semantic searches.
               </CardDescription>
             </CardHeader>
             <CardContent>

@@ -168,7 +168,19 @@ function SearchSummary({
           {keywords ? `“${keywords}”` : "No keywords"}
         </Badge>
       )}
-      {from && to && (
+      {from && to && semanticQuery && (
+        // The semantic search only filters by year.
+        <Badge
+          variant="secondary"
+          title="The semantic search only filters by year"
+        >
+          <CalendarIcon />
+          {from.slice(0, 4) === to.slice(0, 4)
+            ? from.slice(0, 4)
+            : `${from.slice(0, 4)} – ${to.slice(0, 4)}`}
+        </Badge>
+      )}
+      {from && to && !semanticQuery && (
         <Badge variant="secondary" title="Date range">
           <CalendarIcon />
           {format(new Date(from), "d MMM yyyy")} –{" "}

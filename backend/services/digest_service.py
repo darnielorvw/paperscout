@@ -45,7 +45,6 @@ class DigestService:
         keywords: str,
         from_date: str,
         to_date: str,
-        semantic_query: str = "",
     ) -> str:
         """Builds a link to the results page in the frontend for the full profile.
 
@@ -54,8 +53,6 @@ class DigestService:
         """
         params: List[tuple[str, str]] = [("journal_ids", jid) for jid in journal_ids]
         params.append(("keywords", keywords or ""))
-        if semantic_query:
-            params.append(("semantic_query", semantic_query))
         params.append(("from_date", from_date))
         params.append(("to_date", to_date))
         return f"{settings.FRONTEND_URL}/results?{urlencode(params)}"
@@ -134,6 +131,8 @@ class DigestService:
             .where(
                 models.Profile.user_id == user.id,
                 models.Profile.email_notifications == True,  # noqa: E712
+                # The semantic search only filters by year, so it has no monthly email.
+                models.Profile.search_mode == "keywords",
             )
             .options(selectinload(models.Profile.journals))
         ).all()
@@ -157,18 +156,14 @@ class DigestService:
                 continue
 
             # The frontend link keeps the OpenAlex ids the journal picker knows.
-            # Only the query of the profile's search mode is stored.
-            semantic_query = profile.semantic_query if profile.search_mode == "semantic" else ""
             frontend_link = self._build_frontend_link(
-                journal_ids, profile.searchTerm or "", from_date, to_date, semantic_query
+                journal_ids, profile.searchTerm or "", from_date, to_date
             )
 
             data = await self.search_service.search(
                 issns=issns,
                 external_apis=external_apis,
                 keywords=profile.searchTerm or "",
-                semantic_query=semantic_query,
-                source_ids={j.issn: j.id for j in profile.journals if j.issn},
                 from_date=from_date,
                 to_date=to_date,
                 limit=_FETCH_PER_PROFILE,

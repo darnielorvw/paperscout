@@ -353,31 +353,47 @@ class TestSemanticHits:
             self.requests.append(params)
             return {
                 "results": [
-                    {"doi": "https://doi.org/10.1/A", "title": "Trust in robots"},
-                    {"doi": "https://doi.org/10.1/b", "title": "Robot navigation"},
-                    {"doi": None, "title": "Trust without a DOI"},
+                    {
+                        "doi": "https://doi.org/10.1/A",
+                        "publication_date": "2026-02-10",
+                        "relevance_score": 0.7,
+                    },
+                    {
+                        "doi": "https://doi.org/10.1/b",
+                        "publication_date": "2026-04-01",
+                        "relevance_score": 0.9,
+                    },
+                    {
+                        "doi": "https://doi.org/10.1/c",
+                        "publication_date": "2026-03-31",
+                        "relevance_score": 0.8,
+                    },
+                    {"doi": None, "publication_date": "2026-02-01", "relevance_score": 0.95},
                 ]
             }
 
-        async def issued_in_range(dois, from_date, to_date, slots):
-            # Crossref drops 10.1/b, which isn't issued in the date range.
-            return [{"DOI": doi} for doi in dois if doi != "10.1/b"]
+        async def no_crossref(*args, **kwargs):
+            raise AssertionError("the semantic search doesn't ask Crossref")
 
         self.svc._fetch_openalex = fetch_openalex
-        self.svc._crossref_issued_in_range = issued_in_range
+        self.svc._fetch_crossref = no_crossref
 
-    def test_filters_by_source_type_and_year_and_keeps_similarity_order(self):
-        hits, oa_by_doi, complete = asyncio.run(
-            self.svc._semantic_hits(["S1", "S2"], "trust", "2026-01-01", "2026-03-31")
-        )
+    def test_filters_by_source_type_and_year(self):
+        asyncio.run(self.svc._semantic_hits(["S1", "S2"], "trust", "2025-11-01", "2026-03-31"))
         params = self.requests[0]
         assert params["search.semantic"] == "trust"
         assert params["filter"] == (
-            "primary_location.source.id:S1|S2,type:article|review,publication_year:2024-2026"
+            "primary_location.source.id:S1|S2,type:article|review,publication_year:2025-2026"
         )
         assert params["per_page"] == 50
-        assert hits == [{"DOI": "10.1/a"}]
-        assert set(oa_by_doi) == {"10.1/a", "10.1/b"}
+
+    def test_keeps_the_whole_year_sorted_by_score(self):
+        hits, oa_by_doi, complete = asyncio.run(
+            self.svc._semantic_hits(["S1"], "trust", "2026-01-01", "2026-03-31")
+        )
+        # 10.1/b is after the range but in its year; the work without a DOI is dropped.
+        assert [_clean_doi(hit["doi"]) for hit in hits] == ["10.1/b", "10.1/c", "10.1/a"]
+        assert set(oa_by_doi) == {"10.1/a", "10.1/b", "10.1/c"}
         assert complete
 
     def test_no_journals_no_request(self):
@@ -387,6 +403,36 @@ class TestSemanticHits:
             True,
         )
         assert self.requests == []
+
+
+class TestOpenalexRecords:
+    def test_fills_the_crossref_fields_from_openalex(self):
+        work = {
+            "doi": "https://doi.org/10.1/A",
+            "title": "Trust in <i>robots</i>",
+            "publication_date": "2026-02-10",
+            "primary_location": {
+                "source": {
+                    "display_name": "J. Robots",
+                    "issn_l": "1234-5678",
+                    "issn": ["1234-5678", "8765-4321"],
+                }
+            },
+            "authorships": [{"author": {"display_name": "Ada Lovelace"}}],
+            "biblio": {"volume": "12", "issue": "3", "first_page": "5", "last_page": "20"},
+            "referenced_works_count": 40,
+        }
+        records, api_by_doi = SearchService()._openalex_records([work], {"8765-4321": "api"})
+        record = records[0]
+        assert record["id"] == "10.1/a"
+        assert record["title"] == "Trust in robots"
+        assert record["journal_name"] == "J. Robots"
+        assert record["publication_date"] == "2026-02-10"
+        assert record["issue"] == "Vol. 12, Issue 3"
+        assert record["author"] == "Lovelace"
+        assert record["openurl"]["rft.issn"] == "1234-5678"
+        assert record["low_value_hints"] == {"page": "5-20", "reference_count": 40}
+        assert api_by_doi == {"10.1/a": "api"}
 
 
 class TestMerge:
