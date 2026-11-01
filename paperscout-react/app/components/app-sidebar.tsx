@@ -164,10 +164,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     finalUrl = resultsUrl;
                   }
 
-                  // Active if the URL hash matches OR if there's no hash at all and this is the first item.
+                  // Hash items (/#...) are active if the URL hash matches OR if there's
+                  // no hash at all and this is the first one. Without the normalizedHash
+                  // check, every non-hash item would match an empty hash on "/".
                   const isActive =
                     location.pathname === subItem.url ||
                     (location.pathname === "/" &&
+                      !!normalizedHash &&
                       (hash === normalizedHash || (!hash && index === 0)));
                   return (
                     <SidebarMenuItem key={subItem.title} className="w-full">
