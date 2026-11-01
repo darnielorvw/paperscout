@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlmodel import Field, Relationship, SQLModel, UniqueConstraint
+from sqlmodel import JSON, Column, Field, Relationship, SQLModel, UniqueConstraint
 
 JournalIDStr = str
 
@@ -23,7 +24,7 @@ class Journals(SQLModel, table=True):
     publisher: str
     homepage: str
     # Flags individual handling of this journal's papers by an external API, e.g.
-    # "springer" or "scopus" (see services/external_api_service.py). None = Crossref/OpenAlex only.
+    # "springer" (see services/external_api_service.py). None = Crossref/OpenAlex only.
     external_api: Optional[str] = Field(default=None)
 
 
@@ -45,7 +46,109 @@ class Profile(SQLModel, table=True):
     profile_name: str
     user_id: int = Field(foreign_key="user.id")
     searchTerm: str
+    # Which of the two searches the profile runs: "keywords" (searchTerm) or
+    # "semantic" (semantic_query). Only the query of that mode is kept.
+    semantic_query: str = Field(default="")
+    search_mode: str = Field(default="keywords")
     email_notifications: bool = Field(default=True)
 
     user: User = Relationship(back_populates="profiles")
     journals: List[Journals] = Relationship(link_model=ProfileJournalLink)
+
+
+class SavedArticle(SQLModel, table=True):
+    """A paper on a user's reading list. Stores the search result as it was when
+    saved, so the list doesn't need Crossref/OpenAlex to be shown again."""
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "article_id", name="uq_saved_article_user_article"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str
+    title: Optional[str] = None
+    author: Optional[str] = None
+    journal_name: Optional[str] = None
+    publication_date: Optional[str] = None
+    journal_publication_date: Optional[str] = None
+    issue: Optional[str] = None
+    doi: Optional[str] = None
+    # The paper's page at the publisher, for papers without a DOI.
+    url: Optional[str] = None
+    library_url: Optional[str] = None
+    abstract: Optional[str] = None
+    topic: Optional[str] = None
+    # Where the free version is: {"url", "status", "host"} (see _open_access in
+    # search_service), None if there is none.
+    open_access: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    is_read: bool = Field(default=False)
+    saved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ApiAlert(SQLModel, table=True):
+    """A quota alert mail that has gone out, so every API is reported at most
+    once per day and kind (quota running low / quota exhausted)."""
+
+    __table_args__ = (UniqueConstraint("api", "kind", "day", name="uq_api_alert_api_kind_day"),)
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    api: str
+    # "low" or "exhausted"
+    kind: str
+    # ISO date (UTC) of the day the alert went out.
+    day: str
+
+
+class PaperRequest(SQLModel, table=True):
+    """A user asking the admins for a paper's PDF, because the library has no
+    access to it. Removed together with the paper from the reading list."""
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "article_id", name="uq_paper_request_user_article"),
+    )
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True, ondelete="CASCADE")
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str = Field(index=True)
+    requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class PaperPdf(SQLModel, table=True):
+    """A PDF an admin uploaded for a paper. Every user with the paper on their
+    reading list can open it."""
+
+    # The search result's `id`, i.e. the bare DOI.
+    article_id: str = Field(primary_key=True)
+    # Public Vercel Blob URL. Its random suffix keeps it unguessable, and the
+    # API only hands it to users with the paper on their reading list.
+    url: str
+    uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SiteArticle(SQLModel, table=True):
+    """A paper of a journal that is neither on Crossref nor on OpenAlex, imported
+    from the journal's website (see services/site_import_service.py)."""
+
+    # The bare DOI, or for papers without one their page on the journal website.
+    id: str = Field(primary_key=True)
+    doi: Optional[str] = None
+    issn: str = Field(index=True)
+    journal_name: str
+    title: str
+    author: Optional[str] = None
+    # ISO date (YYYY-MM-DD).
+    publication_date: Optional[str] = Field(default=None, index=True)
+    issue: Optional[str] = None
+    abstract: Optional[str] = None
+    url: str
+    pdf_url: Optional[str] = None
+
+
+class SiteImport(SQLModel, table=True):
+    """When a journal's papers were last imported from its website."""
+
+    issn: str = Field(primary_key=True)
+    synced_at: datetime

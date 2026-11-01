@@ -1,6 +1,7 @@
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, SearchIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { AlertDialogBasic } from "~/components/alert-dialog";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -16,7 +17,6 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import { useProfiles } from "~/context/profile-context";
 import { useSearch } from "~/context/search-context";
-import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import { areFiltersEqual } from "~/lib/search-utils";
 
@@ -29,7 +29,7 @@ export function clientLoader() {
 
 export default function Profiles() {
   const [error, setError] = useState<string | null>(null);
-  const { rowSelection, searchTerm: currentSearchTerm } = useSearch();
+  const { rowSelection, searchTerm, semanticQuery, searchMode } = useSearch();
   const {
     profiles,
     isLoading,
@@ -43,7 +43,9 @@ export default function Profiles() {
   const [newProfileName, setNewProfileName] = useState("");
   const currentSearchState = {
     rowSelection,
-    searchTerm: currentSearchTerm,
+    searchTerm,
+    semanticQuery,
+    searchMode,
   };
 
   // A profile can only be saved or updated if at least one journal is selected.
@@ -96,14 +98,6 @@ export default function Profiles() {
     }
   };
 
-  const sendTestMail = async () => {
-    try {
-      await apiFetch("/api/digest/send-test", { method: "POST" });
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Error sending mail.");
-    }
-  };
-
   const handleToggleNotifications = async (
     profileId: number,
     emailNotifications: boolean,
@@ -132,8 +126,8 @@ export default function Profiles() {
         <CardHeader>
           <CardTitle>Create New Profile</CardTitle>
           <CardDescription>
-            Save your current selection of journals and search term for later
-            use.
+            Save your current selection of journals and search, keyword or
+            semantic, for later use.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -174,27 +168,50 @@ export default function Profiles() {
                 const isUpdateDisabled =
                   isApplied ||
                   (activeProfileId !== null && activeProfileId !== profile.id);
+                const isSemantic = profile.searchMode === "semantic";
+                const query = isSemantic ? profile.semanticQuery : profile.searchTerm;
                 return (
                   <Card key={profile.id}>
                     <CardHeader>
                       <CardTitle>{profile.name}</CardTitle>
                       <CardDescription>
                         {Object.keys(profile.rowSelection).length} Journals
-                        {profile.searchTerm && ` | ${profile.searchTerm}`}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={`notify-${profile.id}`}
-                          checked={profile.emailNotifications}
-                          onCheckedChange={(checked) =>
-                            handleToggleNotifications(profile.id, checked)
-                          }
-                        />
-                        <Label htmlFor={`notify-${profile.id}`}>
-                          Email notifications
-                        </Label>
+                    <CardContent className="flex flex-col gap-3">
+                      <div className="flex flex-col items-start gap-1.5">
+                        <Badge variant="secondary">
+                          {isSemantic ? <SparklesIcon /> : <SearchIcon />}
+                          {isSemantic ? "Semantic search" : "Keyword search"}
+                        </Badge>
+                        <p
+                          className="line-clamp-2 text-sm text-muted-foreground"
+                          title={query || undefined}
+                        >
+                          {query ? `“${query}”` : "No query"}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={`notify-${profile.id}`}
+                            // The semantic search only filters by year.
+                            checked={profile.emailNotifications && !isSemantic}
+                            disabled={isSemantic}
+                            onCheckedChange={(checked) =>
+                              handleToggleNotifications(profile.id, checked)
+                            }
+                          />
+                          <Label htmlFor={`notify-${profile.id}`}>
+                            Email notifications
+                          </Label>
+                        </div>
+                        {isSemantic && (
+                          <p className="text-xs text-muted-foreground">
+                            Not available for semantic searches: they only
+                            filter by year.
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                     <CardFooter className="flex justify-between gap-2">
@@ -230,10 +247,6 @@ export default function Profiles() {
             )}
           </div>
         )}
-      </div>
-      <div>
-        <h2 className="mb-4 text-xl font-semibold">Email Test</h2>
-        <Button onClick={sendTestMail}>Send Mail</Button>
       </div>
     </div>
   );

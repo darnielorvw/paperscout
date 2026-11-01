@@ -23,12 +23,12 @@ export default function RegisterPage() {
     const response = await apiFetch<{ message?: string; detail?: string }>(
       "/api/register",
       {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name, email, password }),
-    });
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, password }),
+      });
 
     if (response.message) {
       setSubmittedEmail(email);
@@ -67,7 +67,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create account"
-      description="Create a new account to use PaperScout."
+      description="Create a new account with your @uni-muenster.de or @fh-swf.de email address."
       fields={fields}
       submitButtonText="Create account"
       onSubmit={handleRegister}

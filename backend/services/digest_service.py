@@ -10,14 +10,15 @@ from sqlmodel import Session, select
 from config import settings
 from database import models
 from database.database import engine
-from services.download_service import DownloadService
 from services.mail_service import MailService
-from services.search_service import SearchService
+from services.search_service import SearchService, openurl_resolver_for
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 ARTICLES_PER_PROFILE = 25
-MAX_DOWNLOAD_PAPERS_PER_PROFILE = 25
+# Commentaries, editorials etc. (`low_value`) are left out of the digest, so more
+# results are fetched to still fill the profile's section.
+_FETCH_PER_PROFILE = 2 * ARTICLES_PER_PROFILE
 
 
 class DigestService:
@@ -27,11 +28,9 @@ class DigestService:
         self,
         search_service: SearchService,
         mail_service: MailService,
-        download_service: DownloadService,
     ):
         self.search_service = search_service
         self.mail_service = mail_service
-        self.download_service = download_service
 
     def _date_range(self) -> tuple[str, str]:
         """Returns the full previous calendar month as (from_date, to_date)."""
@@ -40,24 +39,12 @@ class DigestService:
         first_day_prev_month = last_day_prev_month.replace(day=1)
         return first_day_prev_month.isoformat(), last_day_prev_month.isoformat()
 
-    def _build_download_link(self, profile_name: str, articles: List[dict]) -> str | None:
-        """Creates a long-lived, signed link to download all papers of a profile as a ZIP.
-
-        Deliberately encodes only the bare DOIs (not the full URLs or titles) in the
-        token, so the link stays short enough not to be truncated by mail clients.
-        """
-        clean_ids = [a["id"] for a in articles if a.get("id")][:MAX_DOWNLOAD_PAPERS_PER_PROFILE]
-        if not clean_ids:
-            return None
-
-        token = self.download_service.create_bulk_download_token(
-            clean_ids, expire_days=settings.DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS
-        )
-        query = urlencode({"token": token, "zip_name": profile_name})
-        return f"{settings.BACKEND_URL}/api/digest/download?{query}"
-
     def _build_frontend_link(
-        self, journal_ids: List[str], keywords: str, from_date: str, to_date: str
+        self,
+        journal_ids: List[str],
+        keywords: str,
+        from_date: str,
+        to_date: str,
     ) -> str:
         """Builds a link to the results page in the frontend for the full profile.
 
@@ -74,7 +61,6 @@ class DigestService:
         self,
         profile_name: str,
         articles: List[dict],
-        download_link: str | None,
         frontend_link: str | None = None,
     ) -> str:
         browse_note = (
@@ -89,9 +75,9 @@ class DigestService:
 
         if not articles:
             return (
-                f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+                f"<h2 style='margin-top:32px;font-size:20px;'>Profile: {escape(profile_name)}</h2>"
                 f"{browse_note}"
-                f"<p style='color:#666;'>No new results in this period.</p>"
+                f"<p style='color:#666;font-size:14px;'>No new results in this period.</p>"
             )
 
         items = []
@@ -100,34 +86,41 @@ class DigestService:
             author = escape(article.get("author") or "")
             journal = escape(article.get("journal_name") or "")
             date = escape(article.get("publication_date") or "")
-            link = (
-                article.get("pdf_url")
-                or article.get("pdf_landing_page")
-                or article.get("doi")
-                or "#"
+            # The library resolver leads to the full text via the institution's access.
+            library_url = article.get("library_url")
+            doi_url = article.get("doi")
+            page_url = article.get("url")
+            link = library_url or doi_url or page_url or "#"
+            link_parts = []
+            if doi_url:
+                doi = doi_url.removeprefix("https://doi.org/")
+                link_parts.append(
+                    f"DOI: <a href='{escape(doi_url)}' style='color:#1a56db;'>{escape(doi)}</a>"
+                )
+            elif page_url:
+                link_parts.append(
+                    f"<a href='{escape(page_url)}' style='color:#1a56db;'>Article page</a>"
+                )
+            if library_url:
+                link_parts.append(
+                    f"<a href='{escape(library_url)}' style='color:#1a56db;'>Full text via your library</a>"
+                )
+            links = (
+                f"<br/><span style='font-size:13px;'>{' &middot; '.join(link_parts)}</span>"
+                if link_parts
+                else ""
             )
             items.append(
                 "<li style='margin-bottom:14px;'>"
-                f"<a href='{escape(link)}' style='font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
-                f"<span style='color:#555;font-size:14px;'>{author} &middot; {journal} &middot; {date}</span>"
+                f"<a href='{escape(link)}' style='font-size:16px;font-weight:600;text-decoration:none;color:#1a56db;'>{title}</a><br/>"
+                f"<span style='color:#555;font-size:13px;'>{author} &middot; {journal} &middot; {date}</span>"
+                f"{links}"
                 "</li>"
             )
 
-        download_note = (
-            f"<p style='margin:8px 0 16px;'>"
-            f"<a href='{escape(download_link)}' style='display:inline-block;padding:8px 14px;"
-            f"background:#1a56db;color:#fff;border-radius:6px;text-decoration:none;font-size:14px;'>"
-            f"Download all PDFs of this profile as ZIP</a>"
-            f"<br/><span style='color:#999;font-size:12px;'>Link valid for {settings.DIGEST_DOWNLOAD_LINK_EXPIRE_DAYS} days.</span>"
-            f"</p>"
-            if download_link
-            else ""
-        )
-
         return (
-            f"<h2 style='margin-top:32px;'>Profile: {escape(profile_name)}</h2>"
+            f"<h2 style='margin-top:32px;font-size:20px;'>Profile: {escape(profile_name)}</h2>"
             f"{browse_note}"
-            f"{download_note}"
             f"<ul style='list-style:none;padding:0;'>{''.join(items)}</ul>"
         )
 
@@ -138,6 +131,8 @@ class DigestService:
             .where(
                 models.Profile.user_id == user.id,
                 models.Profile.email_notifications == True,  # noqa: E712
+                # The semantic search only filters by year, so it has no monthly email.
+                models.Profile.search_mode == "keywords",
             )
             .options(selectinload(models.Profile.journals))
         ).all()
@@ -157,7 +152,7 @@ class DigestService:
                 if journal.issn and journal.external_api
             }
             if not journal_ids:
-                sections.append(self._render_profile_section(profile.profile_name, [], None))
+                sections.append(self._render_profile_section(profile.profile_name, []))
                 continue
 
             # The frontend link keeps the OpenAlex ids the journal picker knows.
@@ -171,22 +166,22 @@ class DigestService:
                 keywords=profile.searchTerm or "",
                 from_date=from_date,
                 to_date=to_date,
-                limit=ARTICLES_PER_PROFILE,
+                limit=_FETCH_PER_PROFILE,
                 page=1,
+                resolver=openurl_resolver_for(user.email),
+                session=session,
             )
-            articles = data.get("results", [])
-            download_link = self._build_download_link(profile.profile_name, articles)
+            articles = [a for a in data.get("results", []) if not a.get("low_value")]
+            articles = articles[:ARTICLES_PER_PROFILE]
             sections.append(
-                self._render_profile_section(
-                    profile.profile_name, articles, download_link, frontend_link
-                )
+                self._render_profile_section(profile.profile_name, articles, frontend_link)
             )
 
         body = "".join(sections)
         return (
             "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;'>"
-            f"<h1 style='margin-bottom:4px;'>Your monthly PaperScout digest</h1>"
-            f"<p style='color:#666;'>New papers from {from_date} to {to_date}, sorted by your search profiles. "
+            f"<h1 style='margin-bottom:4px;font-size:24px;'>Your monthly PaperScout digest</h1>"
+            f"<p style='color:#666;font-size:14px;'>New papers from {from_date} to {to_date}, sorted by your search profiles. "
             f"Each profile shows up to {ARTICLES_PER_PROFILE} papers here – use the "
             f"“Browse all results” link to see the full list and pick papers yourself.</p>"
             f"{body}"
@@ -203,8 +198,11 @@ class DigestService:
             html_body=html,
         )
 
-    async def run_monthly_digest(self) -> None:
-        """Generates and sends the digest to all registered users with at least one profile."""
+    async def run_monthly_digest(self) -> int:
+        """Generates and sends the digest to all registered users with at least one profile.
+
+        Returns the number of emails sent.
+        """
         logging.info("Starting monthly paper digest send...")
         sent_count = 0
         with Session(engine) as session:
@@ -216,3 +214,4 @@ class DigestService:
                 except Exception as e:
                     logging.error(f"Digest send to {user.email} failed: {e}")
         logging.info(f"Monthly digest send complete. {sent_count} email(s) sent.")
+        return sent_count

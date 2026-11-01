@@ -1,6 +1,17 @@
 import { Trash2Icon } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { AlertDialogBasic } from "~/components/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -48,6 +59,24 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isSendingDigest, setIsSendingDigest] = useState(false);
+  const [digestMessage, setDigestMessage] = useState<string | null>(null);
+
+  const handleSendDigest = async () => {
+    setIsSendingDigest(true);
+    setDigestMessage(null);
+    try {
+      const response = await apiFetch<{ message: string }>(
+        "/api/digest/send-all",
+        { method: "POST" },
+      );
+      setDigestMessage(response.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send digest.");
+    } finally {
+      setIsSendingDigest(false);
+    }
+  };
 
   const handleDeleteJournal = async (journalId: string) => {
     setDeletingId(journalId);
@@ -197,6 +226,45 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-xl font-bold">Monthly Digest</h2>
+          <p className="text-muted-foreground">
+            Send the monthly paper digest to all users with search profiles
+            right now, independent of the regular schedule.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-4">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button disabled={isSendingDigest}>
+                  {isSendingDigest ? "Sending..." : "Send Digest Now"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent size="sm">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Send digest to all users?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Every user with at least one search profile will receive
+                    the monthly digest email immediately.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleSendDigest}>
+                    Send
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {digestMessage && (
+              <p className="text-sm text-muted-foreground">{digestMessage}</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="flex flex-col gap-4">
         <div>

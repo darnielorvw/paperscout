@@ -10,13 +10,16 @@ import {
 import { useNavigate } from "react-router";
 import { apiFetch } from "~/lib/api";
 import { areFiltersEqual, buildResultsUrl } from "~/lib/search-utils";
-import { useSearch } from "./search-context";
+import { useSearch, type SearchMode } from "./search-context";
 
 export interface SearchProfile {
   id: number;
   name: string;
   rowSelection: Record<string, boolean>;
   searchTerm: string;
+  // Only the query of the profile's search mode is stored; the other is empty.
+  semanticQuery: string;
+  searchMode: SearchMode;
   emailNotifications: boolean;
 }
 
@@ -52,9 +55,13 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     rowSelection,
     date,
     searchTerm,
+    semanticQuery,
+    searchMode,
     setRowSelection,
     setDate,
     setSearchTerm,
+    setSemanticQuery,
+    setSearchMode,
   } = useSearch();
   const navigate = useNavigate();
 
@@ -78,38 +85,54 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   // Effect to sync the active profile with the current search state
   useEffect(() => {
-    const currentSearchState = { rowSelection, searchTerm };
+    const currentSearchState = { rowSelection, searchTerm, semanticQuery, searchMode };
     // Find a profile that matches the current search settings.
     const matchingProfile = profiles.find((profile) =>
       areFiltersEqual(profile, currentSearchState)
     );
 
     setActiveProfileId(matchingProfile ? matchingProfile.id : null);
-  }, [rowSelection, searchTerm, profiles]);
+  }, [rowSelection, searchTerm, semanticQuery, searchMode, profiles]);
 
   const applyProfile = useCallback(
     (profileId: number) => {
       const profile = profiles.find((p) => p.id === profileId);
       if (profile) {
         const newRowSelection = profile.rowSelection;
-        const newSearchTerm = profile.searchTerm;
+        const isSemantic = profile.searchMode === "semantic";
 
         // Update the global state with the new values. Profiles no longer store
-        // a date range, so the currently selected date is left untouched.
+        // a date range, so the currently selected date is left untouched. The
+        // field of the other search mode keeps what the user typed.
         setRowSelection(newRowSelection);
-        setSearchTerm(newSearchTerm);
+        setSearchMode(profile.searchMode);
+        if (isSemantic) {
+          setSemanticQuery(profile.semanticQuery);
+        } else {
+          setSearchTerm(profile.searchTerm);
+        }
         setActiveProfileId(profile.id);
 
         // Build the URL with the new values, not the old ones from the hook state.
         const resultsURL = buildResultsUrl({
           rowSelection: newRowSelection,
           date,
-          searchTerm: newSearchTerm,
+          searchTerm: profile.searchTerm,
+          semanticQuery: profile.semanticQuery,
+          searchMode: profile.searchMode,
         });
         navigate(resultsURL, { replace: true });
       }
     },
-    [profiles, date, setRowSelection, setSearchTerm, navigate],
+    [
+      profiles,
+      date,
+      setRowSelection,
+      setSearchTerm,
+      setSemanticQuery,
+      setSearchMode,
+      navigate,
+    ],
   );
 
   const clearActiveProfile = useCallback(() => {
@@ -119,8 +142,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     const now = new Date();
     setDate({ from: startOfMonth(now), to: endOfMonth(now) });
     setSearchTerm("");
+    setSemanticQuery("");
+    setSearchMode("keywords");
     navigate("/", { replace: true });
-  }, [setRowSelection, setDate, setSearchTerm, navigate]);
+  }, [setRowSelection, setDate, setSearchTerm, setSemanticQuery, setSearchMode, navigate]);
 
   const updateProfile = useCallback(
     async (profileId: number) => {
@@ -132,6 +157,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({
             rowSelection,
             searchTerm,
+            semanticQuery,
+            searchMode,
           }),
         },
       );
@@ -140,7 +167,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         prevProfiles.map((p) => (p.id === profileId ? updatedProfile : p)),
       );
     },
-    [rowSelection, searchTerm],
+    [rowSelection, searchTerm, semanticQuery, searchMode],
   );
 
   const saveProfile = useCallback(
@@ -153,6 +180,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           settings: {
             rowSelection,
             searchTerm,
+            semanticQuery,
+            searchMode,
           },
         }),
       });
@@ -160,7 +189,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setProfiles((prevProfiles) => [...prevProfiles, newProfile]);
     },
 
-    [rowSelection, searchTerm],
+    [rowSelection, searchTerm, semanticQuery, searchMode],
   );
 
   const toggleProfileNotifications = useCallback(

@@ -46,3 +46,5 @@ results.xlsx
 results.csv
 .agents/
 
+.vercel
+.env*

@@ -1,4 +1,16 @@
-import { UserIcon } from "lucide-react";
+import {
+  BookmarkIcon,
+  CalendarRangeIcon,
+  CircleHelpIcon,
+  FileInputIcon,
+  ImportIcon,
+  ListIcon,
+  NewspaperIcon,
+  SlidersHorizontalIcon,
+  TextSearchIcon,
+  UserIcon,
+  type LucideIcon,
+} from "lucide-react";
 import * as React from "react";
 import { NavLink, useLocation } from "react-router";
 import {
@@ -17,30 +29,44 @@ import { useAuth } from "~/context/auth-context";
 import { useSearch } from "~/context/search-context";
 import { buildResultsUrl } from "~/lib/search-utils";
 
-const data = [
+type NavGroup = {
+  title: string;
+  items: { title: string; url: string; icon: LucideIcon }[];
+};
+
+const data: NavGroup[] = [
   {
-    title: "Input",
+    title: "New Search",
     items: [
       {
-        title: "Select Journals",
+        title: "Journals",
+        icon: NewspaperIcon,
         url: "/#journals",
       },
       {
-        title: "Select Time Range",
+        title: "Time Range",
+        icon: CalendarRangeIcon,
         url: "/#range",
       },
       {
         title: "Search",
-        url: "/#search",
+        icon: TextSearchIcon,
+        url: "/#keywords",
       },
     ],
   },
   {
-    title: "Output",
+    title: "Papers",
     items: [
       {
         title: "Results",
+        icon: ListIcon,
         url: "/results",
+      },
+      {
+        title: "Reading List",
+        icon: BookmarkIcon,
+        url: "/reading-list",
       },
     ],
   },
@@ -49,18 +75,30 @@ const data = [
     items: [
       {
         title: "Profiles",
+        icon: SlidersHorizontalIcon,
         url: "/profiles",
+      },
+      {
+        title: "Help",
+        icon: CircleHelpIcon,
+        url: "/help",
       },
     ],
   },
 ];
 
-const adminGroup = {
+const adminGroup: NavGroup = {
   title: "Admin",
   items: [
     {
       title: "Import Journals",
+      icon: ImportIcon,
       url: "/admin",
+    },
+    {
+      title: "PDF Requests",
+      icon: FileInputIcon,
+      url: "/admin/pdf-requests",
     },
   ],
 };
@@ -68,7 +106,14 @@ const adminGroup = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation();
   const { user } = useAuth();
-  const { rowSelection, date, searchTerm, isInitialized } = useSearch();
+  const {
+    rowSelection,
+    date,
+    searchTerm,
+    semanticQuery,
+    searchMode,
+    isInitialized,
+  } = useSearch();
   const [isMounted, setIsMounted] = React.useState(false);
 
   const sidebarGroups = user?.is_admin ? [...data, adminGroup] : data;
@@ -81,8 +126,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // useMemo ensures this is only recalculated on changes.
   const resultsUrl = React.useMemo(() => {
     if (!isInitialized) return "/results"; // Wait until the state has been loaded from storage
-    return buildResultsUrl({ rowSelection, date, searchTerm });
-  }, [rowSelection, date, searchTerm, isInitialized]);
+    return buildResultsUrl({
+      rowSelection,
+      date,
+      searchTerm,
+      semanticQuery,
+      searchMode,
+    });
+  }, [
+    rowSelection,
+    date,
+    searchTerm,
+    semanticQuery,
+    searchMode,
+    isInitialized,
+  ]);
 
   return (
     <Sidebar {...props}>
@@ -118,7 +176,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         isActive={isActive}
                         className="w-full justify-start"
                       >
-                        <NavLink to={finalUrl}>{subItem.title}</NavLink>
+                        <NavLink to={finalUrl}>
+                          <subItem.icon />
+                          {subItem.title}
+                        </NavLink>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

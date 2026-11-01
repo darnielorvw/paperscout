@@ -7,6 +7,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [searchParams] = useSearchParams();
   const justVerified = searchParams.get("verified") === "true";
+  const verifyError = searchParams.get("verify_error");
 
   const handleLogin = async (formData: FormData) => {
     const email = formData.get("email");
@@ -51,9 +52,11 @@ export default function LoginPage() {
     <AuthCard
       title="Login"
       description={
-        justVerified
-          ? "Email confirmed! You can now log in."
-          : "Please log in to access PaperScout."
+        verifyError
+          ? verifyError
+          : justVerified
+            ? "Email confirmed! You can now log in."
+            : "Please log in to access PaperScout."
       }
       fields={fields}
       submitButtonText="Sign in"

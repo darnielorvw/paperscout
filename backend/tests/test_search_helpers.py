@@ -4,20 +4,30 @@ These functions do no I/O - they only reshape the JSON that Crossref and
 OpenAlex return - so they can be tested directly with plain dicts.
 """
 
+import asyncio
+from urllib.parse import parse_qs
+
 import pytest
 
+from config import settings
 from services.search_service import (
     SearchService,
     _apa_from_last_names,
     _clean_doi,
     _clean_title,
+    _crossref_openurl_fields,
     _date_parts_to_iso,
     _is_paper,
     _issue_label,
+    _low_value_score,
     _merge,
+    _open_access,
+    _openurl,
+    _page_count,
     _strip_jats,
     format_authors_apa,
     format_authors_apa_crossref,
+    openurl_resolver_for,
 )
 
 
@@ -38,6 +48,51 @@ class TestCleanDoi:
 
     def test_none_input(self):
         assert _clean_doi(None) == ""
+
+
+class TestOpenurl:
+    def test_builds_resolver_link(self):
+        url = _openurl(
+            {
+                "doi": "https://doi.org/10.1000/ABC",
+                "title": "Deep Learning & Co",
+                "journal_name": "Nature",
+                "publication_date": "2024-03-07",
+            },
+            settings.OPENURL_RESOLVER,
+        )
+        base, query = url.split("?", 1)
+        assert base == settings.OPENURL_RESOLVER
+        assert parse_qs(query) == {
+            "ctx_ver": ["Z39.88-2004"],
+            "rft_val_fmt": ["info:ofi/fmt:kev:mtx:journal"],
+            "rft.genre": ["article"],
+            "rft_id": ["info:doi/10.1000/abc"],
+        }
+
+    def test_no_doi(self):
+        assert _openurl({"doi": None, "title": "Something"}, settings.OPENURL_RESOLVER) is None
+
+    def test_resolver_with_own_query(self):
+        url = _openurl({"doi": "10.1000/abc"}, "https://library.example/openurl?vid=X")
+        base, query = url.split("?", 1)
+        assert base == "https://library.example/openurl"
+        assert parse_qs(query)["vid"] == ["X"]
+        assert parse_qs(query)["rft_id"] == ["info:doi/10.1000/abc"]
+
+
+class TestOpenurlResolverFor:
+    def test_muenster_users_get_their_resolver(self):
+        assert (
+            openurl_resolver_for("someone@Uni-Muenster.de")
+            == settings.OPENURL_RESOLVERS_BY_DOMAIN["uni-muenster.de"]
+        )
+
+    @pytest.mark.parametrize(
+        "email", ["someone@fh-swf.de", "someone@wi.uni-muenster.de", "uni-muenster.de@gmail.com"]
+    )
+    def test_everyone_else_gets_the_default(self, email):
+        assert openurl_resolver_for(email) == settings.OPENURL_RESOLVER
 
 
 class TestDatePartsToIso:
@@ -184,6 +239,121 @@ class TestIsPaper:
         assert _is_paper(None)
 
 
+class TestPageCount:
+    @pytest.mark.parametrize(
+        "page, expected",
+        [("123-125", 3), ("S12–S14", 3), ("7-7", 1), ("e12345", None), ("12", None), (None, None)],
+    )
+    def test_counts_page_ranges(self, page, expected):
+        assert _page_count(page) == expected
+
+
+class TestLowValueScore:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "A Commentary on “Leadership and Trust in Remote Teams” by Smith et al.",
+            "Reply to Jones: The effect remains robust",
+            "Rethinking burnout: A response to critics",
+            "Editorial: Looking back on ten years",
+            "Correction to: Effects of sleep on memory",
+            "Introduction to the special issue on work and health",
+            "From the editors: What makes a theory contribution?",
+            "Erratum",
+            "HUMAN RELATIONSCall for Proposals: Critical Reviews Special Issue",
+            "Shared Leadership Is Not Just a Number—Commentary on “When Two Is Too Many”",
+            "Author Correction: Plasticity and language in the human hippocampus",
+            "Addendum: Sea level much higher than assumed",
+            "Expression of Concern: “Dishonest Deed, Clear Conscience”",
+            "Supplemental Material for What Do We Know About Job Knowledge Tests?",
+            "Y. Wang et al. reply",
+            "Human Relations Annual Call for Special Issue Proposals",
+            "Distinguished Reviewers in 2025",
+            "2025 Outside Reviewers",
+            "Human Relations Paper of the Year 2025",
+            "2025 Management Science Service Awards",
+            "Publications Received",
+            "Meeting Calendar",
+            "Daily briefing: Fusion reactor pushes plasma past crucial limit",
+            "In Science Journals",
+        ],
+    )
+    def test_commentary_titles_reach_the_threshold(self, title):
+        assert _low_value_score(title, None, True, None) >= 3
+
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Neural responses to threat in anxious adolescents",
+            "Comment sections and online incivility",
+            "Employee reply behaviour in e-mail threads",
+            "Editorial board diversity and citation impact",
+            "Retraction rates in psychology journals",
+            "Why do papers get retracted? Editorial decisions under scrutiny",
+            "Erratum management in hospitals",
+            "Reviewer bias in peer review of grant proposals",
+            "Awards and recognition as motivators at work",
+        ],
+    )
+    def test_ordinary_titles_score_nothing(self, title):
+        assert _low_value_score(title, "100-120", True, 60) == 0
+
+    def test_short_paper_alone_doesnt(self):
+        assert _low_value_score("Some findings", "100-102", True, 20) == 2
+
+    def test_short_paper_with_many_references_is_research(self):
+        # A Nature or Science letter: four pages, but a full reference list.
+        assert _low_value_score("Some findings", "100-103", False, 85, 14) == 1
+
+    def test_paper_without_authors_reaches_the_threshold(self):
+        assert _low_value_score("Some findings", None, True, None, 0) >= 3
+
+    def test_news_piece_reaches_the_threshold(self):
+        # Online first, no abstract, no references, one author.
+        assert _low_value_score("Whale graveyard discovered", None, False, 0, 1) >= 3
+
+    def test_research_without_references_doesnt(self):
+        # Online-first papers often have no references deposited yet.
+        assert _low_value_score("Some findings", None, True, 0, 2) == 1
+        assert _low_value_score("Some findings", None, True, 0, 5) == 0
+
+    def test_short_paper_without_abstract_reaches_the_threshold(self):
+        assert _low_value_score("Some findings", "100-102", False, None) >= 3
+
+    def test_missing_abstract_and_few_references_alone_dont(self):
+        assert _low_value_score("Some findings", None, False, 14) == 2
+
+    def test_zero_references_are_unknown(self):
+        assert _low_value_score("Some findings", None, True, 0) == 0
+
+
+class TestOpenAccess:
+    def test_green_paper_links_the_repository_copy(self):
+        work = {
+            "open_access": {"is_oa": True, "oa_status": "green", "oa_url": "https://repo/1"},
+            "best_oa_location": {
+                "landing_page_url": "https://repo/1",
+                "source": {"display_name": "Some Repository"},
+            },
+        }
+        assert _open_access(work) == {
+            "url": "https://repo/1",
+            "status": "green",
+            "host": "Some Repository",
+        }
+
+    @pytest.mark.parametrize(
+        "work",
+        [
+            {},
+            {"open_access": {"is_oa": False, "oa_url": None}},
+            {"open_access": {"is_oa": True, "oa_url": None}, "best_oa_location": None},
+        ],
+    )
+    def test_none_without_free_version(self, work):
+        assert _open_access(work) is None
+
+
 class TestFillOpenalex:
     def setup_method(self):
         self.svc = SearchService()
@@ -207,6 +377,101 @@ class TestFillOpenalex:
         ]
 
 
+class TestSemanticHits:
+    def setup_method(self):
+        self.svc = SearchService()
+        self.requests = []
+
+        async def fetch_openalex(endpoint, params):
+            self.requests.append(params)
+            return {
+                "results": [
+                    {
+                        "doi": "https://doi.org/10.1/A",
+                        "publication_date": "2026-02-10",
+                        "relevance_score": 0.7,
+                    },
+                    {
+                        "doi": "https://doi.org/10.1/b",
+                        "publication_date": "2026-04-01",
+                        "relevance_score": 0.9,
+                    },
+                    {
+                        "doi": "https://doi.org/10.1/c",
+                        "publication_date": "2026-03-31",
+                        "relevance_score": 0.8,
+                    },
+                    {"doi": None, "publication_date": "2026-02-01", "relevance_score": 0.95},
+                ]
+            }
+
+        async def no_crossref(*args, **kwargs):
+            raise AssertionError("the semantic search doesn't ask Crossref")
+
+        self.svc._fetch_openalex = fetch_openalex
+        self.svc._fetch_crossref = no_crossref
+
+    def test_filters_by_source_type_and_year(self):
+        asyncio.run(self.svc._semantic_hits(["S1", "S2"], "trust", "2025-11-01", "2026-03-31"))
+        params = self.requests[0]
+        assert params["search.semantic"] == "trust"
+        assert params["filter"] == (
+            "primary_location.source.id:S1|S2,type:article|review,publication_year:2025-2026"
+        )
+        assert params["per_page"] == 50
+
+    def test_keeps_the_whole_year_sorted_by_score(self):
+        hits, oa_by_doi, complete = asyncio.run(
+            self.svc._semantic_hits(["S1"], "trust", "2026-01-01", "2026-03-31")
+        )
+        # 10.1/b is after the range but in its year; the work without a DOI is dropped.
+        assert [_clean_doi(hit["doi"]) for hit in hits] == ["10.1/b", "10.1/c", "10.1/a"]
+        assert set(oa_by_doi) == {"10.1/a", "10.1/b", "10.1/c"}
+        assert complete
+
+    def test_no_journals_no_request(self):
+        assert asyncio.run(self.svc._semantic_hits([], "trust", "2026-01-01", "2026-03-31")) == (
+            [],
+            {},
+            True,
+        )
+        assert self.requests == []
+
+
+class TestOpenalexRecords:
+    def test_fills_the_crossref_fields_from_openalex(self):
+        work = {
+            "doi": "https://doi.org/10.1/A",
+            "title": "Trust in <i>robots</i>",
+            "publication_date": "2026-02-10",
+            "primary_location": {
+                "source": {
+                    "display_name": "J. Robots",
+                    "issn_l": "1234-5678",
+                    "issn": ["1234-5678", "8765-4321"],
+                }
+            },
+            "authorships": [{"author": {"display_name": "Ada Lovelace"}}],
+            "biblio": {"volume": "12", "issue": "3", "first_page": "5", "last_page": "20"},
+            "referenced_works_count": 40,
+        }
+        records, api_by_doi = SearchService()._openalex_records([work], {"8765-4321": "api"})
+        record = records[0]
+        assert record["id"] == "10.1/a"
+        assert record["title"] == "Trust in robots"
+        assert record["journal_name"] == "J. Robots"
+        assert record["publication_date"] == "2026-02-10"
+        assert record["issue"] == "Vol. 12, Issue 3"
+        assert record["author"] == "Lovelace"
+        assert record["openurl"]["rft.issn"] == "1234-5678"
+        assert record["low_value_hints"] == {
+            "page": "5-20",
+            "reference_count": 40,
+            "author_count": 1,
+        }
+        assert api_by_doi == {"10.1/a": "api"}
+
+
 class TestMerge:
     def test_fills_only_empty_fields(self):
         record = {"title": "Kept", "abstract": None}
@@ -218,3 +483,39 @@ class TestMerge:
         record = {"issue": "Vol. 1"}
         _merge(record, {"issue": empty})
         assert record == {"issue": "Vol. 1"}
+
+
+class TestCrossrefOpenurlFields:
+    def test_citation_without_journal_title(self):
+        fields = _crossref_openurl_fields(
+            {
+                "title": ["Array programming with NumPy"],
+                "container-title": ["Nature"],
+                "issn-type": [
+                    {"type": "print", "value": "0028-0836"},
+                    {"type": "electronic", "value": "1476-4687"},
+                ],
+                "issued": {"date-parts": [[2020, 9, 16]]},
+                "volume": "585",
+                "issue": "7825",
+                "page": "357-362",
+            }
+        )
+        assert fields == {
+            "rft.atitle": "Array programming with NumPy",
+            "rft.issn": "0028-0836",
+            "rft.eissn": "1476-4687",
+            "rft.date": "2020",
+            "rft.volume": "585",
+            "rft.issue": "7825",
+            "rft.spage": "357",
+        }
+
+    def test_goes_into_the_link(self):
+        url = _openurl(
+            {"doi": "10.1000/abc", "openurl": {"rft.issn": "1234-5678"}},
+            settings.OPENURL_RESOLVER,
+        )
+        query = parse_qs(url.split("?", 1)[1])
+        assert query["rft.issn"] == ["1234-5678"]
+        assert "rft.jtitle" not in query

@@ -1,10 +1,20 @@
-import { Download } from "lucide-react";
+import { format } from "date-fns";
+import { BookmarkPlusIcon, CalendarIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState, useTransition } from "react";
-import { Await, useLoaderData, useLocation, useNavigate } from "react-router";
-import { ArticleCard } from "~/components/article-card";
+import {
+  Await,
+  useLoaderData,
+  useLocation,
+  useNavigate
+} from "react-router";
+import { ArticleCard, MetaItem } from "~/components/article-card";
 import { ResultsPagination } from "~/components/results-pagination";
 import { SkeletonList } from "~/components/skeletons";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
+import { Field, FieldLabel } from "~/components/ui/field";
+import { useReadingList } from "~/context/reading-list-context";
 import { useSearch } from "~/context/search-context";
 
 import { toast } from "sonner";
@@ -13,21 +23,34 @@ import { apiFetch } from "~/lib/api";
 import { protectPage } from "~/lib/auth";
 import type { Route } from "../+types/root";
 
+// Where the free version of a paper is (see _open_access in search_service.py).
+export type OpenAccess = {
+  url: string;
+  // gold, diamond, hybrid, bronze or green
+  status: string | null;
+  // Repository or journal that hosts the free version.
+  host: string | null;
+};
+
 // Define the article type based on the return value of search_service.py
 export type Article = {
   id: string;
   title: string;
   doi: string | null;
+  // The paper's page at the publisher, for papers without a DOI.
+  url: string | null;
   publication_date: string;
   journal_publication_date: string | null;
   issue: string | null;
-  pdf_landing_page: string;
-  pdf_url: string;
+  library_url: string | null;
   journal_name: string;
   abstract: string;
   topic: string;
   author: string;
-  has_fulltext: boolean;
+  // Likely a commentary, editorial etc.; left out of the monthly digest.
+  low_value?: boolean;
+  // Missing for website papers, which OpenAlex doesn't know.
+  open_access?: OpenAccess | null;
 };
 
 type LoaderData = {
@@ -66,20 +89,110 @@ export function clientLoader({ request }: Route.ClientLoaderArgs): LoaderData {
   const articlePromise = apiFetch<{
     meta?: { count?: number; per_page?: number; page?: number };
     results?: Article[];
-  }>(`/api/articles?${paramsString}`).then(
-    (data) => {
-      const meta = data.meta || {};
-      const results = data.results || [];
-      return {
-        articles: results,
-        totalCount: meta.count || 0,
-        perPage: meta.per_page || 25,
-        currentPage: meta.page || 1,
-      };
-    },
-  );
+  }>(`/api/articles?${paramsString}`).then((data) => {
+    const meta = data.meta || {};
+    const results = data.results || [];
+    return {
+      articles: results,
+      totalCount: meta.count || 0,
+      perPage: meta.per_page || 25,
+      currentPage: meta.page || 1,
+    };
+  });
 
   return { articlePromise };
+}
+
+// Selection checkbox of a result; once saved, it links to the reading list instead.
+function SelectForReadingList({
+  article,
+  isSaved,
+  isSelected,
+  onToggle,
+}: {
+  article: Article;
+  isSaved: boolean;
+  isSelected: boolean;
+  onToggle: (article: Article, checked: boolean) => void;
+}) {
+  if (isSaved) {
+    return <MetaItem label="Reading list">On your reading list</MetaItem>;
+  }
+  return (
+    <MetaItem label="Select">
+      <Field orientation="horizontal" className="mt-1 w-auto">
+        <Checkbox
+          id={`select-${article.id}`}
+          checked={isSelected}
+          onCheckedChange={(checked) => onToggle(article, checked === true)}
+        />
+        <FieldLabel
+          htmlFor={`select-${article.id}`}
+          className="font-normal text-muted-foreground"
+        >
+          Mark for reading list
+        </FieldLabel>
+      </Field>
+    </MetaItem>
+  );
+}
+
+// The keywords, semantic query and date range these results were searched with, from the URL.
+function SearchSummary({
+  search,
+  totalCount,
+}: {
+  search: string;
+  totalCount: number;
+}) {
+  const params = new URLSearchParams(search);
+  const keywords = params.get("keywords")?.trim();
+  const semanticQuery = params.get("semantic_query")?.trim();
+  const from = params.get("from_date");
+  const to = params.get("to_date");
+
+  return (
+    <div className="flex flex-wrap pt-2 gap-2 text-sm">
+      {semanticQuery ? (
+        <Badge
+          variant="secondary"
+          title={semanticQuery}
+          className="max-w-xs"
+        >
+          <SparklesIcon />
+          <span className="truncate">“{semanticQuery}”</span>
+        </Badge>
+      ) : (
+        <Badge variant="secondary" title="Keywords">
+          <SearchIcon />
+          {keywords ? `“${keywords}”` : "No keywords"}
+        </Badge>
+      )}
+      {from && to && semanticQuery && (
+        // The semantic search only filters by year.
+        <Badge
+          variant="secondary"
+          title="The semantic search only filters by year"
+        >
+          <CalendarIcon />
+          {from.slice(0, 4) === to.slice(0, 4)
+            ? from.slice(0, 4)
+            : `${from.slice(0, 4)} – ${to.slice(0, 4)}`}
+        </Badge>
+      )}
+      {from && to && !semanticQuery && (
+        <Badge variant="secondary" title="Date range">
+          <CalendarIcon />
+          {format(new Date(from), "d MMM yyyy")} –{" "}
+          {format(new Date(to), "d MMM yyyy")}
+        </Badge>
+      )}
+      <span className="text-muted-foreground">
+        {totalCount.toLocaleString("en")}{" "}
+        {totalCount === 1 ? "result" : "results"}
+      </span>
+    </div>
+  );
 }
 
 export default function Results() {
@@ -87,12 +200,19 @@ export default function Results() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isPending, startTransition] = useTransition();
-  const [openingPdf, setOpeningPdf] = useState<Record<string, boolean>>({});
-  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const { setRowSelection, setSearchTerm, setDate, isInitialized } =
-    useSearch();
+  const [selectedArticles, setSelectedArticles] = useState<
+    Map<string, Article>
+  >(new Map());
+  const [isSaving, setIsSaving] = useState(false);
+  const { savedArticleIds, saveArticles } = useReadingList();
+  const {
+    setRowSelection,
+    setSearchTerm,
+    setSemanticQuery,
+    setSearchMode,
+    setDate,
+    isInitialized,
+  } = useSearch();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // The list scrolls in its own container, which <ScrollRestoration> (window
@@ -104,7 +224,7 @@ export default function Results() {
       () => {
         if (!cancelled) scrollAreaRef.current?.scrollTo({ top: 0 });
       },
-      () => {},
+      () => { },
     );
     return () => {
       cancelled = true;
@@ -124,7 +244,16 @@ export default function Results() {
     if (journalIds.length === 0) return;
 
     setRowSelection(Object.fromEntries(journalIds.map((id) => [id, true])));
-    setSearchTerm(params.get("keywords") || "");
+    // A semantic search keeps the search term the user had typed before.
+    const semanticQuery = params.get("semantic_query") || "";
+    if (semanticQuery) {
+      setSemanticQuery(semanticQuery);
+      setSearchMode("semantic");
+    } else if (params.get("keywords")) {
+      setSearchTerm(params.get("keywords") || "");
+      setSearchMode("keywords");
+    }
+    // Without either, the mode can't be told from the URL and stays as it is.
 
     const from = params.get("from_date");
     const to = params.get("to_date");
@@ -135,43 +264,26 @@ export default function Results() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, isInitialized]);
 
-  const handleOpenPdfInNewTab = async (article: Article) => {
-    if (!article.pdf_url) return;
-    setOpeningPdf((prev) => ({ ...prev, [article.id]: true }));
-    try {
-      window.open(article.pdf_url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "An unknown error occurred.";
-      console.error("Error opening the PDF:", error);
-      toast.error(errorMessage, { position: "top-center" });
-    } finally {
-      setOpeningPdf((prev) => ({ ...prev, [article.id]: false }));
-    }
-  };
-
-  const handleOpenLandingPage = (url: string) => {
-    window.open(url, "_blank");
-  };
-
-  const toggleSelectedArticle = (articleId: string, checked: boolean) => {
-    setSelectedArticleIds((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(articleId);
+  // Selection is kept across pages, so it stores the articles themselves.
+  // Articles already on the reading list can't be selected.
+  const toggleSelectedArticle = (article: Article, checked: boolean) => {
+    setSelectedArticles((prev) => {
+      const next = new Map(prev);
+      if (checked && !savedArticleIds.has(article.id)) {
+        next.set(article.id, article);
       } else {
-        next.delete(articleId);
+        next.delete(article.id);
       }
       return next;
     });
   };
 
   const selectAllCurrentPage = (articles: Article[]) => {
-    setSelectedArticleIds((prev) => {
-      const next = new Set(prev);
+    setSelectedArticles((prev) => {
+      const next = new Map(prev);
       articles.forEach((article) => {
-        if (article.has_fulltext) {
-          next.add(article.id);
+        if (!savedArticleIds.has(article.id)) {
+          next.set(article.id, article);
         }
       });
       return next;
@@ -179,62 +291,28 @@ export default function Results() {
   };
 
   const clearAllSelections = () => {
-    setSelectedArticleIds(new Set());
+    setSelectedArticles(new Map());
   };
 
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const handleBulkDownload = async (articles: Article[]) => {
-    const selectedArticles = articles.filter((article) =>
-      selectedArticleIds.has(article.id),
-    );
-
-    if (selectedArticles.length === 0) {
-      toast.error("No downloadable PDFs selected.", {
-        position: "top-center",
-      });
-      return;
-    }
-
-    const workIds = selectedArticles.map((article) => article.id).join(",");
-    const titles = selectedArticles.map((article) => article.title);
-    const params = new URLSearchParams({
-      work_ids: workIds,
-      titles: JSON.stringify(titles),
-    });
-
-    setIsDownloading(true);
+  const handleSaveSelected = async () => {
+    setIsSaving(true);
     try {
-      const response = await apiFetch<Blob>(
-        `/api/bulk-download?${params.toString()}`,
-        {
-          responseType: "blob",
-        },
-      );
-
-      const objectUrl = URL.createObjectURL(response);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = "papers.zip";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(objectUrl);
-
+      const { added, skipped } = await saveArticles([
+        ...selectedArticles.values(),
+      ]);
+      setSelectedArticles(new Map());
       toast.success(
-        `${selectedArticles.length} Dateien wurden als ZIP heruntergeladen.`,
-        {
-          position: "top-center",
-        },
+        `${added} ${added === 1 ? "paper" : "papers"} added to your reading list` +
+        (skipped > 0 ? ` (${skipped} already on it).` : "."),
+        { position: "top-center" },
       );
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Bulk-Download fehlgeschlagen.";
-      toast.error(message, { position: "top-center" });
+      toast.error(
+        error instanceof Error ? error.message : "Could not save the papers.",
+        { position: "top-center" },
+      );
     } finally {
-      setIsDownloading(false);
+      setIsSaving(false);
     }
   };
 
@@ -254,8 +332,15 @@ export default function Results() {
     );
   }
 
+  // Navigations run as transitions, so an already shown <Suspense> keeps the old
+  // results until the new ones arrive and the page seems frozen. A new search
+  // (e.g. switching profiles) remounts it to show the skeleton instead; paging
+  // keeps it and dims the old page (see isPending).
+  const searchKey = new URLSearchParams(location.search);
+  searchKey.delete("page");
+
   return (
-    <Suspense fallback={<SkeletonList />}>
+    <Suspense key={searchKey.toString()} fallback={<SkeletonList />}>
       <Await resolve={articlePromise}>
         {(resolvedData) => {
           const { articles, totalCount, perPage, currentPage } = resolvedData;
@@ -272,12 +357,13 @@ export default function Results() {
                   transition: "opacity 1s",
                 }}
               >
-                <div className="space-y-4 pt-4 pr-2">
+                <div className="space-y-4 pb-4 pr-2">
+
                   <div className="sticky top-2 z-10 flex items-center justify-between rounded-lg border bg-background/80 px-4 py-3 shadow-sm backdrop-blur">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground">
-                        {selectedArticleIds.size > 0
-                          ? `${selectedArticleIds.size} selected`
+                        {selectedArticles.size > 0
+                          ? `${selectedArticles.size} selected`
                           : "Nothing selected"}
                       </p>
                       <Button
@@ -292,35 +378,53 @@ export default function Results() {
                         variant="outline"
                         size="sm"
                         onClick={clearAllSelections}
-                        disabled={selectedArticleIds.size === 0}
+                        disabled={selectedArticles.size === 0}
                       >
                         Clear selection
                       </Button>
                     </div>
                     <Button
                       size="sm"
-                      onClick={() => handleBulkDownload(articles)}
-                      disabled={selectedArticleIds.size === 0 || isDownloading}
+                      onClick={handleSaveSelected}
+                      disabled={selectedArticles.size === 0 || isSaving}
                     >
-                      {isDownloading ? (
+                      {isSaving ? (
                         <Spinner data-icon="inline-start" />
                       ) : (
-                        <Download />
+                        <BookmarkPlusIcon />
                       )}
-                      Bulk Download
+                      Save to reading list
                     </Button>
                   </div>
-
+                  <SearchSummary
+                    search={location.search}
+                    totalCount={totalCount}
+                  />
                   {articles.length > 0 ? (
                     articles.map((article) => (
                       <ArticleCard
                         key={article.id}
                         article={article}
-                        openingPdf={openingPdf[article.id] || false}
-                        isSelected={selectedArticleIds.has(article.id)}
-                        onToggleSelect={toggleSelectedArticle}
-                        onOpenPdf={handleOpenPdfInNewTab}
-                        onOpenLandingPage={handleOpenLandingPage}
+                        leftTop={
+                          <>
+                            <SelectForReadingList
+                              article={article}
+                              isSaved={savedArticleIds.has(article.id)}
+                              isSelected={selectedArticles.has(article.id)}
+                              onToggle={toggleSelectedArticle}
+                            />
+                            {article.low_value && (
+                              <MetaItem
+                                label="Type"
+                                description="Title, authors, page count, abstract and references suggest a commentary, editorial, news piece or similar. It is left out of the monthly digest."
+                              >
+                                <Badge variant="outline" className="mt-1">
+                                  Likely commentary/editorial
+                                </Badge>
+                              </MetaItem>
+                            )}
+                          </>
+                        }
                       />
                     ))
                   ) : (

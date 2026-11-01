@@ -1,18 +1,18 @@
-import { ChevronDown, Download, ExternalLinkIcon } from "lucide-react";
+import { ChevronDown, ExternalLinkIcon, LockOpenIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import type { SavedArticleData } from "~/context/reading-list-context";
 import { formatDateForDisplay } from "~/lib/date-utils";
 import { cn } from "~/lib/utils";
-import type { Article } from "~/routes/results";
-import { Checkbox } from "./ui/checkbox";
-import { Field, FieldLabel } from "./ui/field";
+import type { OpenAccess } from "~/routes/results";
 
 type ArticleCardProps = {
-  article: Article;
-  openingPdf: boolean;
-  isSelected: boolean;
-  onToggleSelect: (articleId: string, checked: boolean) => void;
-  onOpenPdf: (article: Article) => void;
-  onOpenLandingPage: (url: string) => void;
+  article: SavedArticleData;
+  // Page-specific entries at the top of the left column (e.g. selection).
+  leftTop?: React.ReactNode;
+  // Page-specific entries at the bottom of the left column.
+  leftBottom?: React.ReactNode;
 };
 
 // Fallback when the meta column is not beside the abstract (stacked layout).
@@ -20,16 +20,61 @@ const DEFAULT_CLAMP_LINES = 6;
 // "Show more" button: mt-3 (12px) + text-sm line height (20px).
 const TOGGLE_BUTTON_HEIGHT = 32;
 
-const actionLinkClass =
-  "inline-flex items-center gap-1.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline disabled:pointer-events-none disabled:opacity-50";
-
 type MetaField = {
   label: string;
   description: string;
   value: React.ReactNode;
 };
 
-function MetaItem({
+// A small outlined button, as wide as its column, for actions next to plain
+// meta data, so clickable entries stand out from the ones that are only text.
+export function ActionButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className={cn("mt-1 w-full justify-start font-normal", className)}
+      {...props}
+    />
+  );
+}
+
+// Lucide's external-link icon is bottom-heavy (its box spans y 6-21 of 24), so it
+// sits about 1px low next to the text; lift it to the text's optical centre.
+export function ExternalIcon() {
+  return <ExternalLinkIcon className="-translate-y-px" />;
+}
+
+// Opens `href` in a new tab; without one the button is disabled.
+export function ActionLink({
+  href,
+  className,
+  children,
+}: {
+  href: string | null;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (!href) {
+    return (
+      <ActionButton className={className} disabled>
+        {children}
+      </ActionButton>
+    );
+  }
+  return (
+    <ActionButton className={className} asChild>
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    </ActionButton>
+  );
+}
+
+export function MetaItem({
   label,
   description,
   children,
@@ -48,7 +93,7 @@ function MetaItem({
   );
 }
 
-function buildMetaFields(article: Article): MetaField[] {
+function buildMetaFields(article: SavedArticleData): MetaField[] {
   const fields: MetaField[] = [
     {
       label: "Journal",
@@ -92,11 +137,8 @@ function buildMetaFields(article: Article): MetaField[] {
 
 export function ArticleCard({
   article,
-  openingPdf,
-  isSelected,
-  onToggleSelect,
-  onOpenPdf,
-  onOpenLandingPage,
+  leftTop,
+  leftBottom,
 }: ArticleCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -139,51 +181,36 @@ export function ArticleCard({
   return (
     <div className="rounded-lg border bg-card p-6 shadow-sm">
       <div className="flex flex-col gap-6 lg:flex-row">
-        <dl className="shrink-0 space-y-3 border-b pb-4 text-sm lg:w-46 lg:border-0 lg:pb-0">
-          <MetaItem label="Select">
-            <Field orientation="horizontal" className="mt-1 w-auto">
-              <Checkbox
-                id={`select-${article.id}`}
-                checked={isSelected}
-                disabled={!article.has_fulltext}
-                onCheckedChange={(checked) =>
-                  onToggleSelect(article.id, checked === true)
-                }
-              />
-              <FieldLabel
-                htmlFor={`select-${article.id}`}
-                className={cn(
-                  "font-normal text-muted-foreground",
-                  !article.has_fulltext && "opacity-50",
-                )}
-                title="Full text is required to select an article"
-              >
-                Mark for bulk download
-              </FieldLabel>
-            </Field>
-          </MetaItem>
-          <MetaItem label="PDF">
-            <button
-              type="button"
-              onClick={() => onOpenPdf(article)}
-              disabled={openingPdf || !article.pdf_url}
-              className={cn(actionLinkClass, openingPdf && "animate-pulse")}
-            >
-              <Download className="size-4" />
-              Download PDF
-            </button>
-          </MetaItem>
-          <MetaItem label="Publisher">
-            <button
-              type="button"
-              onClick={() => onOpenLandingPage(article.pdf_landing_page)}
-              className={actionLinkClass}
-            >
-              <ExternalLinkIcon className="size-4" />
-              Open publisher page
-            </button>
-          </MetaItem>
-        </dl>
+        {/* Stretches to the card's height, so leftBottom sits at its bottom. */}
+        <div className="flex shrink-0 flex-col gap-3 border-b pb-4 text-sm lg:w-46 lg:border-0 lg:pb-0">
+          <dl className="space-y-3">
+            {leftTop}
+            {article.open_access && (
+              <MetaItem label="Open Access">
+                <ActionLink href={article.open_access.url ?? article.url}>
+                  <LockOpenIcon />
+                  Open Access
+                </ActionLink>
+              </MetaItem>
+            )}
+            <MetaItem label="Library">
+              <ActionLink href={article.library_url}>
+                <ExternalIcon />
+                Find at library
+              </ActionLink>
+            </MetaItem>
+            <MetaItem label="Publisher">
+              {/* The DOI link resolves to the publisher's page. */}
+              <ActionLink href={article.doi ?? article.url}>
+                <ExternalIcon />
+                Open publisher page
+              </ActionLink>
+            </MetaItem>
+          </dl>
+          {leftBottom && (
+            <div className="flex flex-col gap-3 lg:mt-auto">{leftBottom}</div>
+          )}
+        </div>
 
         <div
           className={cn(

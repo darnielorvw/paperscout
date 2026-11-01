@@ -1,13 +1,16 @@
 import json
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from html import escape
+from pathlib import Path
 from typing import List
+from urllib.parse import urlencode
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -18,24 +21,35 @@ from sqlmodel import Session, SQLModel, select
 from config import settings
 from database import models
 from database.database import engine, get_session
+from lib import log_redaction
 from schemas import (
     ChangeEmailRequest,
     ChangePasswordRequest,
     DeleteAccountRequest,
     JournalImportByName,
+    PaperPdfCreate,
+    PaperPdfUploadToken,
     ProfileCreate,
     ProfileNotificationsUpdate,
     ProfileSettings,
+    SavedArticlesCreate,
+    SavedArticleUpdate,
     UserCreate,
     UserPublic,
 )
-from services import auth_service, user_service
+from services import auth_service, blob_service, user_service
 from services.digest_service import DigestService
-from services.download_service import DownloadService
 from services.mail_service import MailService
-from services.search_service import SearchService
+from services.search_service import SearchService, openurl_resolver_for
+from services.site_import_service import IMPORTERS
 
 scheduler = AsyncIOScheduler()
+
+JOURNALS_SEED_PATH = Path(__file__).resolve().parent / "database" / "journals_seed.json"
+
+# OpenAlex and Springer take the API key as a query parameter, which httpx
+# would otherwise write to the log with every request URL.
+log_redaction.install()
 
 
 @asynccontextmanager
@@ -43,6 +57,27 @@ async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
 
     with engine.connect() as conn:
+        # A fresh database (e.g. on another machine) gets the journal list from
+        # the versioned seed file. Only an empty table is filled, so journals
+        # added or removed later aren't overwritten on every start.
+        if conn.exec_driver_sql("SELECT COUNT(*) FROM journals").scalar() == 0:
+            journals = json.loads(JOURNALS_SEED_PATH.read_text(encoding="utf-8"))
+            for journal in journals:
+                conn.exec_driver_sql(
+                    "INSERT INTO journals (id, name, issn, publisher, homepage, external_api) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        journal["id"],
+                        journal["name"],
+                        journal["issn"],
+                        journal["publisher"],
+                        journal["homepage"],
+                        journal["external_api"],
+                    ),
+                )
+            conn.commit()
+            print(f"🌱 Seeded {len(journals)} journals.", flush=True)
+
         existing_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
         if "email_notifications" not in existing_columns:
             conn.exec_driver_sql(
@@ -68,13 +103,43 @@ async def lifespan(app: FastAPI):
             )
             conn.commit()
 
-        # Elsevier journals whose abstracts only Scopus delivers. Only fills
-        # journals without an API yet, so a manual change isn't overwritten.
+        # Scopus is no longer used; its journals go back to Crossref/OpenAlex only.
         conn.exec_driver_sql(
-            "UPDATE journals SET external_api = 'scopus' "
-            "WHERE external_api IS NULL AND issn IN ("
-            "'2214-8043', '1472-8117', '0092-6566', '2352-1546', "
-            "'0899-8256', '0167-2681', '0022-1031')"
+            "UPDATE journals SET external_api = NULL WHERE external_api = 'scopus'"
+        )
+        conn.commit()
+
+        # Reading list entries no longer have a note (it was NOT NULL without a
+        # default, so a leftover column would make every insert fail) nor a
+        # publisher link, which was always the DOI link.
+        saved_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(savedarticle)")}
+        for column in ("note", "pdf_landing_page"):
+            if column in saved_columns:
+                conn.exec_driver_sql(f"ALTER TABLE savedarticle DROP COLUMN {column}")
+                conn.commit()
+
+        # Papers without a DOI link their page at the publisher instead.
+        if "url" not in saved_columns:
+            conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN url VARCHAR")
+            conn.commit()
+
+        # Where the free version of an open access paper is.
+        if "open_access" not in saved_columns:
+            conn.exec_driver_sql("ALTER TABLE savedarticle ADD COLUMN open_access JSON")
+            conn.commit()
+
+        # Papers imported from a journal website may have a DOI.
+        site_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(sitearticle)")}
+        if "doi" not in site_columns:
+            conn.exec_driver_sql("ALTER TABLE sitearticle ADD COLUMN doi VARCHAR")
+            conn.commit()
+
+        # The International Journal of Coaching Psychology is on neither Crossref
+        # nor OpenAlex; its papers come from its website (see site_import_service).
+        conn.exec_driver_sql(
+            "INSERT OR IGNORE INTO journals (id, name, issn, publisher, homepage, external_api) "
+            "VALUES ('ijcp', 'International Journal of Coaching Psychology', '2634-7946', "
+            "'National Wellbeing Service', 'https://ijcp.nationalwellbeingservice.com/', NULL)"
         )
         conn.commit()
 
@@ -136,6 +201,20 @@ async def lifespan(app: FastAPI):
             conn.exec_driver_sql("ALTER TABLE profile_new RENAME TO profile")
             conn.commit()
 
+        # Profiles can run a semantic search instead of the keyword search. After
+        # the rebuild above, which would drop the columns again.
+        profile_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(profile)")}
+        if "semantic_query" not in profile_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE profile ADD COLUMN semantic_query VARCHAR NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+        if "search_mode" not in profile_columns:
+            conn.exec_driver_sql(
+                "ALTER TABLE profile ADD COLUMN search_mode VARCHAR NOT NULL DEFAULT 'keywords'"
+            )
+            conn.commit()
+
     print("🚀 Database has been checked and is ready!", flush=True)
 
     scheduler.add_job(
@@ -149,7 +228,6 @@ async def lifespan(app: FastAPI):
 
     yield  # The FastAPI app runs here
     scheduler.shutdown()
-    await download_service.aclose()
 
     # ---- ON APP SHUTDOWN ----
     print("🛑 Server is shutting down...", flush=True)
@@ -169,11 +247,14 @@ app.add_middleware(
 )
 
 search_service = SearchService()
-download_service = DownloadService()
 mail_service = MailService()
-digest_service = DigestService(search_service, mail_service, download_service)
+digest_service = DigestService(search_service, mail_service)
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+ALLOWED_EMAIL_DETAIL = (
+    "Only email addresses of the University of Münster (@uni-muenster.de) "
+    "or FH Südwestfalen (@fh-swf.de) can be used."
+)
 
 
 @app.post("/api/register", status_code=202)
@@ -183,6 +264,9 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
     The account is only created once the link is clicked (see /api/verify-email).
     This prevents bots from flooding the DB with an unlimited number of fake registrations.
     """
+    if not user_service.is_allowed_email(user.email):
+        raise HTTPException(status_code=400, detail=ALLOWED_EMAIL_DETAIL)
+
     if auth_service.get_user_by_email(session, user.email):
         raise HTTPException(status_code=400, detail="Email already registered.")
 
@@ -215,12 +299,22 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
 
 @app.get("/api/verify-email")
 async def verify_email(token: str, session: Session = Depends(get_session)):
-    """Completes registration and only now creates the user in the DB."""
-    payload = auth_service.decode_email_verification_token(token)
+    """Completes registration and only now creates the user in the DB.
+
+    Always redirects to the frontend, since this is opened from an email and
+    a raw JSON error would be a dead end for the user. It's also idempotent:
+    mail scanners (e.g. Microsoft Safe Links) often open the link before the
+    user does, so a second click must still land on the login page.
+    """
+    login_url = f"{settings.FRONTEND_URL}/login"
+    try:
+        payload = auth_service.decode_email_verification_token(token)
+    except HTTPException as exc:
+        return RedirectResponse(url=f"{login_url}?{urlencode({'verify_error': exc.detail})}")
     email = payload["email"]
 
     if auth_service.get_user_by_email(session, email):
-        raise HTTPException(status_code=400, detail="Email already registered.")
+        return RedirectResponse(url=f"{login_url}?verified=true")
 
     new_user = user_service.create_db_user_from_hash(
         session,
@@ -231,7 +325,7 @@ async def verify_email(token: str, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(new_user)
 
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?verified=true")
+    return RedirectResponse(url=f"{login_url}?verified=true")
 
 
 @app.post("/api/login")
@@ -273,6 +367,8 @@ async def get_journals(
                 "publisher": journal.publisher,
                 "homepage_url": journal.homepage,
                 "external_api": journal.external_api,
+                # Papers only on the journal's own website aren't on OpenAlex.
+                "semantic_search": journal.issn not in IMPORTERS,
             }
         )
 
@@ -367,27 +463,32 @@ async def delete_journal(
 async def search_articles(
     journal_ids: List[str] = Query([]),
     keywords: str = Query(""),
+    semantic_query: str = Query("", max_length=2000),
     from_date: str = Query(...),
     to_date: str = Query(...),
     page: int = Query(1),
     session: Session = Depends(get_session),
-    _: models.User = Depends(auth_service.get_current_user),
+    current_user: models.User = Depends(auth_service.get_current_user),
 ):
     """Searches for scientific articles in the selected journals."""
     # journal_ids are OpenAlex source ids; Crossref needs the ISSNs.
-    statement = select(models.Journals.issn, models.Journals.external_api).where(
-        models.Journals.id.in_(journal_ids)
-    )
+    statement = select(
+        models.Journals.issn, models.Journals.external_api, models.Journals.id
+    ).where(models.Journals.id.in_(journal_ids))
     journals = session.exec(statement).all()
 
     data = await search_service.search(
-        issns=[issn for issn, _ in journals if issn],
-        external_apis={issn: api for issn, api in journals if issn and api},
+        issns=[issn for issn, _, _ in journals if issn],
+        external_apis={issn: api for issn, api, _ in journals if issn and api},
         keywords=keywords,
+        semantic_query=semantic_query,
+        source_ids={issn: journal_id for issn, _, journal_id in journals if issn},
         from_date=from_date,
         to_date=to_date,
         limit=25,
         page=page,
+        resolver=openurl_resolver_for(current_user.email),
+        session=session,
     )
     return data
 
@@ -428,8 +529,25 @@ def _profile_response(profile: models.Profile, journal_ids: list[str] | None = N
         "name": profile.profile_name,
         "rowSelection": dict.fromkeys(journal_ids, True),
         "searchTerm": profile.searchTerm,
+        "semanticQuery": profile.semantic_query,
+        "searchMode": profile.search_mode,
         "emailNotifications": profile.email_notifications,
     }
+
+
+def _profile_queries(settings: ProfileSettings) -> dict:
+    """The profile's query fields; only the query of its search mode is kept."""
+    semantic = settings.searchMode == "semantic"
+    return {
+        "searchTerm": "" if semantic else settings.searchTerm,
+        "semantic_query": settings.semanticQuery if semantic else "",
+        "search_mode": settings.searchMode,
+    }
+
+
+def _email_notifications(settings: ProfileSettings) -> bool:
+    """The semantic search only filters by year, so it has no monthly email."""
+    return settings.emailNotifications and settings.searchMode == "keywords"
 
 
 @app.post("/api/profiles", status_code=201)
@@ -445,8 +563,8 @@ async def create_profile(
     new_profile = models.Profile(
         profile_name=profile_data.name,
         user_id=current_user.id,
-        searchTerm=profile_data.settings.searchTerm,
-        email_notifications=profile_data.settings.emailNotifications,
+        **_profile_queries(profile_data.settings),
+        email_notifications=_email_notifications(profile_data.settings),
     )
 
     try:
@@ -495,8 +613,9 @@ async def update_profile(
 
     journal_ids = _valid_journal_ids(session, settings.rowSelection)
 
-    profile.searchTerm = settings.searchTerm
-    profile.email_notifications = settings.emailNotifications
+    for field, value in _profile_queries(settings).items():
+        setattr(profile, field, value)
+    profile.email_notifications = _email_notifications(settings)
     session.add(profile)
     _set_profile_journals(session, profile.id, journal_ids)
     session.commit()
@@ -516,6 +635,11 @@ async def update_profile_notifications(
     profile = session.get(models.Profile, profile_id)
     if not profile or profile.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Profile not found.")
+    if payload.emailNotifications and profile.search_mode == "semantic":
+        raise HTTPException(
+            status_code=400,
+            detail="Semantic searches filter by year only, so they have no monthly email.",
+        )
 
     profile.email_notifications = payload.emailNotifications
     session.add(profile)
@@ -542,6 +666,377 @@ async def delete_profile(
     session.commit()
 
 
+def _saved_article_response(
+    saved: models.SavedArticle, pdf_url: str | None = None, pdf_requested: bool = False
+) -> dict:
+    """A reading list entry: the saved search result plus the user's own data."""
+    return {
+        "id": saved.id,
+        "article": {
+            "id": saved.article_id,
+            "title": saved.title,
+            "author": saved.author,
+            "journal_name": saved.journal_name,
+            "publication_date": saved.publication_date,
+            "journal_publication_date": saved.journal_publication_date,
+            "issue": saved.issue,
+            "doi": saved.doi,
+            "url": saved.url,
+            "library_url": saved.library_url,
+            "abstract": saved.abstract,
+            "topic": saved.topic,
+            "open_access": saved.open_access,
+        },
+        "isRead": saved.is_read,
+        # SQLite hands the UTC timestamp back without a timezone.
+        "savedAt": saved.saved_at.replace(tzinfo=saved.saved_at.tzinfo or timezone.utc).isoformat(),
+        "pdfUrl": pdf_url,
+        "pdfRequested": pdf_requested,
+    }
+
+
+def _saved_article_responses(
+    session: Session, user: models.User, saved: List[models.SavedArticle]
+) -> List[dict]:
+    """Reading list entries, each with its uploaded PDF and whether the user
+    asked for one."""
+    article_ids = [s.article_id for s in saved]
+    pdf_urls = dict(
+        session.exec(
+            select(models.PaperPdf.article_id, models.PaperPdf.url).where(
+                models.PaperPdf.article_id.in_(article_ids)
+            )
+        ).all()
+    )
+    requested = set(
+        session.exec(
+            select(models.PaperRequest.article_id).where(
+                models.PaperRequest.user_id == user.id,
+                models.PaperRequest.article_id.in_(article_ids),
+            )
+        ).all()
+    )
+    return [
+        _saved_article_response(s, pdf_urls.get(s.article_id), s.article_id in requested)
+        for s in saved
+    ]
+
+
+def _get_own_saved_article(
+    session: Session, saved_id: int, user: models.User
+) -> models.SavedArticle:
+    saved = session.get(models.SavedArticle, saved_id)
+    if not saved or saved.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Reading list entry not found.")
+    return saved
+
+
+@app.get("/api/saved-articles")
+async def get_saved_articles(
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Returns the current user's reading list, most recently saved first."""
+    saved = session.exec(
+        select(models.SavedArticle)
+        .where(models.SavedArticle.user_id == current_user.id)
+        .order_by(models.SavedArticle.saved_at.desc(), models.SavedArticle.id.desc())
+    ).all()
+    return {"results": _saved_article_responses(session, current_user, saved)}
+
+
+@app.post("/api/saved-articles", status_code=201)
+async def save_articles(
+    payload: SavedArticlesCreate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Adds search results to the reading list. Articles already on it are skipped."""
+    existing = set(
+        session.exec(
+            select(models.SavedArticle.article_id).where(
+                models.SavedArticle.user_id == current_user.id
+            )
+        ).all()
+    )
+
+    added: List[models.SavedArticle] = []
+    for article in payload.articles:
+        if article.id in existing:
+            continue
+        existing.add(article.id)
+        values = article.model_dump(exclude={"id"})
+        added.append(models.SavedArticle(user_id=current_user.id, article_id=article.id, **values))
+
+    try:
+        session.add_all(added)
+        session.commit()
+    except IntegrityError:
+        # Another request saved one of them in the meantime.
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Some of these articles were just saved elsewhere. Please reload.",
+        ) from None
+
+    for saved in added:
+        session.refresh(saved)
+    return {
+        "results": _saved_article_responses(session, current_user, added),
+        "skipped": len(payload.articles) - len(added),
+    }
+
+
+@app.patch("/api/saved-articles/{saved_id}")
+async def update_saved_article(
+    saved_id: int,
+    payload: SavedArticleUpdate,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Marks a reading list entry as read or unread."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    saved.is_read = payload.isRead
+    session.add(saved)
+    session.commit()
+    session.refresh(saved)
+    return _saved_article_responses(session, current_user, [saved])[0]
+
+
+@app.delete("/api/saved-articles/{saved_id}", status_code=204)
+async def delete_saved_article(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Removes an article from the reading list, along with a PDF request for it."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    _delete_paper_requests(session, current_user, [saved.article_id])
+    session.delete(saved)
+    session.commit()
+
+
+@app.delete("/api/saved-articles", status_code=204)
+async def delete_saved_articles(
+    ids: List[int] = Query(..., max_length=500),
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Removes several articles from the reading list at once. Ids that aren't
+    on the user's own list are ignored."""
+    article_ids = session.exec(
+        select(models.SavedArticle.article_id).where(
+            models.SavedArticle.user_id == current_user.id,
+            models.SavedArticle.id.in_(ids),
+        )
+    ).all()
+    _delete_paper_requests(session, current_user, list(article_ids))
+    session.exec(
+        sql_delete(models.SavedArticle).where(
+            models.SavedArticle.user_id == current_user.id,
+            models.SavedArticle.id.in_(ids),
+        )
+    )
+    session.commit()
+
+
+def _delete_paper_requests(session: Session, user: models.User, article_ids: List[str]) -> None:
+    if article_ids:
+        session.exec(
+            sql_delete(models.PaperRequest).where(
+                models.PaperRequest.user_id == user.id,
+                models.PaperRequest.article_id.in_(article_ids),
+            )
+        )
+
+
+async def _notify_admins_of_pdf_request(
+    session: Session, user: models.User, saved: models.SavedArticle
+) -> None:
+    """Mails all admins that a user is asking for a paper's PDF."""
+    title = escape(saved.title or saved.article_id)
+    journal = escape(saved.journal_name or "")
+    doi_link = escape(saved.doi or saved.url or f"https://doi.org/{saved.article_id}")
+    admin_link = escape(f"{settings.FRONTEND_URL}/admin/pdf-requests")
+    html = (
+        "<div style='font-family:Arial,Helvetica,sans-serif;max-width:640px;'>"
+        "<h1 style='font-size:20px;'>New PDF request</h1>"
+        f"<p style='font-size:14px;'>{escape(user.name)} ({escape(user.email)}) has no access "
+        "to this paper through the library and asks for its PDF:</p>"
+        f"<p style='font-size:16px;font-weight:600;margin-bottom:4px;'>{title}</p>"
+        f"<p style='color:#555;font-size:13px;margin-top:0;'>{journal} &middot; "
+        f"<a href='{doi_link}'>{doi_link}</a></p>"
+        f"<p style='font-size:14px;'><a href='{admin_link}'>Upload the PDF in PaperScout</a></p>"
+        "</div>"
+    )
+    for email in user_service.get_admin_emails(session):
+        await mail_service.send_email(to=email, subject=f"PDF request: {title}", html_body=html)
+
+
+@app.post("/api/saved-articles/{saved_id}/pdf-request")
+async def request_paper_pdf(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Asks the admins for the PDF of a paper on the reading list, for papers the
+    library has no access to. Does nothing if a PDF is already there."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    has_pdf = session.get(models.PaperPdf, saved.article_id) is not None
+    if not has_pdf:
+        session.add(models.PaperRequest(user_id=current_user.id, article_id=saved.article_id))
+        try:
+            session.commit()
+        except IntegrityError:
+            # Already requested.
+            session.rollback()
+        else:
+            await _notify_admins_of_pdf_request(session, current_user, saved)
+    return _saved_article_responses(session, current_user, [saved])[0]
+
+
+@app.delete("/api/saved-articles/{saved_id}/pdf-request")
+async def cancel_paper_pdf_request(
+    saved_id: int,
+    session: Session = Depends(get_session),
+    current_user: models.User = Depends(auth_service.get_current_user),
+):
+    """Withdraws the user's PDF request for a paper on the reading list."""
+    saved = _get_own_saved_article(session, saved_id, current_user)
+    _delete_paper_requests(session, current_user, [saved.article_id])
+    session.commit()
+    return _saved_article_responses(session, current_user, [saved])[0]
+
+
+@app.get("/api/admin/pdf-requests")
+async def list_pdf_requests(
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """All requested papers, oldest request first, with who asked for them and the
+    uploaded PDF if there is one, followed by uploaded PDFs without requests.
+    Admin only."""
+    rows = session.exec(
+        select(models.PaperRequest, models.User.email, models.SavedArticle)
+        .join(models.User, models.PaperRequest.user_id == models.User.id)
+        .join(
+            models.SavedArticle,
+            (models.SavedArticle.user_id == models.PaperRequest.user_id)
+            & (models.SavedArticle.article_id == models.PaperRequest.article_id),
+        )
+        .order_by(models.PaperRequest.requested_at, models.PaperRequest.id)
+    ).all()
+    pdfs = {pdf.article_id: pdf for pdf in session.exec(select(models.PaperPdf)).all()}
+
+    papers: dict = {}
+    for request, email, saved in rows:
+        paper = papers.get(request.article_id)
+        if paper is None:
+            pdf = pdfs.get(request.article_id)
+            requested_at = request.requested_at.replace(
+                tzinfo=request.requested_at.tzinfo or timezone.utc
+            )
+            paper = papers[request.article_id] = {
+                "articleId": request.article_id,
+                "title": saved.title,
+                "journalName": saved.journal_name,
+                "doi": saved.doi,
+                "libraryUrl": saved.library_url,
+                "requestedAt": requested_at.isoformat(),
+                "requesters": [],
+                "pdfUrl": pdf.url if pdf else None,
+            }
+        paper["requesters"].append(email)
+
+    # PDFs nobody asks for anymore (every requester removed the paper) are listed
+    # too, so they can still be replaced or deleted.
+    for pdf in pdfs.values():
+        if pdf.article_id in papers:
+            continue
+        saved = session.exec(
+            select(models.SavedArticle).where(models.SavedArticle.article_id == pdf.article_id)
+        ).first()
+        papers[pdf.article_id] = {
+            "articleId": pdf.article_id,
+            "title": saved.title if saved else None,
+            "journalName": saved.journal_name if saved else None,
+            "doi": saved.doi if saved else f"https://doi.org/{pdf.article_id}",
+            "libraryUrl": saved.library_url if saved else None,
+            "requestedAt": None,
+            "requesters": [],
+            "pdfUrl": pdf.url,
+        }
+    return {"results": list(papers.values()), "uploadsEnabled": blob_service.is_configured()}
+
+
+@app.post("/api/admin/pdf-upload-token")
+async def create_pdf_upload_token(
+    payload: PaperPdfUploadToken,
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """A short-lived token the admin's browser uploads one paper PDF to Vercel Blob
+    with. Admin only."""
+    if not blob_service.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="PDF uploads are not configured (BLOB_READ_WRITE_TOKEN missing).",
+        )
+    pathname = blob_service.paper_pathname(payload.article_id)
+    token = blob_service.create_client_token(
+        pathname,
+        allowed_content_types=["application/pdf"],
+        maximum_size_in_bytes=settings.PAPER_PDF_MAX_MB * 1024 * 1024,
+    )
+    return {"pathname": pathname, "clientToken": token}
+
+
+@app.put("/api/admin/pdfs")
+async def store_paper_pdf(
+    payload: PaperPdfCreate,
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Stores the URL of a PDF uploaded with a token from /api/admin/pdf-upload-token.
+    From then on everyone with the paper on their reading list can open it. A PDF
+    already stored for the paper is replaced. Admin only."""
+    if not blob_service.is_uploaded_blob_url(
+        payload.url, blob_service.paper_pathname(payload.article_id)
+    ):
+        raise HTTPException(status_code=400, detail="Not an uploaded PDF for this paper.")
+
+    pdf = session.get(models.PaperPdf, payload.article_id)
+    replaced_url = pdf.url if pdf and pdf.url != payload.url else None
+    if pdf is None:
+        pdf = models.PaperPdf(article_id=payload.article_id, url=payload.url)
+    else:
+        pdf.url = payload.url
+        pdf.uploaded_at = datetime.now(timezone.utc)
+    session.add(pdf)
+    session.commit()
+
+    if replaced_url:
+        await blob_service.delete_blob(replaced_url)
+    return {"articleId": pdf.article_id, "pdfUrl": pdf.url}
+
+
+@app.delete("/api/admin/pdfs", status_code=204)
+async def delete_paper_pdf(
+    # A query parameter, since DOIs contain slashes.
+    article_id: str = Query(..., min_length=1),
+    session: Session = Depends(get_session),
+    _: models.User = Depends(auth_service.require_admin),
+):
+    """Deletes a paper's uploaded PDF. Its requests stay, so the paper is open
+    again and a new PDF can be uploaded. Admin only."""
+    pdf = session.get(models.PaperPdf, article_id)
+    if pdf is None:
+        raise HTTPException(status_code=404, detail="No PDF uploaded for this paper.")
+    url = pdf.url
+    session.delete(pdf)
+    session.commit()
+    await blob_service.delete_blob(url)
+
+
 @app.api_route("/api/users/me", response_model=UserPublic, methods=["GET", "HEAD"])
 async def read_users_me(
     current_user: models.User = Depends(auth_service.get_current_user),
@@ -560,6 +1055,9 @@ async def update_email(
     since the old token was issued for the previous email address."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    if not user_service.is_allowed_email(payload.newEmail):
+        raise HTTPException(status_code=400, detail=ALLOWED_EMAIL_DETAIL)
 
     if payload.newEmail != current_user.email and auth_service.get_user_by_email(
         session, payload.newEmail
@@ -607,9 +1105,17 @@ async def delete_account(
     session: Session = Depends(get_session),
     current_user: models.User = Depends(auth_service.get_current_user),
 ):
-    """Irrevocably deletes the current user's account, including all search profiles."""
+    """Irrevocably deletes the current user's account, including all search profiles
+    and the reading list."""
     if not user_service.verify_password(payload.currentPassword, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect password.")
+
+    session.exec(
+        sql_delete(models.SavedArticle).where(models.SavedArticle.user_id == current_user.id)
+    )
+    session.exec(
+        sql_delete(models.PaperRequest).where(models.PaperRequest.user_id == current_user.id)
+    )
 
     profile_ids = session.exec(
         select(models.Profile.id).where(models.Profile.user_id == current_user.id)
@@ -626,92 +1132,13 @@ async def delete_account(
     session.commit()
 
 
-@app.get("/api/bulk-download")
-async def bulk_download(
-    work_ids: str,
-    titles: str | None = None,
-    _: models.User = Depends(auth_service.get_current_user),
+@app.post("/api/digest/send-all")
+async def send_digest_to_all(
+    _: models.User = Depends(auth_service.require_admin),
 ):
-    ids = [work_id for work_id in work_ids.split(",") if work_id]
-    if not ids:
-        raise HTTPException(status_code=400, detail="No work IDs provided.")
-
-    parsed_titles: list[str] = []
-    if titles:
-        try:
-            parsed_titles = json.loads(titles)
-        except json.JSONDecodeError:
-            parsed_titles = []
-
-    # The results carry DOIs, but the PDFs are fetched by OpenAlex ID.
-    works = await search_service.fetch_openalex_works(ids)
-    papers = [
-        (
-            works[work_id]["id"],
-            (parsed_titles[index] if index < len(parsed_titles) else None)
-            or works[work_id].get("title"),
-        )
-        for index, work_id in enumerate(ids)
-        if work_id in works
-    ]
-    archive_bytes = await download_service.download_pdf_from_openalex(papers)
-    if not archive_bytes:
-        raise HTTPException(
-            status_code=404,
-            detail="None of the selected papers has a PDF available for download.",
-        )
-
-    return StreamingResponse(
-        iter([archive_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=papers.zip"},
-    )
-
-
-@app.get("/api/digest/download")
-async def digest_download(token: str, zip_name: str = "papers"):
-    """Public download endpoint for the signed ZIP links from digest emails.
-
-    Requires no login since the link is clicked directly from the email —
-    the token itself handles the authorization (see DownloadService.create_bulk_download_token).
-    """
-    payload = download_service.decode_bulk_download_token(token)
-    work_ids: List[str] = payload.get("work_ids", [])
-    works = await search_service.fetch_openalex_works(work_ids)
-    papers = [
-        (works[work_id]["id"], works[work_id].get("title"))
-        for work_id in work_ids
-        if work_id in works
-    ]
-
-    archive_bytes = await download_service.download_pdf_from_openalex(papers)
-    if not archive_bytes:
-        raise HTTPException(
-            status_code=404,
-            detail="None of these papers has a PDF available for download.",
-        )
-
-    safe_name = download_service.sanitize_filename(zip_name, "papers")
-    return StreamingResponse(
-        iter([archive_bytes]),
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={safe_name}.zip"},
-    )
-
-
-@app.post("/api/digest/send-test")
-async def send_test_digest(
-    session: Session = Depends(get_session),
-    current_user: models.User = Depends(auth_service.get_current_user),
-):
-    """Sends the monthly digest immediately to the currently logged-in user (for testing purposes)."""
-    sent = await digest_service.send_digest_to_user(session, current_user)
-    if not sent:
-        raise HTTPException(
-            status_code=400,
-            detail="No digest sent (no search profiles found or SMTP not configured — see server logs).",
-        )
-    return {"message": f"Digest sent to {current_user.email}."}
+    """Runs the monthly digest send for all users right now. Admin only."""
+    sent_count = await digest_service.run_monthly_digest()
+    return {"message": f"Digest sent. {sent_count} email(s) sent.", "sent": sent_count}
 
 
 if __name__ == "__main__":

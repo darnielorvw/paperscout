@@ -1,0 +1,44 @@
+meta {
+  name: ScienceDirect - Abstract by DOI
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{sciencedirectBaseUrl}}/article/doi/{{doi}}?view=META_ABS
+  body: none
+  auth: none
+}
+
+params:query {
+  view: META_ABS
+}
+
+headers {
+  X-ELS-APIKey: {{scienceApiKey}}
+  Accept: application/json
+}
+
+tests {
+  test("status 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("has abstract", function() {
+    const coredata = res.getBody()["full-text-retrieval-response"].coredata;
+    expect(coredata).to.have.property("dc:description");
+  });
+}
+
+docs {
+  Liefert den Abstract eines Papers anhand seiner DOI über die ScienceDirect Article
+  Retrieval API (Elsevier). Sie liest direkt aus ScienceDirect und sollte daher auch
+  ganz neue Elsevier-Paper kennen (ungetestet, da bisher kein Zugriff).
+
+  - Der Abstract steht unter `full-text-retrieval-response.coredata["dc:description"]`.
+  - `view=META_ABS`: nur Metadaten und Abstract. `view=FULL` liefert den Volltext,
+    sofern die Institution das Paper lizenziert hat.
+  - `AUTHENTICATION_ERROR` ("Requestor configuration settings insufficient") heißt:
+    Der Key ist für ScienceDirect nicht freigeschaltet. Elsevier muss das tun.
+  - Der API-Key kommt aus `SCIENCE_DIRECT_KEY` in `bruno/.env`.
+}

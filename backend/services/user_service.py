@@ -1,6 +1,9 @@
-from passlib.context import CryptContext
-from sqlmodel import Session
+from typing import List
 
+from passlib.context import CryptContext
+from sqlmodel import Session, select
+
+from config import settings
 from database import models
 
 # Setup for password hashing (bcrypt is the standard)
@@ -17,6 +20,15 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def is_allowed_email(email: str) -> bool:
+    """Whether the email is at one of the institutions allowed to register."""
+    domain = email.rsplit("@", 1)[-1].strip().lower()
+    return any(
+        domain == allowed or domain.endswith(f".{allowed}")
+        for allowed in settings.ALLOWED_EMAIL_DOMAINS
+    )
+
+
 def create_db_user_from_hash(
     session: Session, email: str, name: str, hashed_password: str
 ) -> models.User:
@@ -27,3 +39,12 @@ def create_db_user_from_hash(
     )
     session.add(db_user)
     return db_user
+
+
+def get_admin_emails(session: Session) -> List[str]:
+    """The email addresses of all admins, e.g. for notifications."""
+    return list(
+        session.exec(
+            select(models.User.email).where(models.User.is_admin == True)  # noqa: E712
+        ).all()
+    )
