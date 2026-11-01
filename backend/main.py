@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
 from typing import List
+from urllib.parse import urlencode
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -298,12 +299,22 @@ async def register_user(user: UserCreate, session: Session = Depends(get_session
 
 @app.get("/api/verify-email")
 async def verify_email(token: str, session: Session = Depends(get_session)):
-    """Completes registration and only now creates the user in the DB."""
-    payload = auth_service.decode_email_verification_token(token)
+    """Completes registration and only now creates the user in the DB.
+
+    Always redirects to the frontend, since this is opened from an email and
+    a raw JSON error would be a dead end for the user. It's also idempotent:
+    mail scanners (e.g. Microsoft Safe Links) often open the link before the
+    user does, so a second click must still land on the login page.
+    """
+    login_url = f"{settings.FRONTEND_URL}/login"
+    try:
+        payload = auth_service.decode_email_verification_token(token)
+    except HTTPException as exc:
+        return RedirectResponse(url=f"{login_url}?{urlencode({'verify_error': exc.detail})}")
     email = payload["email"]
 
     if auth_service.get_user_by_email(session, email):
-        raise HTTPException(status_code=400, detail="Email already registered.")
+        return RedirectResponse(url=f"{login_url}?verified=true")
 
     new_user = user_service.create_db_user_from_hash(
         session,
@@ -314,7 +325,7 @@ async def verify_email(token: str, session: Session = Depends(get_session)):
     session.commit()
     session.refresh(new_user)
 
-    return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?verified=true")
+    return RedirectResponse(url=f"{login_url}?verified=true")
 
 
 @app.post("/api/login")
