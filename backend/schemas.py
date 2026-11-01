@@ -29,7 +29,7 @@ class UserLogin(BaseModel):
 class ProfileSettings(BaseModel):
     rowSelection: Dict[str, bool] = Field(default_factory=dict)
     searchTerm: str = ""
-    semanticQuery: str = Field(default="", max_length=2000)
+    semanticQuery: str = Field(default="", max_length=1500)
     searchMode: Literal["keywords", "semantic"] = "keywords"
     emailNotifications: bool = True
 

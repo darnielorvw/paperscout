@@ -11,6 +11,7 @@ import pytest
 
 from config import settings
 from services.search_service import (
+    SEMANTIC_MAX_CHARS,
     SearchService,
     _apa_from_last_names,
     _clean_doi,
@@ -419,6 +420,10 @@ class TestSemanticHits:
             "primary_location.source.id:S1|S2,type:article|review,publication_year:2025-2026"
         )
         assert params["per_page"] == 50
+
+    def test_cuts_the_query_to_what_openalex_takes(self):
+        asyncio.run(self.svc._semantic_hits(["S1"], "x" * 2000, "2026-01-01", "2026-03-31"))
+        assert self.requests[0]["search.semantic"] == "x" * SEMANTIC_MAX_CHARS
 
     def test_keeps_the_whole_year_sorted_by_score(self):
         hits, oa_by_doi, complete = asyncio.run(

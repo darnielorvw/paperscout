@@ -11,8 +11,8 @@ get {
 }
 
 params:query {
-  search.semantic: how trust in robots develops over repeated interactions
-  filter: primary_location.source.id:S4210193251|S168738021,type:article|review,publication_year:2026
+  search.semantic: This systematic review synthesised 128 peer-reviewed studies (2017 – early 2025) to examine how unplanned, disruptive events may relate to emotions, psychological and behavioural self-management processes, and sustainable career outcomes over time. Existing research insufficiently addressed how disruptive events affect careers and only a few studies considered the role of emotions. While deliberate thinking plays a key role in career shocks, psychological aspects are often overlooked since self-management is typically viewed as an aggregation of behaviours, which hinders research. Our synthesis differentiates psychological self-management (e.g. self-reflection and resilience) from behavioural self-management, including mobilising social support and goal setting. The synthesis indicates that workers’ appraisals of disruptive events may be associated with discrete emotional responses that appear to shape adaptation efforts and opportunity seeking. Initial disruption demands immediate attention, whereas subsequent stabilisation may create space to reflect on long-term career goals, pointing to career development as a gradual process. This review underscores the importance of supportive organisational resources in fostering resilience and adaptability. This study presents a framework detailing how emotions, self-management, and career outcomes reciprocally interact over time, providing insight into sustainable career development during periods of disruption. We related these findings to prior research and suggested directions for future research.
+  filter: primary_location.source.id:S4210193251|S168738021|S141527467,type:article|review,publication_year:2026
   sort: relevance_score:desc
   per_page: 50
   select: doi,title,publication_date,primary_location,relevance_score
@@ -35,7 +35,7 @@ tests {
 docs {
   Semantische Suche über die OpenAlex API, wie sie `_semantic_hits` in `search_service.py` stellt.
   
-  - `search.semantic`: Freitext, höchstens 2.000 Zeichen.
+  - `search.semantic`: Freitext, höchstens 1.500 Zeichen (länger: 400 „Search query too long“).
   - `filter`: Journals als OpenAlex-Source-IDs (hier ACM Transactions on Human-Robot Interaction und International Journal of Social Robotics), Typ und Jahr.
   - Als Datumsfilter nimmt die API nur `publication_year` an; `from_publication_date` / `publication_date` liefern 400. Den genauen Zeitraum filtert das Backend danach selbst über `publication_date`.
   - Höchstens 50 Treffer, keine weiteren Seiten, eine Anfrage pro Sekunde.

@@ -62,7 +62,7 @@ const sections: HelpSection[] = [
         abstract, a research aim or a paragraph from your own paper. The richer
         the description, the better the matches.
       </>,
-      "The semantic search returns up to 50 papers, the most similar first, and uses only the first 2,000 characters.",
+      "The semantic search returns up to 50 papers, the most similar first, and uses only the first 1,500 characters.",
       "The semantic search only filters by year: it finds papers from every month of the years in your time range. That's why semantic profiles get no monthly email.",
       "Some journals cannot be searched semantically. They are listed below the field and left out of the results.",
     ],

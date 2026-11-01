@@ -90,6 +90,8 @@ _SEARCH_WINDOW_YEARS = 2
 # come from OpenAlex. So there is no monthly email for it either. It replaces
 # the keyword search; the two don't go together.
 _SEMANTIC_MAX_RESULTS = 50
+# Longer queries are rejected by OpenAlex with a 400 ("Search query too long").
+SEMANTIC_MAX_CHARS = 1500
 # What the results need from OpenAlex when Crossref isn't asked.
 _SEMANTIC_SELECT = (
     f"{_OPENALEX_SELECT},title,publication_date,primary_location,authorships,biblio,"
@@ -702,8 +704,7 @@ class SearchService:
                 records.append(record)
 
         # The library link differs per user, so it is added to copies of the
-        # (shared, cached) records. Its citation fields stay internal. Website
-        # papers have no DOI and bring their own link.
+        # (shared, cached) records. Its citation fields stay internal.
         return {
             "meta": {"count": count, "page": page, "per_page": limit},
             "results": [
@@ -1067,7 +1068,8 @@ class SearchService:
                     f"publication_year:{from_date[:4]}-{to_date[:4]}",
                 ]
             ),
-            "search.semantic": query,
+            # Profiles saved before the limit may hold longer queries.
+            "search.semantic": query[:SEMANTIC_MAX_CHARS],
             "sort": "relevance_score:desc",
             "per_page": _SEMANTIC_MAX_RESULTS,
             "select": _SEMANTIC_SELECT,

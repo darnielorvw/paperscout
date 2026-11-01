@@ -194,8 +194,8 @@ export default function SearchPage({
                 placeholder="Semantic Search"
                 // Styled like the search term field, but grows with its lines.
                 className="p-4 min-h-32 max-h-64 w-full rounded-3xl text-2xl resize-none field-sizing-content"
-                // OpenAlex only uses the first 2,000 characters.
-                maxLength={2000}
+                // OpenAlex rejects longer queries (SEMANTIC_MAX_CHARS in search_service).
+                maxLength={1500}
                 value={semanticQuery}
                 onChange={(e) => onSemanticQueryChange(e.target.value)}
                 onKeyDown={handleSemanticKeyDown}
