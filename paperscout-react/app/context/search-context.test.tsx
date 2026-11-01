@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { SEMANTIC_MAX_CHARS } from "~/lib/search-utils";
 import { SearchProvider, useSearch } from "./search-context";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -52,5 +53,16 @@ describe("useSearch", () => {
     await waitFor(() => expect(result.current.isInitialized).toBe(true));
 
     expect(result.current.rowSelection).toEqual({ J1: true });
+  });
+
+  it("cuts a semantic query that is too long, also one restored from sessionStorage", async () => {
+    sessionStorage.setItem("ps_semantic_query", "x".repeat(2000));
+
+    const { result } = renderHook(() => useSearch(), { wrapper });
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    expect(result.current.semanticQuery).toHaveLength(SEMANTIC_MAX_CHARS);
+
+    act(() => result.current.setSemanticQuery("y".repeat(1600)));
+    expect(result.current.semanticQuery).toBe("y".repeat(SEMANTIC_MAX_CHARS));
   });
 });

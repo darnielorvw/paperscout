@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areFiltersEqual, buildResultsUrl } from "./search-utils";
+import { SEMANTIC_MAX_CHARS, areFiltersEqual, buildResultsUrl } from "./search-utils";
 
 describe("buildResultsUrl", () => {
   const date = { from: new Date(2024, 2, 1), to: new Date(2024, 2, 31) };
@@ -43,6 +43,19 @@ describe("buildResultsUrl", () => {
       searchMode: "semantic",
     });
     expect(new URL(withoutQuery, "http://x").searchParams.has("semantic_query")).toBe(false);
+  });
+
+  it("cuts the semantic query to what OpenAlex takes", () => {
+    const url = buildResultsUrl({
+      rowSelection: {},
+      date,
+      searchTerm: "",
+      semanticQuery: "x".repeat(2000),
+      searchMode: "semantic",
+    });
+    expect(new URL(url, "http://x").searchParams.get("semantic_query")).toBe(
+      "x".repeat(SEMANTIC_MAX_CHARS),
+    );
   });
 
   it("drops the keywords when there is a semantic query", () => {

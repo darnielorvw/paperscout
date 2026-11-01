@@ -1,7 +1,14 @@
 "use client";
 
 import { InfoIcon, SearchIcon, SparklesIcon } from "lucide-react";
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
+import { toast } from "sonner";
 import {
   Card,
   CardContent,
@@ -13,6 +20,7 @@ import {
 import { Input } from "~/components/ui/input";
 import { Textarea } from "~/components/ui/textarea";
 import type { SearchMode } from "~/context/search-context";
+import { SEMANTIC_MAX_CHARS } from "~/lib/search-utils";
 import { cn } from "~/lib/utils";
 
 // Each field sits in a card with its hints; the active one stands out. The
@@ -52,7 +60,7 @@ export default function SearchPage({
   // Vertical centres of the two fields, where the knob stops on the rail.
   const [stops, setStops] = useState({ keywords: 24, semantic: 120 });
 
-  // The textarea grows with its text, so the stops are measured again on resize.
+  // The textarea fills the height that is left, so the stops are measured again on resize.
   useLayoutEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper) return;
@@ -89,6 +97,17 @@ export default function SearchPage({
       onSearch();
     }
   };
+  // The browser cuts pasted text at maxLength without a word, so say so.
+  const handleSemanticPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const { selectionStart, selectionEnd } = event.currentTarget;
+    const pasted = event.clipboardData.getData("text");
+    const length = semanticQuery.length - (selectionEnd - selectionStart) + pasted.length;
+    if (length > SEMANTIC_MAX_CHARS) {
+      toast.info(
+        `The text was cut to ${SEMANTIC_MAX_CHARS.toLocaleString("en-US")} characters, the most the semantic search takes.`,
+      );
+    }
+  };
   const toggleMode = () => {
     const next = searchMode === "keywords" ? "semantic" : "keywords";
     onSearchModeChange(next);
@@ -97,10 +116,10 @@ export default function SearchPage({
   const isSemantic = searchMode === "semantic";
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center md:p-1">
+    <div className="flex h-full min-h-0 w-full flex-col items-center md:p-1">
       <div
         ref={wrapperRef}
-        className="grid w-full max-w-2xl grid-cols-[52px_minmax(0,1fr)] gap-2"
+        className="grid min-h-0 w-full max-w-2xl flex-1 grid-cols-[52px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-2"
       >
         <div className="relative">
           <span
@@ -141,7 +160,7 @@ export default function SearchPage({
           </button>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex min-h-0 flex-col gap-4">
           <Card
             className={cardClass(!isSemantic)}
             onFocus={() => onSearchModeChange("keywords")}
@@ -171,7 +190,7 @@ export default function SearchPage({
             </CardFooter>
           </Card>
           <Card
-            className={cardClass(isSemantic)}
+            className={cn(cardClass(isSemantic), "min-h-0 flex-1")}
             onFocus={() => onSearchModeChange("semantic")}
           >
             <CardHeader>
@@ -188,18 +207,29 @@ export default function SearchPage({
                 semantic searches.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex min-h-0 flex-1 flex-col">
               <Textarea
                 ref={semanticRef}
                 placeholder="Semantic Search"
-                // Styled like the search term field, but grows with its lines.
-                className="p-4 min-h-32 max-h-64 w-full rounded-3xl text-2xl resize-none field-sizing-content"
-                // OpenAlex rejects longer queries (SEMANTIC_MAX_CHARS in search_service).
-                maxLength={1500}
+                // Styled like the search term field; takes all the height the card has left.
+                className="p-4 min-h-32 flex-1 w-full rounded-3xl text-2xl resize-none"
+                maxLength={SEMANTIC_MAX_CHARS}
                 value={semanticQuery}
                 onChange={(e) => onSemanticQueryChange(e.target.value)}
                 onKeyDown={handleSemanticKeyDown}
+                onPaste={handleSemanticPaste}
+                aria-describedby="semantic-query-length"
               />
+              <p
+                id="semantic-query-length"
+                className={cn(
+                  "mt-2 text-right text-xs tabular-nums text-muted-foreground",
+                  semanticQuery.length >= SEMANTIC_MAX_CHARS && "text-destructive",
+                )}
+              >
+                {semanticQuery.length.toLocaleString("en-US")} /{" "}
+                {SEMANTIC_MAX_CHARS.toLocaleString("en-US")}
+              </p>
             </CardContent>
             {unsupportedJournals.length > 0 && (
               <CardFooter className="text-sm text-muted-foreground">

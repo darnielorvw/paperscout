@@ -79,6 +79,22 @@ describe("apiFetch", () => {
     await expect(apiFetch("/api/x")).rejects.toThrow("Nope");
   });
 
+  it("joins the messages of a validation error (422)", async () => {
+    fetchMock.mockResolvedValue(
+      mockResponse(
+        {
+          detail: [
+            { loc: ["body", "a"], msg: "Too long" },
+            { loc: ["body", "b"], msg: "Missing" },
+          ],
+        },
+        { status: 422 },
+      ),
+    );
+
+    await expect(apiFetch("/api/x")).rejects.toThrow("Too long; Missing");
+  });
+
   it("falls back to a generic message when the error body is not JSON", async () => {
     fetchMock.mockResolvedValue(mockResponse("boom", { status: 500, json: false }));
 

@@ -2,6 +2,13 @@ import type { DateRange } from "react-day-picker";
 import isEqual from "fast-deep-equal";
 import { formatDateForApi } from "./date-utils";
 
+// OpenAlex rejects longer semantic queries (SEMANTIC_MAX_CHARS in search_service).
+export const SEMANTIC_MAX_CHARS = 1500;
+
+/** The semantic query cut to what OpenAlex takes. */
+export function clampSemanticQuery(query: string): string {
+  return query.slice(0, SEMANTIC_MAX_CHARS);
+}
 
 interface SearchParams {
   rowSelection: Record<string, boolean>;
@@ -32,8 +39,9 @@ export function buildResultsUrl({
   // Only the active field counts; an empty one searches without a query.
   if (searchMode === "semantic") {
     params.append("keywords", "");
-    if (semanticQuery?.trim()) {
-      params.append("semantic_query", semanticQuery.trim());
+    const query = clampSemanticQuery(semanticQuery?.trim() ?? "").trim();
+    if (query) {
+      params.append("semantic_query", query);
     }
   } else {
     params.append("keywords", searchTerm.trim());

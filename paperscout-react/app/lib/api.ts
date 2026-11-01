@@ -14,6 +14,19 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// FastAPI's `detail` is a string, or for validation errors (422) a list of
+// `{ msg, loc, ... }` objects, whose messages are joined.
+function detailMessage(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => (typeof item?.msg === "string" ? item.msg : ""))
+      .filter(Boolean)
+      .join("; ");
+  }
+  return "";
+}
+
 interface ApiFetchOptions extends RequestInit {
   // Allows the caller to specify the expected response type.
   responseType?: 'json' | 'blob' | 'text';
@@ -66,7 +79,8 @@ export async function apiFetch<T = unknown>(
     // Try to read the error details from the body,
     // since the API often sends a JSON response with a 'detail' property.
     const errorData = await response.json().catch(() => ({})); // Empty object if the body isn't JSON
-    const errorMessage = errorData.detail || `API error: ${response.status} ${response.statusText}`;
+    const errorMessage =
+      detailMessage(errorData.detail) || `API error: ${response.status} ${response.statusText}`;
     // Throw a generic error, which is then caught in the calling component.
     throw new Error(errorMessage);
   }

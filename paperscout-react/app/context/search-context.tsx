@@ -1,7 +1,8 @@
 import { endOfMonth, startOfMonth } from "date-fns";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { DateRange } from "react-day-picker";
 import { normalizeDateRange } from "~/lib/date-utils";
+import { clampSemanticQuery } from "~/lib/search-utils";
 
 // Which field searches: the search term or the semantic query.
 export type SearchMode = "keywords" | "semantic";
@@ -33,7 +34,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [date, setDateState] = useState<DateRange | undefined>();
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [semanticQuery, setSemanticQuery] = useState<string>("");
+  const [semanticQuery, setSemanticQueryState] = useState<string>("");
   const [searchMode, setSearchMode] = useState<SearchMode>("keywords");
 
   // Wrapper around setDate to ensure the time is always set to 00:00:00 UTC.
@@ -41,6 +42,16 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     console.log(normalizeDateRange(newDate))
     setDateState(normalizeDateRange(newDate));
   };
+
+  // Cuts the query to the limit, so profiles saved before it (or an old
+  // sessionStorage value) show exactly what is searched and can be saved again.
+  const setSemanticQuery = useCallback<React.Dispatch<React.SetStateAction<string>>>(
+    (value) =>
+      setSemanticQueryState((prev) =>
+        clampSemanticQuery(typeof value === "function" ? value(prev) : value),
+      ),
+    [],
+  );
 
   // Restore data from sessionStorage on first load
   useEffect(() => {
@@ -70,7 +81,8 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
-  }, []);
+    // setSemanticQuery is stable, so this still runs once.
+  }, [setSemanticQuery]);
 
   // Write changes back to sessionStorage
   useEffect(() => {
