@@ -16,7 +16,16 @@ import "./app.css";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { AuthLayout } from "./layouts/auth-layout";
 
+const ICON_VERSION = 2;
+
 export const links: Route.LinksFunction = () => [
+  // Safari doesn't take every format: the PNG is the one every browser reads,
+  // the SVG stays sharp where it's supported. Browsers keep icons for long, so
+  // bump ICON_VERSION when they change.
+  { rel: "icon", href: `/favicon.ico?v=${ICON_VERSION}`, sizes: "32x32" },
+  { rel: "icon", href: `/favicon-96.png?v=${ICON_VERSION}`, type: "image/png", sizes: "96x96" },
+  { rel: "icon", href: `/logo.svg?v=${ICON_VERSION}`, type: "image/svg+xml" },
+  { rel: "apple-touch-icon", href: `/apple-touch-icon.png?v=${ICON_VERSION}` },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",

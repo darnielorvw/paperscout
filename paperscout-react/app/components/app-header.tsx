@@ -51,7 +51,9 @@ export function AppHeader({ showSidebarTrigger = false, showProfiles = false }: 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {showSidebarTrigger && <SidebarTrigger />}
-      <span className="text-lg font-bold shrink-0">PaperScout</span>
+      <span className="flex shrink-0 items-center gap-2 text-lg font-bold">
+        PaperScout
+      </span>
       <div className="flex-1 flex justify-start min-w-0">
         {showProfiles && <ProfileSelector />}
       </div>

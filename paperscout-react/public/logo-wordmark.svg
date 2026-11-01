@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252 64">
+  <g>
+  <rect width="64" height="64" rx="14" fill="#007a55"/>
+  <!-- paper sheet with a folded corner -->
+  <path d="M16 11h19l10 10v32a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2V13a2 2 0 0 1 2-2z" fill="#ecfdf5"/>
+  <path d="M35 11v8a2 2 0 0 0 2 2h8z" fill="#a4f4cf"/>
+  <!-- text lines -->
+  <rect x="19" y="26" width="20" height="3" rx="1.5" fill="#007a55" opacity=".35"/>
+  <rect x="19" y="32" width="14" height="3" rx="1.5" fill="#007a55" opacity=".35"/>
+  <rect x="19" y="38" width="10" height="3" rx="1.5" fill="#007a55" opacity=".35"/>
+  <!-- magnifier: knockout ring, then lens and handle -->
+  <circle cx="41" cy="41" r="9" fill="none" stroke="#007a55" stroke-width="9"/>
+  <path d="M47.5 47.5l7 7" stroke="#007a55" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="41" cy="41" r="7.5" fill="#ecfdf5" fill-opacity=".25" stroke="#ffb900" stroke-width="4"/>
+  <path d="M47 47l6.5 6.5" stroke="#ffb900" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <text x="78" y="43" font-family="Inter, 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="32" font-weight="700" letter-spacing="-0.5" fill="#0a0a0a">Paper<tspan fill="#007a55">Scout</tspan></text>
+</svg>
