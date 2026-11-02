@@ -31,8 +31,6 @@ auf redis bzw plattform die nicht serverless ist umstellen
 ggf neues repo
 Für Prod mail einrichten bei journal wünschen
 
-vercel fehler bei link auf registrierungsmail
-
 TESTS:
 sind alle journals noch beim alten verlag?
 

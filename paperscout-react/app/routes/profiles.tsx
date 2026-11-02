@@ -178,7 +178,9 @@ export default function Profiles() {
                         {Object.keys(profile.rowSelection).length} Journals
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
+                    {/* flex-1: cards in a grid row share the tallest one's
+                        height, so this keeps the footer at the bottom. */}
+                    <CardContent className="flex flex-1 flex-col gap-3">
                       <div className="flex flex-col items-start gap-1.5">
                         <Badge variant="secondary">
                           {isSemantic ? <SparklesIcon /> : <SearchIcon />}
